@@ -1,6 +1,6 @@
-/* VILLMARK - KART
-   Ekte kart (Leaflet + OSM-fliser) med skjulte arter rundt spilleren.
-   Arter spretter opp innenfor 5 km. Ukjente arter vises som skygge. */
+/* VILLMARK - MAP
+   A real map (Leaflet + OSM tiles) with hidden species around the player.
+   Species pop up within 5 km. Unknown species show as a shadow. */
 (() => {
 'use strict';
 
@@ -8,291 +8,280 @@ const $   = s => document.querySelector(s);
 const rnd = (a,b) => a + Math.random()*(b-a);
 const VM  = () => window.VM || null;
 
-const MAKS_M   = 5000;   // ingen art spretter opp lenger unna enn dette
-const MIN_M    = 120;    // ... og ingen rett oppi lomma heller
-const ANTALL   = 4;      // antall aktive funnpunkt
-const MIN_STJ  = 4;      // berre sjeldne arter dukkar opp paa kartet
-const HJEM     = { lat:63.4305, lon:10.3951 };   // Trondheim - brukes til geo svarer
+const MAX_M     = 5000;   // no species pops up further away than this
+const MIN_M     = 120;    // ... and none right in your pocket either
+const COUNT     = 4;      // number of active find points
+const MIN_STARS = 4;      // only rare species show up on the map
+const HOME      = { lat:63.4305, lon:10.3951 };   // Trondheim - used until geo answers
 
-/* OSM-fliser uten noekkel. CARTO krever API-noekkel og stempler flisene.
-   Fargene vrenges til moerkt villmarkskart i CSS (.leaflet-tile-pane). */
-const FLISER = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+/* OSM tiles without a key. CARTO needs an API key and stamps the tiles.
+   The colors are turned into a dark wilderness map in CSS (.leaflet-tile-pane). */
+const TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
-let kart = null, artLag = null, megMark = null, sone = null;
-let senter = HJEM, harGeo = false, geoBedt = false;
-let punkter = [], valgt = null, sistSendt = null;
-let flisFeil = false;
+let map = null, speciesLayer = null, meMarker = null, zone = null;
+let center = HOME, hasGeo = false, geoAsked = false;
+let points = [], selected = null;
+let tileError = false;
 
-// ---------------------------------------------------------- småting
-const lokaltFunnet = new Set();
-function funnet(){ return VM()?.STATE?.funnet || lokaltFunnet; }
+// ---------------------------------------------------------- small things
+const localFound = new Set();
+function found(){ return VM()?.STATE?.found || localFound; }
 function toast(t){ VM()?.toast ? VM().toast(t) : null; }
-function klikk(){ VM()?.LYD?.klikk(); VM()?.dirr?.(12); }
-function navnPa(id){
-  try { return VM().visningsNavn(id); } catch(e){ return SPECIES_BY_ID[id].navn; }
+function click(){ VM()?.SOUND?.click(); VM()?.vibrate?.(12); }
+function nameOf(id){
+  try { return VM().displayName(id); } catch(e){ return SPECIES_BY_ID[id].name; }
 }
-function miniBilde(id){
-  try { return VM().lagMini(id, VM().STATE.varianter[id] || null); } catch(e){ return ''; }
+function thumbOf(id){
+  try { return VM().makeThumb(id, VM().STATE.variants[id] || null); } catch(e){ return ''; }
 }
-function stjerner(n){ return '★'.repeat(n) + '☆'.repeat(5-n); }
-function sjeldenNavn(n){
-  return ['','VANLIG','NOKSÅ VANLIG','UVANLIG','SJELDEN','SVÆRT SJELDEN'][n] || '';
+function stars(n){ return '★'.repeat(n) + '☆'.repeat(5-n); }
+function rarityName(n){
+  return ['','COMMON','FAIRLY COMMON','UNCOMMON','RARE','VERY RARE'][n] || '';
 }
 
-/** meter mellom to punkt (haversine) */
-function avstand(a, b){
+/** metres between two points (haversine) */
+function distance(a, b){
   const R = 6371000, r = Math.PI/180;
   const dLat = (b.lat-a.lat)*r, dLon = (b.lon-a.lon)*r;
   const s = Math.sin(dLat/2)**2 +
             Math.cos(a.lat*r)*Math.cos(b.lat*r)*Math.sin(dLon/2)**2;
   return 2*R*Math.asin(Math.sqrt(s));
 }
-function visAvstand(m){
-  return m < 950 ? Math.round(m/10)*10 + ' M' : (m/1000).toFixed(1).replace('.',',') + ' KM';
+function showDistance(m){
+  return m < 950 ? Math.round(m/10)*10 + ' M' : (m/1000).toFixed(1) + ' KM';
 }
-/** flytt et punkt gitt meter og retning */
-function forskyv(p, meter, vinkel){
-  const dLat = (meter*Math.cos(vinkel))/111320;
-  const dLon = (meter*Math.sin(vinkel))/(111320*Math.cos(p.lat*Math.PI/180));
+/** move a point by a distance in metres and a bearing */
+function offset(p, metres, angle){
+  const dLat = (metres*Math.cos(angle))/111320;
+  const dLon = (metres*Math.sin(angle))/(111320*Math.cos(p.lat*Math.PI/180));
   return { lat:p.lat + dLat, lon:p.lon + dLon };
 }
 
-// ---------------------------------------------------------- artsvalg
-/* Sjeldne arter dukker sjeldnere opp og ligger lenger unna.
-   Ukjente arter prioriteres, ellers blir kartet tomt for nye funn. */
-function velgArt(brukte){
-  const sjeldne = SPECIES.filter(s => s.sjelden >= MIN_STJ);
-  let basseng = sjeldne.filter(s => !brukte.has(s.id));
-  if(!basseng.length) basseng = sjeldne.slice();
-  const nye = basseng.filter(s => !funnet().has(s.id));
-  if(nye.length && Math.random() < 0.8) basseng = nye;
-  const vekter = basseng.map(s => 1/(s.sjelden*s.sjelden));
-  let r = Math.random() * vekter.reduce((x,y) => x+y, 0);
-  for(let i=0;i<basseng.length;i++){ r -= vekter[i]; if(r <= 0) return basseng[i]; }
-  return basseng[basseng.length-1];
+// ---------------------------------------------------------- species choice
+/* Rare species show up less often and sit further away.
+   Unknown species get priority, otherwise the map runs dry of new finds. */
+function pickSpecies(used){
+  const rare = SPECIES.filter(s => s.rarity >= MIN_STARS);
+  let pool = rare.filter(s => !used.has(s.id));
+  if(!pool.length) pool = rare.slice();
+  const unseen = pool.filter(s => !found().has(s.id));
+  if(unseen.length && Math.random() < 0.8) pool = unseen;
+  const weights = pool.map(s => 1/(s.rarity*s.rarity));
+  let r = Math.random() * weights.reduce((x,y) => x+y, 0);
+  for(let i=0;i<pool.length;i++){ r -= weights[i]; if(r <= 0) return pool[i]; }
+  return pool[pool.length-1];
 }
-/** avstandsbånd etter sjeldenhet - r1 tett på, r5 helt ute ved 5 km */
-function avstandFor(sjelden){
-  const min  = Math.min(MAKS_M - 900, 300 + (sjelden-1)*600);
-  const maks = Math.min(MAKS_M, 1500 + sjelden*700);
-  // jevn fordeling i areal, ikke i radius - ellers klumper alt seg i midten
-  return Math.sqrt(rnd(min*min, maks*maks));
+/** distance band by rarity - r1 close by, r5 all the way out at 5 km */
+function distanceFor(rarity){
+  const min = Math.min(MAX_M - 900, 300 + (rarity-1)*600);
+  const max = Math.min(MAX_M, 1500 + rarity*700);
+  // even spread over area, not over radius - otherwise everything clumps in the middle
+  return Math.sqrt(rnd(min*min, max*max));
 }
-const SPRIK_M = 620;   // minste avstand mellom to funnpunkt, ellers dekker ikonene kvarandre
-function nyttPunkt(brukte, andre){
-  const sp = velgArt(brukte);
+const SPREAD_M = 620;   // least distance between two find points, or the icons cover each other
+function newPoint(used, others){
+  const sp = pickSpecies(used);
   let pos = null;
   for(let f=0; f<14; f++){
-    pos = forskyv(senter, avstandFor(sp.sjelden), rnd(0, Math.PI*2));
-    if(!andre || !andre.some(q => avstand(q, pos) < SPRIK_M)) break;
+    pos = offset(center, distanceFor(sp.rarity), rnd(0, Math.PI*2));
+    if(!others || !others.some(q => distance(q, pos) < SPREAD_M)) break;
   }
-  return { art:sp.id, lat:pos.lat, lon:pos.lon, mark:null };
+  return { species:sp.id, lat:pos.lat, lon:pos.lon, mark:null };
 }
-function genererPunkter(){
-  punkter.forEach(p => p.mark && artLag.removeLayer(p.mark));
-  punkter = [];
-  const brukte = new Set();
-  for(let i=0;i<ANTALL;i++){
-    const p = nyttPunkt(brukte, punkter);
-    brukte.add(p.art);
-    punkter.push(p);
+function generatePoints(){
+  points.forEach(p => p.mark && speciesLayer.removeLayer(p.mark));
+  points = [];
+  const used = new Set();
+  for(let i=0;i<COUNT;i++){
+    const p = newPoint(used, points);
+    used.add(p.species);
+    points.push(p);
   }
-  tegnPunkter();
-  rammInn();
-  oppdaterHud();
+  drawPoints();
+  frameZone();
+  updateHud();
 }
-/** legg kartutsnittet slik at heile jaktsona er synleg */
-function rammInn(){
-  if(!kart || !sone) return;
-  kart.fitBounds(sone.getBounds(), { padding:[26,26], animate:false });
+/** set the map view so the whole hunting zone is visible */
+function frameZone(){
+  if(!map || !zone) return;
+  map.fitBounds(zone.getBounds(), { padding:[26,26], animate:false });
 }
 
-// ---------------------------------------------------------- markører
-function ikonFor(p){
-  const sp = SPECIES_BY_ID[p.art];
-  const kjent = funnet().has(p.art);
-  const bilde = miniBilde(p.art);
+// ---------------------------------------------------------- markers
+function iconFor(p){
+  const sp = SPECIES_BY_ID[p.species];
+  const known = found().has(p.species);
+  const img = thumbOf(p.species);
   return L.divIcon({
     className: '',
     iconSize: [58,74], iconAnchor: [29,70],
-    html: `<div class="kartmark r${sp.sjelden} ${kjent ? 'kjent' : 'skjult'}">
-      <div class="kartmark-bilde">${bilde
-        ? `<img src="${bilde}" alt="">`
-        : '<span class="kartmark-q">?</span>'}</div>
-      <div class="kartmark-stj">${'★'.repeat(sp.sjelden)}</div>
-      <i class="kartmark-fot"></i>
+    html: `<div class="map-mark r${sp.rarity} ${known ? 'known' : 'hidden'}">
+      <div class="map-mark-img">${img
+        ? `<img src="${img}" alt="">`
+        : '<span class="map-mark-q">?</span>'}</div>
+      <div class="map-mark-stars">${'★'.repeat(sp.rarity)}</div>
+      <i class="map-mark-foot"></i>
     </div>`
   });
 }
-function tegnPunkter(){
-  punkter.forEach(p => {
-    if(p.mark){ p.mark.setIcon(ikonFor(p)); return; }
-    p.mark = L.marker([p.lat, p.lon], { icon:ikonFor(p), keyboard:false })
-      .addTo(artLag)
-      .on('click', () => velgPunkt(p));
+function drawPoints(){
+  points.forEach(p => {
+    if(p.mark){ p.mark.setIcon(iconFor(p)); return; }
+    p.mark = L.marker([p.lat, p.lon], { icon:iconFor(p), keyboard:false })
+      .addTo(speciesLayer)
+      .on('click', () => selectPoint(p));
   });
 }
-function fjernPunkt(p){
-  if(p.mark) artLag.removeLayer(p.mark);
-  punkter = punkter.filter(x => x !== p);
-  if(valgt === p) lukkKort();
-  // sett ut en ny så kartet aldri går tomt
-  const brukte = new Set(punkter.map(x => x.art));
-  const ny = nyttPunkt(brukte, punkter);
-  punkter.push(ny);
-  tegnPunkter();
-  oppdaterHud();
+function removePoint(p){
+  if(p.mark) speciesLayer.removeLayer(p.mark);
+  points = points.filter(x => x !== p);
+  if(selected === p) closeCard();
+  // put out a new one so the map never runs empty
+  const used = new Set(points.map(x => x.species));
+  const fresh = newPoint(used, points);
+  points.push(fresh);
+  drawPoints();
+  updateHud();
 }
 
-// ---------------------------------------------------------- kort nederst
-function velgPunkt(p){
-  klikk();
-  valgt = p;
-  const sp = SPECIES_BY_ID[p.art];
-  const kjent = funnet().has(p.art);
-  const m = avstand(senter, p);
+// ---------------------------------------------------------- card at the bottom
+function selectPoint(p){
+  click();
+  selected = p;
+  const sp = SPECIES_BY_ID[p.species];
+  const known = found().has(p.species);
+  const m = distance(center, p);
 
-  $('#kartKortNavn').textContent  = kjent ? navnPa(p.art) : '? ? ?';
-  $('#kartKortSci').textContent   = kjent ? sp.sci : 'UIDENTIFISERT ' + (sp.kind === 'dyr' ? 'DYR' : 'PLANTE');
-  $('#kartKortStj').textContent   = stjerner(sp.sjelden);
-  $('#kartKortStj').className     = 'kart-kort-stj r' + sp.sjelden;
-  $('#kartKortRang').textContent  = sjeldenNavn(sp.sjelden);
-  $('#kartKortDist').textContent  = visAvstand(m);
-  $('#kartKortFakta').textContent = kjent
-    ? sp.fakta
-    : 'Noe beveger seg her. Gå nærmere og skann for å få det inn i samlinga.';
+  $('#mapCardName').textContent  = known ? nameOf(p.species) : '? ? ?';
+  $('#mapCardSci').textContent   = known ? sp.sci : 'UNIDENTIFIED ' + (sp.kind === 'animal' ? 'ANIMAL' : 'PLANT');
+  $('#mapCardStars').textContent = stars(sp.rarity);
+  $('#mapCardStars').className   = 'map-card-stars r' + sp.rarity;
+  $('#mapCardRank').textContent  = rarityName(sp.rarity);
+  $('#mapCardDist').textContent  = showDistance(m);
+  $('#mapCardFact').textContent  = known
+    ? sp.fact
+    : 'Something is moving here. Get closer and scan to add it to your collection.';
 
-  /* LES MER staar bare pa arter som alt er funnet - ellers avslorer den arten */
-  const mer = $('#kartKortMer');
-  if(mer){
-    mer.dataset.mer = p.art;
-    mer.hidden = !(kjent && window.ARTIKKEL && window.ARTIKKEL.har(p.art));
+  /* READ MORE only shows on species already found - otherwise it gives the species away */
+  const more = $('#mapCardMore');
+  if(more){
+    more.dataset.more = p.species;
+    more.hidden = !(known && window.ARTICLE && window.ARTICLE.has(p.species));
   }
 
-  const kort = $('#kartKort');
-  kort.hidden = false;
-  kort.classList.remove('inn'); void kort.offsetWidth; kort.classList.add('inn');
-  // loft markoeren over kortet som sklir opp nedst
-  kart.setView([p.lat, p.lon], kart.getZoom(), { animate:true });
-  kart.panBy([0, 110], { animate:true });
+  const card = $('#mapCard');
+  card.hidden = false;
+  card.classList.remove('in'); void card.offsetWidth; card.classList.add('in');
+  // lift the marker above the card sliding up from the bottom
+  map.setView([p.lat, p.lon], map.getZoom(), { animate:true });
+  map.panBy([0, 110], { animate:true });
 }
-function lukkKort(){
-  valgt = null;
-  $('#kartKort').hidden = true;
+function closeCard(){
+  selected = null;
+  $('#mapCard').hidden = true;
 }
 
 // ---------------------------------------------------------- hud
-function oppdaterHud(){
-  const skjult = punkter.filter(p => !funnet().has(p.art)).length;
-  $('#kartAntall').textContent = punkter.length;
-  $('#kartSkjult').textContent = skjult;
+function updateHud(){
+  const hidden = points.filter(p => !found().has(p.species)).length;
+  $('#mapTotal').textContent = points.length;
+  $('#mapHidden').textContent = hidden;
 }
 
-// ---------------------------------------------------------- posisjon
-function settSenter(lat, lon, flytt){
-  senter = { lat, lon };
-  if(megMark) megMark.setLatLng([lat, lon]);
-  if(sone) sone.setLatLng([lat, lon]);
-  // ved foerste geo-treff rammar genererPunkter() inn heile sona - ikkje slaass om utsnittet
-  if(flytt && !punkter.length) kart.setView([lat, lon], kart.getZoom(), { animate:false });
-  if(valgt) $('#kartKortDist').textContent = visAvstand(avstand(senter, valgt));
+// ---------------------------------------------------------- position
+function setCenter(lat, lon, move){
+  center = { lat, lon };
+  if(meMarker) meMarker.setLatLng([lat, lon]);
+  if(zone) zone.setLatLng([lat, lon]);
+  // on the first geo hit generatePoints() frames the whole zone - do not fight over the view
+  if(move && !points.length) map.setView([lat, lon], map.getZoom(), { animate:false });
+  if(selected) $('#mapCardDist').textContent = showDistance(distance(center, selected));
 }
-function startPosisjon(){
-  if(geoBedt || !navigator.geolocation) return;
-  geoBedt = true;
+function startPosition(){
+  if(geoAsked || !navigator.geolocation) return;
+  geoAsked = true;
   navigator.geolocation.watchPosition(
     p => {
-      const forste = !harGeo;
-      harGeo = true;
-      settSenter(p.coords.latitude, p.coords.longitude, forste);
-      if(forste){ genererPunkter(); toast('Posisjon funnet'); }
+      const first = !hasGeo;
+      hasGeo = true;
+      setCenter(p.coords.latitude, p.coords.longitude, first);
+      if(first){ generatePoints(); toast('Position found'); }
     },
-    () => { if(!harGeo) toast('Ingen posisjon - bruker Trondheim'); },
+    () => { if(!hasGeo) toast('No position - using Trondheim'); },
     { enableHighAccuracy:true, timeout:8000, maximumAge:30000 }
   );
 }
 
-// ---------------------------------------------------------- oppsett
-function byggKart(){
-  if(kart) return;
-  const boks = $('#kart');
+// ---------------------------------------------------------- setup
+function buildMap(){
+  if(map) return;
+  const box = $('#map');
   if(typeof L === 'undefined'){
-    boks.innerHTML = '<p class="kart-feil">KARTBIBLIOTEK MANGLER<br><span>Leaflet lastet ikke ned</span></p>';
+    box.innerHTML = '<p class="map-error">MAP LIBRARY MISSING<br><span>Leaflet did not load</span></p>';
     return;
   }
-  kart = L.map(boks, {
+  map = L.map(box, {
     zoomControl:false, attributionControl:true,
-    center:[senter.lat, senter.lon], zoom:12,
+    center:[center.lat, center.lon], zoom:12,
     minZoom:9, maxZoom:18, zoomSnap:0.5,
   });
-  L.tileLayer(FLISER, {
+  L.tileLayer(TILES, {
     maxZoom:19, attribution:'&copy; OpenStreetMap',
-  }).addTo(kart).on('tileerror', () => {
-    if(flisFeil) return;
-    flisFeil = true;
-    toast('Kartfliser utilgjengelig - er du frakoblet?');
+  }).addTo(map).on('tileerror', () => {
+    if(tileError) return;
+    tileError = true;
+    toast('Map tiles unavailable - are you offline?');
   });
 
-  // 5 km jaktsone
-  sone = L.circle([senter.lat, senter.lon], {
-    radius:MAKS_M, className:'kart-sone',
+  // 5 km hunting zone
+  zone = L.circle([center.lat, center.lon], {
+    radius:MAX_M, className:'map-zone',
     color:'#e8b93c', weight:2, dashArray:'6 8', fill:false,
-  }).addTo(kart);
+  }).addTo(map);
 
-  megMark = L.marker([senter.lat, senter.lon], {
+  meMarker = L.marker([center.lat, center.lon], {
     interactive:false, keyboard:false,
     icon: L.divIcon({ className:'', iconSize:[26,26], iconAnchor:[13,13],
-      html:'<div class="kart-meg"><i></i></div>' })
-  }).addTo(kart);
+      html:'<div class="map-me"><i></i></div>' })
+  }).addTo(map);
 
-  artLag = L.layerGroup().addTo(kart);
-  kart.on('click', lukkKort);
+  speciesLayer = L.layerGroup().addTo(map);
+  map.on('click', closeCard);
 
-  genererPunkter();
-  startPosisjon();
+  generatePoints();
+  startPosition();
 }
 
-// ---------------------------------------------------------- knapper
+// ---------------------------------------------------------- buttons
 document.addEventListener('click', e => {
-  if(e.target.closest('#kartMeg')){
-    klikk();
-    kart && kart.setView([senter.lat, senter.lon], 14, { animate:true });
+  if(e.target.closest('#mapMe')){
+    click();
+    map && map.setView([center.lat, center.lon], 14, { animate:true });
   }
-  if(e.target.closest('#kartSok')){
-    klikk();
-    genererPunkter();
-    lukkKort();
-    toast('Nye spor i området');
+  if(e.target.closest('#mapSearch')){
+    click();
+    generatePoints();
+    closeCard();
+    toast('New tracks in the area');
   }
-  if(e.target.closest('#kartKortLukk')){ klikk(); lukkKort(); }
-  if(e.target.closest('#kartKortGo') && valgt){
-    klikk();
-    sistSendt = valgt;
-    const vm = VM();
-    if(vm){ vm.STATE.kartMal = valgt.art; vm.gaTil('scan'); }
-    else   { toast('Skanneren er ikke klar'); }
-  }
+  if(e.target.closest('#mapCardClose')){ click(); closeCard(); }
 });
 
-// ---------------------------------------------------------- inn/ut av skjermen
-/* Kartsiden er ren HTML og ligger utenfor scenerutinga i app.js.
-   Vi lytter derfor på klasseendringa i stedet for å hekte oss på gaTil. */
-const skjerm = $('#screen-map');
-if(skjerm){
+// ---------------------------------------------------------- in/out of the screen
+/* The map page is plain HTML and sits outside the scene routing in app.js.
+   We therefore listen for the class change instead of hooking into goTo. */
+const screen = $('#screen-map');
+if(screen){
   new MutationObserver(() => {
-    if(!skjerm.classList.contains('active')) return;
-    byggKart();
-    if(!kart) return;
-    kart.invalidateSize();
-    // art skannet siden sist? fjern punktet og sett ut et nytt
-    if(sistSendt && funnet().has(sistSendt.art) && punkter.includes(sistSendt)){
-      const p = sistSendt; sistSendt = null;
-      if(p.mark) p.mark.setIcon(ikonFor(p));
-      setTimeout(() => fjernPunkt(p), 900);
-    }
-    tegnPunkter();
-    oppdaterHud();
-  }).observe(skjerm, { attributes:true, attributeFilter:['class'] });
+    if(!screen.classList.contains('active')) return;
+    buildMap();
+    if(!map) return;
+    map.invalidateSize();
+    /* Species found somewhere else since last time? The point stays, but the
+       marker should show the species instead of a shadow. */
+    drawPoints();
+    updateHud();
+  }).observe(screen, { attributes:true, attributeFilter:['class'] });
 }
 
 })();

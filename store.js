@@ -10,7 +10,7 @@
 const STORE = (() => {
 'use strict';
 
-const KEY     = 'villmark-plen-v1';
+const KEY     = 'villmark-lawn-v1';
 const VERSION = 1;
 const DELAY   = 400;      // wait this long after the last change before writing
 
@@ -34,11 +34,11 @@ function cleanProp(p){
 
 /** one scanned specimen, or null if the record is unusable */
 function cleanSpecimen(e){
-  if(!e || typeof e !== 'object' || typeof e.art !== 'string') return null;
+  if(!e || typeof e !== 'object' || typeof e.species !== 'string') return null;
   return {
     uid:     num(e.uid, 0),
-    art:     e.art,
-    niva:    num(e.niva, 1),
+    species: e.species,
+    level:   num(e.level, 1),
     variant: typeof e.variant === 'string' ? e.variant : null,
     x:       e.x === null ? null : num(e.x, null),
     z:       e.z === null ? null : num(e.z, null),
@@ -49,24 +49,24 @@ function cleanSpecimen(e){
    specimens are dragged together, so the list is pruned on the way out
    rather than growing for the life of the lawn. */
 function liveUids(S){
-  if(!S.dekk) return S.eksemplarer.map(e => e.uid);
-  const live = new Set(S.eksemplarer.map(e => e.uid));
-  return [...S.dekk].filter(uid => live.has(uid));
+  if(!S.deck) return S.specimens.map(e => e.uid);
+  const live = new Set(S.specimens.map(e => e.uid));
+  return [...S.deck].filter(uid => live.has(uid));
 }
 
 function snapshot(S){
   return {
     v:            VERSION,
-    mynt:         S.mynt,
-    niva:         S.niva,
-    funnet:       [...S.funnet],
-    varianter:    S.varianter,
-    pynt:         S.pynt,
-    nestePyntUid: S.nestePyntUid,
-    eksemplarer:  S.eksemplarer,
-    nesteUid:     S.nesteUid,
-    dekk:         liveUids(S),
-    dekkValgt:    !!S.dekkValgt,
+    coins:        S.coins,
+    level:        S.level,
+    found:        [...S.found],
+    variants:     S.variants,
+    props:        S.props,
+    nextPropUid:  S.nextPropUid,
+    specimens:    S.specimens,
+    nextUid:      S.nextUid,
+    deck:         liveUids(S),
+    deckChosen:   !!S.deckChosen,
   };
 }
 
@@ -101,29 +101,29 @@ function load(S){
   try { d = JSON.parse(raw); } catch { return false; }
   if(!d || typeof d !== 'object' || d.v !== VERSION) return false;
 
-  const props     = Array.isArray(d.pynt)        ? d.pynt.map(cleanProp).filter(Boolean)            : [];
-  const specimens = Array.isArray(d.eksemplarer) ? d.eksemplarer.map(cleanSpecimen).filter(Boolean) : [];
+  const props     = Array.isArray(d.props)     ? d.props.map(cleanProp).filter(Boolean)         : [];
+  const specimens = Array.isArray(d.specimens) ? d.specimens.map(cleanSpecimen).filter(Boolean) : [];
 
-  S.mynt = num(d.mynt, S.mynt);
-  S.niva = num(d.niva, S.niva);
-  S.funnet = new Set(Array.isArray(d.funnet) ? d.funnet.filter(x => typeof x === 'string') : []);
-  S.varianter = (d.varianter && typeof d.varianter === 'object') ? d.varianter : {};
-  S.pynt = props;
-  S.eksemplarer = specimens;
+  S.coins = num(d.coins, S.coins);
+  S.level = num(d.level, S.level);
+  S.found = new Set(Array.isArray(d.found) ? d.found.filter(x => typeof x === 'string') : []);
+  S.variants = (d.variants && typeof d.variants === 'object') ? d.variants : {};
+  S.props = props;
+  S.specimens = specimens;
 
   /* A lawn saved before the deck editor existed has no deck. It gets every
      specimen it owns, which is what it played with. */
-  S.dekk = new Set(Array.isArray(d.dekk)
-    ? d.dekk.filter(uid => typeof uid === 'number' && isFinite(uid))
+  S.deck = new Set(Array.isArray(d.deck)
+    ? d.deck.filter(uid => typeof uid === 'number' && isFinite(uid))
     : specimens.map(e => e.uid));
-  S.dekkValgt = d.dekkValgt === true;
+  S.deckChosen = d.deckChosen === true;
 
   /* The uid counters must clear everything already on the lawn. Otherwise a
      new find takes the uid of an old one, and the two are dragged as one. */
   const top = (list, start) => list.reduce((m, o) => Math.max(m, o.uid), start - 1) + 1;
-  S.nestePyntUid = Math.max(num(d.nestePyntUid, 1), top(props, 1));
-  S.nesteUid     = Math.max(num(d.nesteUid, 1),     top(specimens, 1));
-  S.sistLagt = null;
+  S.nextPropUid = Math.max(num(d.nextPropUid, 1), top(props, 1));
+  S.nextUid     = Math.max(num(d.nextUid, 1),     top(specimens, 1));
+  S.lastPlaced = null;
   return true;
 }
 

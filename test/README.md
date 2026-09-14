@@ -1,6 +1,6 @@
 # Tester
 
-Fem selvstendige testfiler. Ingen avhengigheter utenfor Node og Chrome.
+Seks selvstendige testfiler. Ingen avhengigheter utenfor Node og Chrome.
 
 ## `dekk.test.js`
 
@@ -64,6 +64,19 @@ node test/nettleser.test.js
 Bruker `?fake-nett`, altså `BroadcastChannel` mellom faner. Trenger ingen
 Supabase-konto.
 
+## `skann.test.js`
+
+Åpner spillet i Chrome og styrer skanneren. Dekker at skanneren aldri gjetter:
+uten modell eller kamera skriver ruta hvorfor den ikke fikk svar, den viser
+ingen prosent, og ingen art blir satt. Dekker også `SKANN PÅ NYTT`, som tar
+ruta tilbake til utgangsstillingen og kaster arten, og `GI MEG EN TILFELDIG`,
+som gir en art merket som trekning — uten prosent og uten ordet `SIKKER` —
+og som først havner i samlingen når du trykker `GODTA TREFF`.
+
+```sh
+node test/skann.test.js
+```
+
 ## `supabase.test.js`
 
 Samme flyt, men mot ekte Supabase. Starter to atskilte Chrome-profiler, siden
@@ -81,7 +94,7 @@ prosjektet.
 
 ## Felles
 
-Alle fem skriver `Alle ... gikk gjennom` og avslutter med kode 0 når de er
+Alle seks skriver `Alle ... gikk gjennom` og avslutter med kode 0 når de er
 grønne. Nettlesertestene krever Google Chrome på `/Applications/Google Chrome.app`,
 starter en lokal filtjener selv, og rydder bort nettleserprosessene sine også
 når de feiler underveis.

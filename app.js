@@ -1216,32 +1216,64 @@ function settMal(art){
   SKANN.setArt(art, { variant: STATE.malVariant });
 }
 
-/* Ekte skann krever tre ting: modellene er konfigurert, kameraet gir bilde,
-   og det er ikke et oppsatt mote fra kartet. Ellers kjorer det simulerte,
-   som er akkurat slik spillet oppforte seg for. */
-let ekteSkann = false;
+/* Skanneren gjetter aldri. Enten svarer en av modellene paa et ekte
+   kamerabilde, eller saa sier ruta hva som mangler og tilbyr SKANN PAA NYTT.
+   Vil du ha en art uten aa skanne, finnes GI MEG EN TILFELDIG - og den sier
+   selv at den er en trekning. For falt skannet stille tilbake til trekningen
+   og skrev "98 % SIKKER" paa den, som var ren logn. */
+let kartMote = null;   // art satt opp fra kartet - scriptet mote, ikke skann
+
+function modellKlar(){
+  /* typeof-sjekken gjor at et feilslaatt klassifiser.js ikke tar skanneren
+     med seg i fallet - da staar bare tilfeldig-knappen igjen. */
+  return typeof KLASSIFISER !== 'undefined' && KLASSIFISER.konfigurert();
+}
+function kameraKlar(){
+  const video = $('#camFeed');
+  return !!kamStrom && video.readyState >= 2 && video.videoWidth > 0;
+}
+
+/* Tre tilstander: klar, kjorer, ferdig. Knappene folger tilstanden.
+   'ferdig' viser alltid SKANN PAA NYTT, ogsaa naar treffet er godt - et
+   svar du ikke tror paa skal kunne kastes. */
+function skannKnapper(tilstand, opt){
+  opt = opt || {};
+  const go = $('#scanGo'), godta = $('#scanGodta'), omigjen = $('#scanRetry'), rnd = $('#scanRandom');
+  go.hidden      = tilstand !== 'klar';
+  go.disabled    = tilstand !== 'klar';
+  godta.hidden   = tilstand !== 'ferdig' || !opt.treff;
+  omigjen.hidden = tilstand !== 'ferdig';
+  rnd.hidden     = tilstand === 'kjorer';
+  rnd.disabled   = tilstand === 'kjorer';
+}
+
+function klarTekst(){
+  if(!modellKlar()) return 'INGEN ARTSMODELL · BRUK TILFELDIG';
+  if(!kamStrom)     return 'INGEN KAMERA · BRUK TILFELDIG';
+  return 'RETT KAMERAET MOT ARTEN';
+}
+
+/** tilbake til utgangspunktet - brukes av SKANN PAA NYTT og av startSkann */
+function nullstillSkann(){
+  STATE.malArt = null;
+  STATE.malVariant = null;
+  STATE.malNiva = 0;
+  SKANN.tomArt();
+  SKANN.setProgresjon(0);
+  $('#scanMeterFill').style.width = '0%';
+  $('#scanReadout').textContent = klarTekst();
+  $('#scanReadout').classList.remove('treff','bom');
+  $('#scanBeam').classList.remove('kjor');
+  $('#scanGodta').onclick = null;
+  skannKnapper('klar');
+}
 
 async function startSkann(){
-  /* typeof-sjekken gjor at et feilslaatt klassifiser.js ikke tar skanneren
-     med seg i fallet - da kjorer spillet bare simulert som for. */
-  ekteSkann = typeof KLASSIFISER !== 'undefined' && KLASSIFISER.konfigurert() && !STATE.kartMal;
-  STATE.malNiva = 0;
-  if(ekteSkann){
-    STATE.malArt = null;
-    STATE.malVariant = null;
-    SKANN.tomArt();
-  } else {
-    const art = STATE.kartMal || tilfeldigArt();
-    STATE.kartMal = null;
-    settMal(art);
-  }
+  kartMote = STATE.kartMal || null;
+  STATE.kartMal = null;
   $('#scanCoords').textContent = geoTekst();
-  SKANN.setProgresjon(0);
-  $('#scanReadout').textContent = 'RETT KAMERAET MOT ARTEN';
-  $('#scanReadout').classList.remove('treff','bom');
-  $('#scanMeterFill').style.width = '0%';
-  $('#scanGo').disabled = false;
-  $('#scanBeam').classList.remove('kjor');
+  nullstillSkann();
+  if(kartMote) $('#scanReadout').textContent = 'MØTE PÅ KARTET · TRYKK SKANN';
 
   const video = $('#camFeed');
   if(!kamStrom){
@@ -1253,9 +1285,9 @@ async function startSkann(){
     } catch(err){
       $('#camFallback').style.display = 'block';
       video.style.display = 'none';
-      ekteSkann = false;   /* uten kamera finnes det ikke noe aa klassifisere */
     }
   }
+  if(!kartMote) $('#scanReadout').textContent = klarTekst();
 }
 function stoppSkann(){
   if(kamStrom){ kamStrom.getTracks().forEach(t => t.stop()); kamStrom = null; }
@@ -1263,16 +1295,39 @@ function stoppSkann(){
 }
 SCENES.scan.exit = stoppSkann;
 
-/* ---------- simulert skann: uendret oppforsel, brukes naar modellene
-   ikke er tilgjengelige, naar kartet har satt opp et mote, og som
-   fallback hvis noe ryker underveis ---------- */
-function simulertSkann(){
-  STATE.malNiva = 0;   /* simulert skann er alltid et sikkert treff */
-  if(!STATE.malArt) settMal(tilfeldigArt());
-  const linjer = ['ANALYSERER FORM…','SAMMENLIGNER MED ARTSBANK…','MÅLER FARGEPROFIL…','BEKREFTER ART…'];
-  let p = 0, i = 0;
+/* ---------- felles avslutning ---------- */
+
+/** treffet ligger paa skjermen, og spilleren velger selv om det skal godtas */
+function avsluttTreff(id, vari){
+  $('#scanBeam').classList.remove('kjor');
+  blitz();
+  if(vari){ LYD.sjelden(); dirr([30,60,30,60,90]); }
+  else    { LYD.funn();    dirr(60); }
+  skannKnapper('ferdig', { treff:true });
+  $('#scanGodta').onclick = () => { LYD.klikk(); visFunn(id); };
+}
+
+/** ingen art kom ut. Ruta sier hvorfor, og SKANN PAA NYTT staar klar. */
+function visSkannFeil(tekst){
+  SKANN.tomArt();
+  $('#scanReadout').textContent = tekst;
+  $('#scanReadout').classList.remove('treff');
+  $('#scanReadout').classList.add('bom');
+  $('#scanMeterFill').style.width = '100%';
+  $('#scanBeam').classList.remove('kjor');
+  LYD.klikk(); dirr(12);
+  skannKnapper('ferdig', { treff:false });
+}
+
+/* ---------- trekning: GI MEG EN TILFELDIG og mote fra kartet ----------
+   Dette er ikke gjenkjenning, og ruta viser derfor aldri en prosent her. */
+function trekkSkann(art, merkelapp, ferdig){
+  STATE.malNiva = 0;
+  settMal(art);
+  const linjer = ['TREKKER FRA ARTSBANK…','VELGER EKSEMPLAR…','BYGGER MODELL…'];
+  let p = 0, i = -1;
   const id = setInterval(() => {
-    p += 0.028 + Math.random()*0.02;
+    p += 0.035 + Math.random()*0.025;
     SKANN.setProgresjon(Math.min(1, p));
     $('#scanMeterFill').style.width = Math.min(100, p*100) + '%';
     const ni = Math.min(linjer.length-1, Math.floor(p*linjer.length));
@@ -1282,12 +1337,9 @@ function simulertSkann(){
       const sp = SPECIES_BY_ID[STATE.malArt];
       const vari = STATE.malVariant;
       $('#scanReadout').textContent = (vari ? VARIANTER[vari].navn + ' ' : '') + sp.navn +
-        (vari ? ' — AVVIKENDE FARGE!' : ' — 98 % SIKKER');
+        (vari ? ' — AVVIKENDE FARGE!' : '') + ' — ' + merkelapp;
       $('#scanReadout').classList.add('treff');
-      blitz();
-      if(vari){ LYD.sjelden(); dirr([30,60,30,60,90]); }
-      else    { LYD.funn();    dirr(60); }
-      setTimeout(() => visFunn(STATE.malArt), 460);
+      ferdig();
     }
   }, 55);
 }
@@ -1334,12 +1386,7 @@ function visSkannResultat(svar){
   STATE.malNiva = svar.niva;
 
   if(!svar.id){
-    $('#scanReadout').textContent = 'UKJENT ART · ' + raa + ' ' + prosent + ' %';
-    $('#scanReadout').classList.add('bom');
-    $('#scanMeterFill').style.width = '100%';
-    LYD.klikk(); dirr(12);
-    $('#scanGo').disabled = false;
-    $('#scanBeam').classList.remove('kjor');
+    visSkannFeil('UKJENT ART · ' + raa + ' ' + prosent + ' %');
     return;
   }
 
@@ -1352,12 +1399,7 @@ function visSkannResultat(svar){
   $('#scanReadout').classList.add('treff');
   $('#scanMeterFill').style.width = '100%';
 
-  materialiser(() => {
-    blitz();
-    if(vari){ LYD.sjelden(); dirr([30,60,30,60,90]); }
-    else    { LYD.funn();    dirr(60); }
-    setTimeout(() => visFunn(svar.id), 460);
-  });
+  materialiser(() => avsluttTreff(svar.id, vari));
 }
 
 function skannFase(fase, andel){
@@ -1370,20 +1412,51 @@ function skannFase(fase, andel){
   }
 }
 
+$('#scanRetry').addEventListener('click', () => {
+  LYD.klikk(); dirr(12);
+  nullstillSkann();
+});
+
+$('#scanRandom').addEventListener('click', () => {
+  const knapp = $('#scanRandom');
+  if(knapp.disabled) return;
+  kartMote = null;
+  LYD.skann(); dirr(25);
+  skannKnapper('kjorer');
+  $('#scanBeam').classList.add('kjor');
+  $('#scanReadout').classList.remove('treff','bom');
+  const art = tilfeldigArt();
+  trekkSkann(art, 'TILFELDIG TREKNING', () => avsluttTreff(art, STATE.malVariant));
+});
+
 $('#scanGo').addEventListener('click', async () => {
   const knapp = $('#scanGo');
   if(knapp.disabled) return;
-  knapp.disabled = true;
   LYD.skann(); dirr(25);
+  skannKnapper('kjorer');
   $('#scanBeam').classList.add('kjor');
   $('#scanReadout').classList.remove('treff','bom');
 
-  const video = $('#camFeed');
-  const harBilde = !!kamStrom && video.readyState >= 2 && video.videoWidth > 0;
-  if(!ekteSkann || !harBilde){ simulertSkann(); return; }
+  /* Et mote satt opp fra kartet er ingen klassifisering: arten er alt valgt,
+     saa ruta spiller den av uten aa paastaa noen sikkerhet. */
+  if(kartMote){
+    const art = kartMote;
+    kartMote = null;
+    trekkSkann(art, 'MØTE PÅ KARTET', () => {
+      $('#scanBeam').classList.remove('kjor');
+      blitz();
+      if(STATE.malVariant){ LYD.sjelden(); dirr([30,60,30,60,90]); }
+      else                { LYD.funn();    dirr(60); }
+      setTimeout(() => visFunn(art), 460);
+    });
+    return;
+  }
+
+  if(!modellKlar()){ visSkannFeil('INGEN ARTSMODELL · PRØV IGJEN ELLER TREKK'); return; }
+  if(!kameraKlar()){ visSkannFeil('INGEN KAMERA · PRØV IGJEN ELLER TREKK');    return; }
 
   try {
-    const svar = await KLASSIFISER.klassifiser(video, {
+    const svar = await KLASSIFISER.klassifiser($('#camFeed'), {
       onFase: skannFase,
       bekreftNedlasting: sporOmNedlasting,
       /* samlingen bryter uavgjort paa slekt og familie: en art du mangler
@@ -1392,21 +1465,19 @@ $('#scanGo').addEventListener('click', async () => {
     });
     visSkannResultat(svar);
   } catch(err){
-    /* Modeller som mangler hoppes over inne i klassifiser.js. Kommer vi hit,
-       kom ingen av dem gjennom, eller spilleren sa nei til begge. */
-    if(err.navn === 'ModellUtilgjengelig' || err.navn === 'NedlastingKreves'){
-      toast('SKANNER UTEN MODELL');
+    /* Ingen fallback til trekning her. Skanneren skal si at den ikke fikk
+       svar, ikke finne paa en art og en sikkerhet. */
+    if(err.navn === 'NedlastingKreves'){
+      visSkannFeil('MODELLEN ER IKKE LASTET NED');
+    } else if(err.navn === 'ModellUtilgjengelig'){
+      visSkannFeil('MODELLEN ER IKKE TILGJENGELIG');
     } else {
       /* Meldingen maa fram paa skjermen. Paa telefon finnes ingen konsoll,
          og "MODELLEN SVIKTET" alene sier ingenting om hvorfor. */
       console.warn('skann feilet:', err);
       const grunn = String(err && (err.message || err.name) || err).slice(0, 80);
-      toast('MODELLEN SVIKTET: ' + grunn.toUpperCase());
-      $('#scanReadout').textContent = 'FEIL: ' + grunn;
-      $('#scanReadout').classList.add('bom');
+      visSkannFeil('FEIL: ' + grunn.toUpperCase());
     }
-    ekteSkann = false;
-    simulertSkann();
   }
 });
 

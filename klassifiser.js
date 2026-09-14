@@ -159,13 +159,29 @@ async function lastModell(navn, opt){
        kjoring, ikke ved oppretting, saa en try/catch her fanger ingenting.
        int8-modellene gaar derfor rett paa wasm. */
     const webgpuDuger = navigator.gpu && meta.presisjon !== 'int8' && !kunWasm.has(navn);
-    const ep = webgpuDuger ? ['webgpu', 'wasm'] : ['wasm'];
-    let session;
-    try {
+    let session, ep;
+
+    /* ort.env.wasm.proxy = true sender modellbufferet til workeren, og
+       overforingen gjor bufferet detached. Et andre forsok paa det samme
+       bufferet doer da med "buffer already detached" i stedet for den
+       egentlige feilen. Reservekopien lages derfor for forste forsok, og
+       bare naar det faktisk finnes et andre forsok - int8 gaar rett paa
+       wasm, og der er det ingenting aa falle tilbake til. */
+    if(!webgpuDuger){
+      ep = ['wasm'];
       session = await ort.InferenceSession.create(buf, { executionProviders: ep, graphOptimizationLevel:'all' });
-    } catch(e){
-      /* WebGPU feiler ogsaa stille paa en del Android-GPUer. */
-      session = await ort.InferenceSession.create(buf, { executionProviders:['wasm'], graphOptimizationLevel:'all' });
+    } else {
+      const reserve = buf.slice(0);
+      try {
+        ep = ['webgpu', 'wasm'];
+        session = await ort.InferenceSession.create(buf, { executionProviders: ep, graphOptimizationLevel:'all' });
+      } catch(e){
+        /* WebGPU feiler ogsaa stille paa en del Android-GPUer. */
+        console.warn('KLASSIFISER: WebGPU duger ikke for', navn, '-', e.message);
+        kunWasm.add(navn);
+        ep = ['wasm'];
+        session = await ort.InferenceSession.create(reserve, { executionProviders: ep, graphOptimizationLevel:'all' });
+      }
     }
     const oppf = { session, meta, labels, navn, ep };
     sesjoner.set(navn, oppf);
@@ -291,6 +307,8 @@ async function kjorRobust(navn, oppf, kilde, ort){
   } catch(feil){
     const brukteGpu = oppf.ep && oppf.ep.indexOf('webgpu') !== -1;
     if(!brukteGpu || kunWasm.has(navn)) throw feil;
+    /* Ny sesjon bygges av et nytt buffer fra cachen. Det gamle ligger i
+       workeren og er detached. */
     console.warn('KLASSIFISER: WebGPU feilet for', navn, '- bytter til wasm:', feil.message);
     kunWasm.add(navn);
     frigjor(navn);

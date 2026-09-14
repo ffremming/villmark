@@ -75,7 +75,6 @@
       </div>
       <p class="kart-kort-fakta" id="kartKortFakta"></p>
       <button class="btn kart-kort-mer" id="kartKortMer" data-mer="" hidden>LES MER</button>
-      <button class="btn btn-primary" id="kartKortGo">SKANN HER</button>
     </div>
 
     <nav class="tabbar">
@@ -135,7 +134,12 @@
       </div>
       <div class="scan-readout" id="scanReadout">RETT KAMERAET MOT ARTEN</div>
       <div class="scan-meter"><i id="scanMeterFill"></i></div>
-      <button class="btn btn-primary scan-go" id="scanGo">SKANN ART</button>
+      <div class="scan-knapper">
+        <button class="btn btn-primary scan-go" id="scanGo">SKANN ART</button>
+        <button class="btn btn-primary scan-go" id="scanGodta" hidden>GODTA TREFF</button>
+        <button class="btn scan-go" id="scanRetry" hidden>SKANN P&Aring; NYTT</button>
+        <button class="btn scan-go scan-tilfeldig" id="scanRandom">GI MEG EN TILFELDIG</button>
+      </div>
     </div>
   </section>
 

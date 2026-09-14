@@ -1,477 +1,479 @@
-/* VILLMARK - KORTSPILL: kortbase, regeldata og stokkbygging
+/* VILLMARK - CARD GAME: card base, rule data and deck building
 
-   Reglene folger One Piece Card Game. Navnene er omsatt til villmark:
-     SOL = DON!!        LIV = Life          LEDER = Leader
-     ART = Character    HENDELSE = Event    BIOTOP = Stage
-     KOMPOST = Trash    MOTTREKK = Counter  SPRANG = Rush
-     VERN = Blocker     DOBBELTHOGG = Double Attack
-     FORTAER = Banish   UTLOSER = Trigger                          */
+   The rules follow the One Piece Card Game. The names are carried over into
+   villmark:
+     SUN = DON!!        LIFE = Life         LEADER = Leader
+     SPECIES = Character   EVENT = Event    BIOTOPE = Stage
+     COMPOST = Trash    COUNTER = Counter   RUSH = Rush
+     BLOCKER = Blocker  DOUBLE_ATTACK = Double Attack
+     BANISH = Banish    TRIGGER = Trigger                           */
 
-/* ---------------------------------------------------------- farger
-   Hvert omrade er en farge, slik OPTCG har seks farger. En LEDER har to
-   farger, og stokken kan bare inneholde kort i LEDERens farger. */
-const KORTFARGER = {
-  granskogen:{ navn:'SKOG',  hex:'#3f8a49', mork:'#16301c', lys:'#68c274' },
-  fjellet:   { navn:'FJELL', hex:'#7f8d99', mork:'#2a323a', lys:'#b2bec8' },
-  myra:      { navn:'MYR',   hex:'#8f7c36', mork:'#332c12', lys:'#c9b25a' },
-  kysten:    { navn:'KYST',  hex:'#3d86c6', mork:'#122839', lys:'#74b4e8' },
-  vidda:     { navn:'VIDDE', hex:'#c08a4a', mork:'#3a2814', lys:'#e2b477' },
-  fjorden:   { navn:'FJORD', hex:'#2f9a9a', mork:'#0f3232', lys:'#5fd0d0' },
+/* ---------------------------------------------------------- colors
+   Every area is a color, the way OPTCG has six colors. A LEADER has two
+   colors, and the deck may only hold cards in the LEADER's colors. */
+const CARD_COLORS = {
+  spruceforest:{ name:'FOREST',   hex:'#3f8a49', dark:'#16301c', light:'#68c274' },
+  mountains:   { name:'MOUNTAIN', hex:'#7f8d99', dark:'#2a323a', light:'#b2bec8' },
+  bog:         { name:'BOG',      hex:'#8f7c36', dark:'#332c12', light:'#c9b25a' },
+  coast:       { name:'COAST',    hex:'#3d86c6', dark:'#122839', light:'#74b4e8' },
+  plateau:     { name:'PLATEAU',  hex:'#c08a4a', dark:'#3a2814', light:'#e2b477' },
+  fjord:       { name:'FJORD',    hex:'#2f9a9a', dark:'#0f3232', light:'#5fd0d0' },
 };
 
-/* ---------------------------------------------------------- nokkelord */
-const NOKLER = {
-  SPRANG:      'Kan angripe samme tur som den spilles.',
-  VERN:        'Kan hvile for å bli nytt mål for angrepet.',
-  DOBBELTHOGG: 'Tar 2 livskort når den treffer en LEDER.',
-  FORTAER:     'Livskortet går til kompost i stedet for hånda.',
+/* ---------------------------------------------------------- keywords */
+const KEYWORDS = {
+  RUSH:          'Can attack the same turn it is played.',
+  BLOCKER:       'Can rest to become the new target of the attack.',
+  DOUBLE_ATTACK: 'Takes 2 life cards when it hits a LEADER.',
+  BANISH:        'The life card goes to the compost instead of the hand.',
 };
-const NOKKEL_VIS = {
-  SPRANG:'SPRANG', VERN:'VERN', DOBBELTHOGG:'DOBBELTHOGG', FORTAER:'FORTÆR',
-};
-
-/* ---------------------------------------------------------- regelkonstanter */
-const REGLER = {
-  stokk: 50,          // kort i kortstokken
-  solStokk: 8,        // kort i SOL-stokken. 10 rakk ingen a bruke opp
-  apningshand: 5,     // kort trukket ved start
-  solForste: 1,       // SOL forste spiller far pa sin forste tur
-  solVanlig: 2,       // SOL alle andre turer
-  maksArter: 5,       // plasser i artsomradet
-  maksKopier: 4,      // kopier av samme kort i en stokk
-  solKraft: 1000,     // kraft per SOL som er gitt til et kort
+const KEYWORD_LABEL = {
+  RUSH:'RUSH', BLOCKER:'BLOCKER', DOUBLE_ATTACK:'DOUBLE ATTACK', BANISH:'BANISH',
 };
 
-/* ---------------------------------------------------------- avledede tall
-   Stats kommer fra artsdataene i species.js, slik at kortet og dyret
-   alltid forteller det samme.
+/* ---------------------------------------------------------- rule constants */
+const RULES = {
+  deck: 50,           // cards in the deck
+  sunDeck: 8,         // cards in the SUN deck. 10 was more than anyone used up
+  openingHand: 5,     // cards drawn at the start
+  sunFirst: 1,        // SUN the first player gets on their first turn
+  sunNormal: 2,       // SUN on every other turn
+  maxSpecies: 5,      // slots in the species area
+  maxCopies: 4,       // copies of the same card in one deck
+  sunPower: 1000,     // power per SUN given to a card
+};
 
-   Kosten er rangbasert, ikke absolutt. Rastyrken til artene ligger tett
-   (1160 til 6080), saa en direkte omregning stappet fire av fem arter i
-   kost 1 og 2: SOL-stokken vokste til 10 mens ingenting kostet mer enn
-   seks. Na sorteres artene etter rastyrke og fordeles over kurven, slik
-   at bassenget har dyre kort a bruke SOL paa ut spillet. Rekkefolgen er
-   den samme som for, saa bjornen er fortsatt dyrest og hvitveisen
-   billigst. */
-const KOSTKURVE  = [[0.19,1], [0.38,2], [0.55,3], [0.70,4], [0.83,5], [0.93,6], [1.00,7]];
-const KRAFTKURVE = { 1:2000, 2:3000, 3:4000, 4:5000, 5:6000, 6:7000, 7:9000 };
+/* ---------------------------------------------------------- derived numbers
+   Stats come from the species data in species.js, so the card and the animal
+   always tell the same story.
 
-const rastyrke = (angrep, hp) => angrep*100 + hp*20;
+   The cost is rank-based, not absolute. The raw power of the species sits
+   close together (1160 to 6080), so a direct conversion stuffed four of five
+   species into cost 1 and 2: the SUN deck grew to 10 while nothing cost more
+   than six. Now the species are sorted by raw power and spread over the curve,
+   so the pool has expensive cards to spend SUN on all game. The order is the
+   same as before, so the bear is still the most expensive and the wood anemone
+   the cheapest. */
+const COST_CURVE  = [[0.19,1], [0.38,2], [0.55,3], [0.70,4], [0.83,5], [0.93,6], [1.00,7]];
+const POWER_CURVE = { 1:2000, 2:3000, 3:4000, 4:5000, 5:6000, 6:7000, 7:9000 };
 
-const KOSTRANG = (() => {
-  const sortert = SPECIES.slice()
-    .sort((a,b) => rastyrke(a.angrep, a.hp) - rastyrke(b.angrep, b.hp)
+const rawPower = (attack, hp) => attack*100 + hp*20;
+
+const COST_RANK = (() => {
+  const sorted = SPECIES.slice()
+    .sort((a,b) => rawPower(a.attack, a.hp) - rawPower(b.attack, b.hp)
                 || a.id.localeCompare(b.id));
   const m = {};
-  sortert.forEach((sp, i) => {
-    const andel = (i + 1) / sortert.length;
-    m[sp.id] = KOSTKURVE.find(([grense]) => andel <= grense)[1];
+  sorted.forEach((sp, i) => {
+    const share = (i + 1) / sorted.length;
+    m[sp.id] = COST_CURVE.find(([limit]) => share <= limit)[1];
   });
   return m;
 })();
 
-/* Et eksemplar paa nivaa 3 har ingen rad i KOSTRANG, saa den skalerte
-   rastyrken plasseres paa stigen av alle rastyrker i stedet. Stigen slutter
-   paa kost 7: over det gir et hoyere nivaa bare merket, ikke mer kraft. */
-const NIVA_STEG = 0.15;          // +15 % paa alle stats per nivaa
-const STYRKESTIGE = SPECIES.map(sp => rastyrke(sp.angrep, sp.hp))
-                           .sort((a,b) => a - b);
+/* A specimen at level 3 has no row in COST_RANK, so the scaled raw power is
+   placed on the ladder of all raw powers instead. The ladder ends at cost 7:
+   above that a higher level only gives the badge, not more power. */
+const LEVEL_STEP = 0.15;          // +15 % on every stat per level
+const POWER_LADDER = SPECIES.map(sp => rawPower(sp.attack, sp.hp))
+                            .sort((a,b) => a - b);
 
-function kostFraStyrke(styrke){
-  let under = 0;
-  while(under < STYRKESTIGE.length && STYRKESTIGE[under] <= styrke) under++;
-  const andel = Math.max(under, 1) / STYRKESTIGE.length;
-  return KOSTKURVE.find(([grense]) => andel <= grense)[1];
+function costFromPower(power){
+  let below = 0;
+  while(below < POWER_LADDER.length && POWER_LADDER[below] <= power) below++;
+  const share = Math.max(below, 1) / POWER_LADDER.length;
+  return COST_CURVE.find(([limit]) => share <= limit)[1];
 }
 
-function kortKost(sp, niva){
-  if(!(niva > 1)) return KOSTRANG[sp.id];
-  const f = 1 + NIVA_STEG*(niva - 1);
-  return kostFraStyrke(rastyrke(sp.angrep*f, sp.hp*f));
+function cardCost(sp, level){
+  if(!(level > 1)) return COST_RANK[sp.id];
+  const f = 1 + LEVEL_STEP*(level - 1);
+  return costFromPower(rawPower(sp.attack*f, sp.hp*f));
 }
-function kortKraft(sp, niva){ return KRAFTKURVE[kortKost(sp, niva)]; }
-function kortMottrekk(sp){
-  if(sp.forsvar >= 22) return 2000;
-  if(sp.forsvar >= 11) return 1000;
+function cardPower(sp, level){ return POWER_CURVE[cardCost(sp, level)]; }
+function cardCounter(sp){
+  if(sp.defense >= 22) return 2000;
+  if(sp.defense >= 11) return 1000;
   return 0;
 }
-function kortAttributt(sp){
-  if(sp.kind === 'plante') return sp.vox.type === 'sopp' ? 'GIFT' : 'ROT';
+function cardAttribute(sp){
+  if(sp.kind === 'plant') return sp.vox.type === 'mushroom' ? 'POISON' : 'ROOT';
   const t = sp.vox.type;
-  if(t === 'fugl') return 'NEBB';
-  if(t === 'fisk' || t === 'sel') return 'FINNE';
-  if(sp.vox.gevir) return 'HORN';
-  return sp.angrep >= 25 ? 'KLØR' : 'TANN';
+  if(t === 'bird') return 'BEAK';
+  if(t === 'fish' || t === 'seal') return 'FIN';
+  if(sp.vox.antlers) return 'HORN';
+  return sp.attack >= 25 ? 'CLAWS' : 'FANG';
 }
 
-/* ---------------------------------------------------------- effekter
-   Bare seks virkninger finnes, og alle er implementert i motoren.
-     gjor: ko | hvil | kraft | selvkraft | trekk | sol
-     nar:  ved_spill | nar_angrep | aktiver | hoved | mottrekk | utloser */
-const E = (nar, gjor, o={}) => ({ nar, gjor, verdi:o.verdi||0, maks:o.maks||0 });
+/* ---------------------------------------------------------- effects
+   Only six effects exist, and all of them are implemented in the engine.
+     does: ko | rest | power | selfPower | draw | sun
+     when: on_play | on_attack | activate | main | counter | trigger */
+const E = (when, does, o={}) => ({ when, does, value:o.value||0, max:o.max||0 });
 
-function effTekst(e){
-  const varighet = e.nar === 'mottrekk' ? 'denne kampen' : 'denne turen';
-  switch(e.gjor){
-    case 'ko':        return `KO én av motstanderens ARTer med kostnad ${e.maks} eller mindre.`;
-    case 'hvil':      return `Hvil én av motstanderens ARTer med kostnad ${e.maks} eller mindre.`;
-    case 'kraft':     return `Gi én av dine LEDER eller ARTer +${e.verdi} kraft ${varighet}.`;
-    case 'selvkraft': return `Dette kortet får +${e.verdi} kraft ${varighet}.`;
-    case 'trekk':     return `Trekk ${e.verdi} kort.`;
-    case 'sol':       return `Legg ${e.verdi} SOL fra SOL-stokken, hvilt.`;
+function effectText(e){
+  const duration = e.when === 'counter' ? 'this battle' : 'this turn';
+  switch(e.does){
+    case 'ko':        return `KO one of your opponent's SPECIES with cost ${e.max} or less.`;
+    case 'rest':      return `Rest one of your opponent's SPECIES with cost ${e.max} or less.`;
+    case 'power':     return `Give one of your LEADER or SPECIES +${e.value} power ${duration}.`;
+    case 'selfPower': return `This card gets +${e.value} power ${duration}.`;
+    case 'draw':      return `Draw ${e.value} cards.`;
+    case 'sun':       return `Place ${e.value} SUN from the SUN deck, rested.`;
   }
   return '';
 }
-const NAR_PREFIKS = {
-  ved_spill:  'NÅR SPILT',
-  nar_angrep: 'NÅR DEN ANGRIPER',
-  aktiver:    'AKTIVER ⟳ én gang per tur',
-  hoved:      'HOVED',
-  mottrekk:   'MOTTREKK',
-  utloser:    'UTLØSER',
+const WHEN_PREFIX = {
+  on_play:   'ON PLAY',
+  on_attack: 'WHEN IT ATTACKS',
+  activate:  'ACTIVATE ⟳ once per turn',
+  main:      'MAIN',
+  counter:   'COUNTER',
+  trigger:   'TRIGGER',
 };
-function effHeltekst(e){
-  return e ? NAR_PREFIKS[e.nar] + ': ' + effTekst(e) : '';
+function effectFullText(e){
+  return e ? WHEN_PREFIX[e.when] + ': ' + effectText(e) : '';
 }
 
-/* ---------------------------------------------------------- ART-kortene
-   Nokkelord og effekt per art. Kost, kraft og mottrekk er avledet.
-   maks-tallene folger kostkurven: 'ko' rekker om lag kost minus tre,
-   'hvil' om lag kost minus en. Med 13 arter paa kost 1 og 72 totalt
-   dekker maks 2 en tredel av bassenget og maks 4 to tredeler, saa
-   fjerning treffer noe men ikke alt. */
-const ARTSKORT = {
-  /* GRANSKOGEN */
-  rev:       { nokler:['SPRANG'],      eff:E('ved_spill','hvil',{maks:4}),      utloser:E('utloser','kraft',{verdi:2000}) },
-  ekorn:     { nokler:['SPRANG'],      eff:E('ved_spill','sol',{verdi:1}),      utloser:E('utloser','trekk',{verdi:1}) },
-  bjorn:     { nokler:['DOBBELTHOGG'], eff:E('ved_spill','ko',{maks:4}) },
-  ulv:       { nokler:['DOBBELTHOGG'], eff:E('nar_angrep','selvkraft',{verdi:1000}) },
-  gran:      { nokler:['VERN'],        eff:E('aktiver','kraft',{verdi:1000}) },
-  fluesopp:  { nokler:[],              eff:E('ved_spill','hvil',{maks:3}),      utloser:E('utloser','hvil',{maks:3}) },
-  kantarell: { nokler:[],              eff:E('ved_spill','trekk',{verdi:1}),    utloser:E('utloser','trekk',{verdi:1}) },
-  /* FJELLET */
-  hare:      { nokler:['SPRANG'],      eff:null,                                utloser:E('utloser','trekk',{verdi:1}) },
-  gaupe:     { nokler:['DOBBELTHOGG'], eff:E('nar_angrep','selvkraft',{verdi:1000}) },
-  jerv:      { nokler:['VERN'],        eff:E('ved_spill','ko',{maks:3}) },
-  blaveis:   { nokler:[],              eff:E('ved_spill','kraft',{verdi:2000}), utloser:E('utloser','kraft',{verdi:3000}) },
-  /* MYRA */
-  elg:       { nokler:['VERN'],        eff:E('nar_angrep','selvkraft',{verdi:1000}) },
-  tyttebaer: { nokler:[],              eff:E('ved_spill','trekk',{verdi:1}),    utloser:E('utloser','trekk',{verdi:1}) },
-  molte:     { nokler:[],              eff:E('ved_spill','sol',{verdi:1}),      utloser:E('utloser','sol',{verdi:1}) },
-  bjork:     { nokler:['VERN'],        eff:null,                                utloser:E('utloser','kraft',{verdi:2000}) },
-  /* KYSTEN */
-  hubro:     { nokler:['FORTAER'],     eff:E('ved_spill','hvil',{maks:5}) },
-  havorn:    { nokler:['SPRANG'],      eff:E('nar_angrep','selvkraft',{verdi:1000}) },
-  furu:      { nokler:['VERN'],        eff:E('aktiver','kraft',{verdi:1000}) },
-  /* VIDDA */
-  rein:      { nokler:['VERN'],        eff:E('ved_spill','kraft',{verdi:2000}) },
-  rype:      { nokler:['SPRANG'],      eff:E('ved_spill','trekk',{verdi:1}),    utloser:E('utloser','trekk',{verdi:1}) },
-  fjellrev:  { nokler:['SPRANG'],      eff:E('ved_spill','sol',{verdi:1}),      utloser:E('utloser','sol',{verdi:1}) },
-  rosslyng:  { nokler:['VERN'],        eff:null,                                utloser:E('utloser','kraft',{verdi:2000}) },
-  /* FJORDEN */
-  oter:      { nokler:['SPRANG'],      eff:E('ved_spill','trekk',{verdi:1}) },
-  torsk:     { nokler:[],              eff:E('ved_spill','sol',{verdi:1}),      utloser:E('utloser','sol',{verdi:1}) },
-  steinkobbe:{ nokler:['VERN'],        eff:E('ved_spill','kraft',{verdi:1000}) },
-  tare:      { nokler:['VERN'],        eff:null,                                utloser:E('utloser','kraft',{verdi:2000}) },
+/* ---------------------------------------------------------- the SPECIES cards
+   Keywords and effect per species. Cost, power and counter are derived.
+   The max numbers follow the cost curve: 'ko' reaches about cost minus three,
+   'rest' about cost minus one. With 13 species at cost 1 and 72 in total,
+   max 2 covers a third of the pool and max 4 two thirds, so removal hits
+   something but not everything. */
+const SPECIES_CARDS = {
+  /* SPRUCE FOREST */
+  fox:         { keys:['RUSH'],          effect:E('on_play','rest',{max:4}),       trigger:E('trigger','power',{value:2000}) },
+  squirrel:    { keys:['RUSH'],          effect:E('on_play','sun',{value:1}),      trigger:E('trigger','draw',{value:1}) },
+  bear:        { keys:['DOUBLE_ATTACK'], effect:E('on_play','ko',{max:4}) },
+  wolf:        { keys:['DOUBLE_ATTACK'], effect:E('on_attack','selfPower',{value:1000}) },
+  spruce:      { keys:['BLOCKER'],       effect:E('activate','power',{value:1000}) },
+  flyagaric:   { keys:[],                effect:E('on_play','rest',{max:3}),       trigger:E('trigger','rest',{max:3}) },
+  chanterelle: { keys:[],                effect:E('on_play','draw',{value:1}),     trigger:E('trigger','draw',{value:1}) },
+  /* MOUNTAINS */
+  hare:        { keys:['RUSH'],          effect:null,                              trigger:E('trigger','draw',{value:1}) },
+  lynx:        { keys:['DOUBLE_ATTACK'], effect:E('on_attack','selfPower',{value:1000}) },
+  wolverine:   { keys:['BLOCKER'],       effect:E('on_play','ko',{max:3}) },
+  hepatica:    { keys:[],                effect:E('on_play','power',{value:2000}), trigger:E('trigger','power',{value:3000}) },
+  /* THE BOG */
+  moose:       { keys:['BLOCKER'],       effect:E('on_attack','selfPower',{value:1000}) },
+  lingonberry: { keys:[],                effect:E('on_play','draw',{value:1}),     trigger:E('trigger','draw',{value:1}) },
+  cloudberry:  { keys:[],                effect:E('on_play','sun',{value:1}),      trigger:E('trigger','sun',{value:1}) },
+  birch:       { keys:['BLOCKER'],       effect:null,                              trigger:E('trigger','power',{value:2000}) },
+  /* THE COAST */
+  eagleowl:    { keys:['BANISH'],        effect:E('on_play','rest',{max:5}) },
+  seaeagle:    { keys:['RUSH'],          effect:E('on_attack','selfPower',{value:1000}) },
+  pine:        { keys:['BLOCKER'],       effect:E('activate','power',{value:1000}) },
+  /* THE PLATEAU */
+  reindeer:    { keys:['BLOCKER'],       effect:E('on_play','power',{value:2000}) },
+  ptarmigan:   { keys:['RUSH'],          effect:E('on_play','draw',{value:1}),     trigger:E('trigger','draw',{value:1}) },
+  arcticfox:   { keys:['RUSH'],          effect:E('on_play','sun',{value:1}),      trigger:E('trigger','sun',{value:1}) },
+  heather:     { keys:['BLOCKER'],       effect:null,                              trigger:E('trigger','power',{value:2000}) },
+  /* THE FJORD */
+  otter:       { keys:['RUSH'],          effect:E('on_play','draw',{value:1}) },
+  cod:         { keys:[],                effect:E('on_play','sun',{value:1}),      trigger:E('trigger','sun',{value:1}) },
+  harbourseal: { keys:['BLOCKER'],       effect:E('on_play','power',{value:1000}) },
+  kelp:        { keys:['BLOCKER'],       effect:null,                              trigger:E('trigger','power',{value:2000}) },
 };
 
-/* Artene uten egen rad over sto for femti av de syttito ART-kortene, alle
-   uten tekst og dermed utbyttbare. De far na ett nokkelord fra sine egne
-   tall, saa et kort skiller seg fra et annet paa mer enn kraft. Ett hvert,
-   for at bassenget ikke skal renne over av VERN og DOBBELTHOGG. */
-function avledeNokler(sp){
-  const naboer = SPECIES.filter(x => x.omrade === sp.omrade);
-  const snitt = f => naboer.reduce((s,x) => s + f(x), 0) / naboer.length;
-  const rel = f => f(sp) / (snitt(f) || 1);
+/* The species without their own row above made up fifty of the seventy-two
+   SPECIES cards, all of them without text and therefore interchangeable. They
+   now get one keyword from their own numbers, so one card differs from another
+   by more than power. One each, so the pool does not overflow with BLOCKER and
+   DOUBLE_ATTACK. */
+function deriveKeywords(sp){
+  const neighbours = SPECIES.filter(x => x.area === sp.area);
+  const avg = f => neighbours.reduce((s,x) => s + f(x), 0) / neighbours.length;
+  const rel = f => f(sp) / (avg(f) || 1);
   const best = [
-    ['DOBBELTHOGG', rel(x => x.angrep)],
-    ['SPRANG',      rel(x => x.fart)],
-    ['VERN',        rel(x => x.forsvar)],
+    ['DOUBLE_ATTACK', rel(x => x.attack)],
+    ['RUSH',          rel(x => x.speed)],
+    ['BLOCKER',       rel(x => x.defense)],
   ].sort((a,b) => b[1] - a[1])[0];
   return best[1] >= 1.2 ? [best[0]] : [];
 }
 
-/* ---------------------------------------------------------- HENDELSE-kortene
-   Hvert kort er avledet av artens forste trekk i species.js.
-   Dyretrekk blir MOTTREKK-hendelser. Plantetrekk blir HOVED-hendelser.
+/* ---------------------------------------------------------- the EVENT cards
+   Every card is derived from the species' first move in species.js.
+   Animal moves become COUNTER events. Plant moves become MAIN events.
 
-   Kosten til plantehendelsene sto for i angrepsstyrken til trekket, og
-   alle ti havnet paa 2. Na staar prisen ved siden av virkningen, slik at
-   en fjerning koster mer enn en oppladning. */
-const PLANTEHENDELSE = {
-  gran:      { kost:3, eff:E('hoved','hvil',{maks:4}) },
-  fluesopp:  { kost:4, eff:E('hoved','ko',{maks:3}) },
-  kantarell: { kost:2, eff:E('hoved','trekk',{verdi:2}) },
-  blaveis:   { kost:1, eff:E('hoved','kraft',{verdi:3000}) },
-  tyttebaer: { kost:2, eff:E('hoved','trekk',{verdi:2}) },
-  molte:     { kost:1, eff:E('hoved','sol',{verdi:1}) },
-  bjork:     { kost:2, eff:E('hoved','hvil',{maks:3}) },
-  furu:      { kost:3, eff:E('hoved','ko',{maks:2}) },
-  rosslyng:  { kost:2, eff:E('hoved','kraft',{verdi:4000}) },
-  tare:      { kost:3, eff:E('hoved','hvil',{maks:4}) },
+   The cost of the plant events used to sit in the attack strength of the move,
+   and all ten landed on 2. Now the price stands next to the effect, so a
+   removal costs more than a power-up. */
+const PLANT_EVENTS = {
+  spruce:      { cost:3, effect:E('main','rest',{max:4}) },
+  flyagaric:   { cost:4, effect:E('main','ko',{max:3}) },
+  chanterelle: { cost:2, effect:E('main','draw',{value:2}) },
+  hepatica:    { cost:1, effect:E('main','power',{value:3000}) },
+  lingonberry: { cost:2, effect:E('main','draw',{value:2}) },
+  cloudberry:  { cost:1, effect:E('main','sun',{value:1}) },
+  birch:       { cost:2, effect:E('main','rest',{max:3}) },
+  pine:        { cost:3, effect:E('main','ko',{max:2}) },
+  heather:     { cost:2, effect:E('main','power',{value:4000}) },
+  kelp:        { cost:3, effect:E('main','rest',{max:4}) },
 };
 
-/* ---------------------------------------------------------- BIOTOP-kortene
-   BIOTOPen virker hver tur den staar, saa fjerningen her er holdt lavt. */
-const BIOTOPKORT = {
-  granskogen:{ navn:'SKOGHOLTET', kost:3, eff:E('aktiver','kraft',{verdi:2000}) },
-  fjellet:   { navn:'STEINURA',   kost:2, eff:E('aktiver','hvil',{maks:2}) },
-  myra:      { navn:'TORVMYRA',   kost:1, eff:E('aktiver','kraft',{verdi:1000}) },
-  kysten:    { navn:'BERGVEGGEN', kost:2, eff:E('aktiver','hvil',{maks:2}) },
-  vidda:     { navn:'LYNGHEIA',   kost:1, eff:E('aktiver','kraft',{verdi:1000}) },
-  fjorden:   { navn:'TARESKOGEN', kost:3, eff:E('aktiver','kraft',{verdi:2000}) },
+/* ---------------------------------------------------------- the BIOTOPE cards
+   The BIOTOPE works every turn it stands, so removal here is kept low. */
+const BIOTOPE_CARDS = {
+  spruceforest:{ name:'THE COPSE',       cost:3, effect:E('activate','power',{value:2000}) },
+  mountains:   { name:'THE SCREE',       cost:2, effect:E('activate','rest',{max:2}) },
+  bog:         { name:'THE PEAT BOG',    cost:1, effect:E('activate','power',{value:1000}) },
+  coast:       { name:'THE CLIFF FACE',  cost:2, effect:E('activate','rest',{max:2}) },
+  plateau:     { name:'THE HEATH',       cost:1, effect:E('activate','power',{value:1000}) },
+  fjord:       { name:'THE KELP FOREST', cost:3, effect:E('activate','power',{value:2000}) },
 };
 
-/* ---------------------------------------------------------- LEDER-kortene
-   En LEDER per omrade. To farger, slik at stokken far nok kort a velge i.
-   Hver farge brukes av noyaktig to ledere, og hver effekt deles av to
-   ledere.
+/* ---------------------------------------------------------- the LEADER cards
+   One LEADER per area. Two colors, so the deck has enough cards to choose
+   from. Every color is used by exactly two leaders, and every effect is shared
+   by two leaders.
 
-   Liv og effekt skal veie mot hverandre: den sterkeste effekten horer
-   sammen med minst liv. For sto det motsatt — GAUPE og REIN hadde bade
-   fem liv og trekk hver tur, mens BJORN og STEINKOBBE hadde fire liv og
-   en SOL-effekt som ikke gjorde noe, siden SOL-stokken uansett naar taket
-   av seg selv. Den beste lederen vant fire av fem partier mot den
-   svakeste. */
-const LEDERKORT = [
-  { id:'ld_gaupe',      art:'gaupe',      liv:4, farger:['fjellet','vidda'],     eff:E('aktiver','trekk',{verdi:1}) },
-  { id:'ld_rein',       art:'rein',       liv:4, farger:['vidda','myra'],        eff:E('aktiver','trekk',{verdi:1}) },
-  { id:'ld_havorn',     art:'havorn',     liv:5, farger:['kysten','fjorden'],    eff:E('nar_angrep','selvkraft',{verdi:1000}) },
-  { id:'ld_elg',        art:'elg',        liv:5, farger:['myra','kysten'],       eff:E('nar_angrep','selvkraft',{verdi:1000}) },
-  { id:'ld_bjorn',      art:'bjorn',      liv:5, farger:['granskogen','fjellet'],eff:E('aktiver','kraft',{verdi:2000}) },
-  { id:'ld_steinkobbe', art:'steinkobbe', liv:5, farger:['fjorden','granskogen'],eff:E('aktiver','kraft',{verdi:2000}) },
+   Life and effect must balance each other: the strongest effect belongs with
+   the least life. It used to be the other way around - LYNX and REINDEER had
+   both five life and a draw every turn, while BEAR and HARBOUR SEAL had four
+   life and a SUN effect that did nothing, since the SUN deck reaches its cap
+   by itself anyway. The best leader won four out of five games against the
+   weakest. */
+const LEADER_CARDS = [
+  { id:'ld_lynx',        species:'lynx',        life:4, colors:['mountains','plateau'],     effect:E('activate','draw',{value:1}) },
+  { id:'ld_reindeer',    species:'reindeer',    life:4, colors:['plateau','bog'],           effect:E('activate','draw',{value:1}) },
+  { id:'ld_seaeagle',    species:'seaeagle',    life:5, colors:['coast','fjord'],           effect:E('on_attack','selfPower',{value:1000}) },
+  { id:'ld_moose',       species:'moose',       life:5, colors:['bog','coast'],             effect:E('on_attack','selfPower',{value:1000}) },
+  { id:'ld_bear',        species:'bear',        life:5, colors:['spruceforest','mountains'],effect:E('activate','power',{value:2000}) },
+  { id:'ld_harbourseal', species:'harbourseal', life:5, colors:['fjord','spruceforest'],    effect:E('activate','power',{value:2000}) },
 ];
 
-/* ---------------------------------------------------------- kortbygging
-   Et ART-kort baerer nivaaet til eksemplaret det kom fra. Nivaaet ligger i
-   id-en - 'rev@3' - slik at motoren fortsatt kan sende rene id-lister over
-   nettet, og motparten slaar opp det samme kortet uten a faa noe tilsendt.
-   Nivaa 1 beholder den bare arts-id-en, saa gamle id-er virker som for. */
-function kortIdFor(artId, niva){
-  return niva > 1 ? artId + '@' + niva : artId;
+/* ---------------------------------------------------------- card building
+   A SPECIES card carries the level of the specimen it came from. The level
+   lives in the id - 'fox@3' - so the engine can still send plain id lists over
+   the network, and the opponent looks up the same card without being sent
+   anything. At level 1 it keeps the bare species id, so old ids work as before. */
+function cardIdFor(speciesId, level){
+  return level > 1 ? speciesId + '@' + level : speciesId;
 }
-function delKortId(id){
+function splitCardId(id){
   const i = id.indexOf('@');
-  if(i < 0) return { artId:id, niva:1 };
-  const niva = Number(id.slice(i + 1));
-  return { artId: id.slice(0, i), niva: niva >= 1 ? niva : 1 };
+  if(i < 0) return { speciesId:id, level:1 };
+  const level = Number(id.slice(i + 1));
+  return { speciesId: id.slice(0, i), level: level >= 1 ? level : 1 };
 }
 
-function typeLinje(sp){
-  return (sp.kind === 'dyr' ? 'DYR' : 'PLANTE') + ' / ' + KORTFARGER[sp.omrade].navn;
+function typeLine(sp){
+  return (sp.kind === 'animal' ? 'ANIMAL' : 'PLANT') + ' / ' + CARD_COLORS[sp.area].name;
 }
 
-/* Et VERN gir fra seg turen det kommer ned: det skal stoppe noe, ikke
-   angripe. Til gjengjeld staar det som et kort to hakk lenger oppe paa
-   kraftkurven. Uten det taper de forsvarstunge fargene paa ren fart —
-   MYRA, som er atte planter og fire dyr, angrep ti ganger i partiet mot
-   KYSTENs fjorten, og ELGen vant hvert femte parti. */
-const VERNKRAFT = 2000;
+/* A BLOCKER gives up the turn it comes down: it is meant to stop something,
+   not to attack. In return it stands as a card two steps higher on the power
+   curve. Without that, the defense-heavy colors lose on speed alone - THE BOG,
+   which is eight plants and four animals, attacked ten times a game against
+   THE COAST's fourteen, and the MOOSE won every fifth game. */
+const BLOCKER_POWER = 2000;
 
-function byggArtKort(sp, niva){
-  const d = ARTSKORT[sp.id] || { nokler: avledeNokler(sp), eff:null };
-  const nokler = d.nokler || [];
-  const n = niva > 1 ? niva : 1;
+function buildSpeciesCard(sp, level){
+  const d = SPECIES_CARDS[sp.id] || { keys: deriveKeywords(sp), effect:null };
+  const keys = d.keys || [];
+  const n = level > 1 ? level : 1;
   return {
-    id: kortIdFor(sp.id, n), kat:'art', artId: sp.id, niva: n,
-    navn: sp.navn, sci: sp.sci,
-    farger: [sp.omrade],
-    kost: kortKost(sp, n), mot: kortMottrekk(sp),
-    kraft: kortKraft(sp, n) + (nokler.includes('VERN') ? VERNKRAFT : 0),
-    attributt: kortAttributt(sp), typer: typeLinje(sp),
-    nokler, eff: d.eff || null, utloser: d.utloser || null,
-    sjelden: sp.sjelden, fakta: sp.fakta,
+    id: cardIdFor(sp.id, n), kind:'species', speciesId: sp.id, level: n,
+    name: sp.name, sci: sp.sci,
+    colors: [sp.area],
+    cost: cardCost(sp, n), counter: cardCounter(sp),
+    power: cardPower(sp, n) + (keys.includes('BLOCKER') ? BLOCKER_POWER : 0),
+    attribute: cardAttribute(sp), types: typeLine(sp),
+    keys, effect: d.effect || null, trigger: d.trigger || null,
+    rarity: sp.rarity, fact: sp.fact,
   };
 }
 
-function byggHendelseKort(sp){
-  const t = sp.trekk[0];
-  const plante = sp.kind === 'plante';
-  const p = plante && (PLANTEHENDELSE[sp.id] || { kost:2, eff:E('hoved','trekk',{verdi:1}) });
-  const eff = plante ? p.eff
-    : E('mottrekk','kraft',{ verdi: t.s >= 30 ? 4000 : 3000 });
+function buildEventCard(sp){
+  const t = sp.moves[0];
+  const plant = sp.kind === 'plant';
+  const p = plant && (PLANT_EVENTS[sp.id] || { cost:2, effect:E('main','draw',{value:1}) });
+  const effect = plant ? p.effect
+    : E('counter','power',{ value: t.s >= 30 ? 4000 : 3000 });
   return {
-    id: 'hn_' + sp.id, kat:'hendelse', artId: sp.id,
-    navn: t.n, sci: sp.sci,
-    farger: [sp.omrade],
-    kost: plante ? p.kost : (t.s >= 30 ? 2 : 1),
-    kraft: null, mot: plante ? 0 : 1000,
-    attributt: null, typer: 'HENDELSE / ' + KORTFARGER[sp.omrade].navn,
-    nokler: [], eff, utloser: plante ? null : E('utloser','kraft',{verdi:3000}),
-    sjelden: sp.sjelden, fakta: sp.fakta,
+    id: 'ev_' + sp.id, kind:'event', speciesId: sp.id,
+    name: t.n, sci: sp.sci,
+    colors: [sp.area],
+    cost: plant ? p.cost : (t.s >= 30 ? 2 : 1),
+    power: null, counter: plant ? 0 : 1000,
+    attribute: null, types: 'EVENT / ' + CARD_COLORS[sp.area].name,
+    keys: [], effect, trigger: plant ? null : E('trigger','power',{value:3000}),
+    rarity: sp.rarity, fact: sp.fact,
   };
 }
 
-function byggBiotopKort(omr){
-  const b = BIOTOPKORT[omr.id];
+function buildBiotopeCard(area){
+  const b = BIOTOPE_CARDS[area.id];
   return {
-    id: 'bt_' + omr.id, kat:'biotop', artId: omr.arter[0],
-    navn: b.navn, sci: omr.navn,
-    farger: [omr.id],
-    kost: b.kost, kraft: null, mot: 0,
-    attributt: null, typer: 'BIOTOP / ' + KORTFARGER[omr.id].navn,
-    nokler: [], eff: b.eff, utloser: null,
-    sjelden: 2, fakta: omr.desc,
+    id: 'bt_' + area.id, kind:'biotope', speciesId: area.species[0],
+    name: b.name, sci: area.name,
+    colors: [area.id],
+    cost: b.cost, power: null, counter: 0,
+    attribute: null, types: 'BIOTOPE / ' + CARD_COLORS[area.id].name,
+    keys: [], effect: b.effect, trigger: null,
+    rarity: 2, fact: area.desc,
   };
 }
 
-function byggLederKort(l){
-  const sp = SPECIES_BY_ID[l.art];
+function buildLeaderCard(l){
+  const sp = SPECIES_BY_ID[l.species];
   return {
-    id: l.id, kat:'leder', artId: l.art,
-    navn: sp.navn, sci: sp.sci,
-    farger: l.farger,
-    kost: null, kraft: 5000, mot: 0, liv: l.liv,
-    attributt: kortAttributt(sp),
-    typer: KORTFARGER[l.farger[0]].navn + ' / ' + KORTFARGER[l.farger[1]].navn,
-    nokler: [], eff: l.eff, utloser: null,
-    sjelden: sp.sjelden, fakta: sp.fakta,
+    id: l.id, kind:'leader', speciesId: l.species,
+    name: sp.name, sci: sp.sci,
+    colors: l.colors,
+    cost: null, power: 5000, counter: 0, life: l.life,
+    attribute: cardAttribute(sp),
+    types: CARD_COLORS[l.colors[0]].name + ' / ' + CARD_COLORS[l.colors[1]].name,
+    keys: [], effect: l.effect, trigger: null,
+    rarity: sp.rarity, fact: sp.fact,
   };
 }
 
-/* hele kortbasen, oppslagbar pa id */
-const KORTBASE = (() => {
+/* the whole card base, looked up by id */
+const CARD_BASE = (() => {
   const b = {};
   for(const sp of SPECIES){
-    const a = byggArtKort(sp);      b[a.id] = a;
-    const h = byggHendelseKort(sp); b[h.id] = h;
+    const a = buildSpeciesCard(sp); b[a.id] = a;
+    const h = buildEventCard(sp);   b[h.id] = h;
   }
-  for(const omr of AREAS)    { const k = byggBiotopKort(omr); b[k.id] = k; }
-  for(const l of LEDERKORT)  { const k = byggLederKort(l);    b[k.id] = k; }
+  for(const area of AREAS)      { const k = buildBiotopeCard(area); b[k.id] = k; }
+  for(const l of LEADER_CARDS)  { const k = buildLeaderCard(l);     b[k.id] = k; }
   return b;
 })();
-const LEDERE = LEDERKORT.map(l => KORTBASE[l.id]);
+const LEADERS = LEADER_CARDS.map(l => CARD_BASE[l.id]);
 
-/* Oppslag som ogsaa kjenner nivaakortene. KORTBASE har bare nivaa 1, saa
-   'rev@3' bygges forste gang noen spor etter det og blir liggende. Motoren
-   bruker denne i stedet for KORTBASE[id]. */
-function kortAv(id){
-  const funnet = KORTBASE[id];
-  if(funnet) return funnet;
+/* Lookup that also knows the level cards. CARD_BASE only holds level 1, so
+   'fox@3' is built the first time someone asks for it and then stays. The
+   engine uses this instead of CARD_BASE[id]. */
+function cardById(id){
+  const hit = CARD_BASE[id];
+  if(hit) return hit;
   if(typeof id !== 'string' || id.indexOf('@') < 0) return undefined;
-  const { artId, niva } = delKortId(id);
-  const sp = SPECIES_BY_ID[artId];
+  const { speciesId, level } = splitCardId(id);
+  const sp = SPECIES_BY_ID[speciesId];
   if(!sp) return undefined;
-  const kort = byggArtKort(sp, niva);
-  KORTBASE[kort.id] = kort;
-  return kort;
+  const card = buildSpeciesCard(sp, level);
+  CARD_BASE[card.id] = card;
+  return card;
 }
 
-/* ---------------------------------------------------------- stokkbygging
-   50 kort, bare i LEDERens to farger, maks 4 kopier av hvert kort.
+/* ---------------------------------------------------------- deck building
+   50 cards, only in the LEADER's two colors, at most 4 copies of each card.
 
-   For ble stokken plukket som ett eksemplar av hvert kort i bassenget.
-   Det ga 50 forskjellige kort: ingen to partier lignet hverandre, fire-
-   kopier-regelen slo aldri inn, og halve stokken var mottrekkshendelser.
-   Na fylles en fast plan med ekte kopier. Planen sier hvor mange kort
-   stokken skal ha av hver kategori og hver kost, slik at kurven holder
-   uansett hvilke to farger lederen har. */
-const STOKKPLAN = {
-  art:      { 1:4, 2:7, 3:7, 4:7, 5:5, 6:4, 7:2 },   /* 36 */
-  hendelse: { 1:4, 2:5, 3:3 },                       /* 12 */
+   The deck used to be picked as one copy of every card in the pool. That gave
+   50 different cards: no two games looked alike, the four-copy rule never
+   kicked in, and half the deck was counter events. Now a fixed plan is filled
+   with real copies. The plan says how many cards the deck should hold of each
+   category and each cost, so the curve holds no matter which two colors the
+   leader has. */
+const DECK_PLAN = {
+  species: { 1:4, 2:7, 3:7, 4:7, 5:5, 6:4, 7:2 },   /* 36 */
+  event:   { 1:4, 2:5, 3:3 },                       /* 12 */
 };
-const STOKK_BIOTOP = 2;   /* ett av hver farge — bare en kan ligge ute om gangen */
+const DECK_BIOTOPES = 2;   /* one of each color - only one can be out at a time */
 
-function byggStokk(leder){
-  const basseng = Object.values(KORTBASE)
-    .filter(k => k.kat !== 'leder' && leder.farger.includes(k.farger[0]));
-  /* kort med tekst forst, saa de sjeldne: stokken skal ha noe a gjore */
-  const vekt = k => (k.eff ? 2 : 0) + (k.utloser ? 1 : 0)
-                  + (k.nokler ? k.nokler.length : 0) + k.sjelden/10;
+function buildDeck(leader){
+  const pool = Object.values(CARD_BASE)
+    .filter(k => k.kind !== 'leader' && leader.colors.includes(k.colors[0]));
+  /* cards with text first, then the rare ones: the deck should have something to do */
+  const weight = k => (k.effect ? 2 : 0) + (k.trigger ? 1 : 0)
+                    + (k.keys ? k.keys.length : 0) + k.rarity/10;
 
-  const stokk = [], kopier = {};
-  const legg = (kort, onsket) => {
-    let lagt = 0;
-    while(lagt < onsket && stokk.length < REGLER.stokk
-          && (kopier[kort.id] || 0) < REGLER.maksKopier){
-      kopier[kort.id] = (kopier[kort.id] || 0) + 1;
-      stokk.push(kort.id);
-      lagt++;
+  const deck = [], copies = {};
+  const add = (card, wanted) => {
+    let added = 0;
+    while(added < wanted && deck.length < RULES.deck
+          && (copies[card.id] || 0) < RULES.maxCopies){
+      copies[card.id] = (copies[card.id] || 0) + 1;
+      deck.push(card.id);
+      added++;
     }
-    return lagt;
+    return added;
   };
-  /* Fyll en rute i planen. Mangler fargene kort til akkurat den kosten,
-     brukes naermeste kost i samme kategori, saa planen alltid gaar opp.
-     Et for dyrt kort teller dobbelt saa langt unna som et for billig: et
-     hull fylt oppover kan ikke spilles paa kurven, og da star SOL ubrukt.
-     MYRA og KYSTEN har ingen art paa kost 5, og da ELGens hull ble fylt
-     med kost 6 vant han bare hvert fjerde parti. */
-  const avstand = (k, kost) => k.kost > kost ? (k.kost - kost) * 2 : kost - k.kost;
-  const fyll = (kat, kost, antall) => {
-    const naer = basseng.filter(k => k.kat === kat).sort((a,b) =>
-      avstand(a, kost) - avstand(b, kost)
-      || vekt(b) - vekt(a) || a.id.localeCompare(b.id));
-    let igjen = antall;
-    for(const k of naer){
-      if(igjen <= 0) break;
-      igjen -= legg(k, Math.min(REGLER.maksKopier, igjen));
+  /* Fill one slot in the plan. If the colors lack cards at exactly that cost,
+     the nearest cost in the same category is used, so the plan always adds up.
+     A card that is too expensive counts as twice as far away as one that is
+     too cheap: a hole filled upwards cannot be played on the curve, and then
+     SUN sits unused. THE BOG and THE COAST have no species at cost 5, and when
+     the MOOSE's hole was filled with cost 6 he only won every fourth game. */
+  const gap = (k, cost) => k.cost > cost ? (k.cost - cost) * 2 : cost - k.cost;
+  const fill = (kind, cost, count) => {
+    const near = pool.filter(k => k.kind === kind).sort((a,b) =>
+      gap(a, cost) - gap(b, cost)
+      || weight(b) - weight(a) || a.id.localeCompare(b.id));
+    let left = count;
+    for(const k of near){
+      if(left <= 0) break;
+      left -= add(k, Math.min(RULES.maxCopies, left));
     }
   };
-  /* en BIOTOP av hver farge. Flere kopier er bortkastet: bare en kan
-     ligge ute, og den andre havner rett i komposten. */
-  for(const k of basseng.filter(k => k.kat === 'biotop')
-                        .sort((a,b) => a.id.localeCompare(b.id))
-                        .slice(0, STOKK_BIOTOP)) legg(k, 1);
+  /* one BIOTOPE of each color. More copies are wasted: only one can be out,
+     and the other lands straight in the compost. */
+  for(const k of pool.filter(k => k.kind === 'biotope')
+                     .sort((a,b) => a.id.localeCompare(b.id))
+                     .slice(0, DECK_BIOTOPES)) add(k, 1);
 
-  for(const kat of ['art','hendelse'])
-    for(const kost of Object.keys(STOKKPLAN[kat]))
-      fyll(kat, Number(kost), STOKKPLAN[kat][kost]);
+  for(const kind of ['species','event'])
+    for(const cost of Object.keys(DECK_PLAN[kind]))
+      fill(kind, Number(cost), DECK_PLAN[kind][cost]);
 
-  /* Har en farge for faa kort til a fylle planen, toppes det opp med de
-     beste ART-kortene som er igjen. */
-  const rest = basseng.filter(k => k.kat === 'art')
-    .sort((a,b) => vekt(b) - vekt(a) || a.kost - b.kost || a.id.localeCompare(b.id));
-  while(stokk.length < REGLER.stokk){
-    const for_ = stokk.length;
-    for(const k of rest) legg(k, 1);
-    if(stokk.length === for_) break;              // alt er brukt opp
+  /* If a color has too few cards to fill the plan, it is topped up with the
+     best SPECIES cards left over. */
+  const rest = pool.filter(k => k.kind === 'species')
+    .sort((a,b) => weight(b) - weight(a) || a.cost - b.cost || a.id.localeCompare(b.id));
+  while(deck.length < RULES.deck){
+    const before = deck.length;
+    for(const k of rest) add(k, 1);
+    if(deck.length === before) break;              // everything is used up
   }
-  return stokk;
+  return deck;
 }
 
-/* ---------------------------------------------------------- spillerens dekk
-   Stokken over er maskinens: en plan fylt med kort fra hele kortbasen. Din
-   egen stokk er derimot plenen din. Hvert eksemplar som staar ute er ett
-   kort, paa sitt eget nivaa, og du velger selv hvilke av dem som blir med.
+/* ---------------------------------------------------------- the player's deck
+   The deck above is the machine's: a plan filled with cards from the whole
+   card base. Your own deck is your lawn instead. Every specimen standing out
+   there is one card, at its own level, and you choose which of them come along.
 
-   Derfor gjelder ingen av de to reglene fra planstokken her: fargen
-   begrenser ikke lenger, siden plenen ikke har omraader, og kopitaket gir
-   ikke mening naar seks rever paa plenen nettopp er seks rev-kort. BIOTOP
-   og HENDELSE hoerer til omraader og trekk, ikke til dyr som staar paa en
-   plen, saa de er ute av spillerdekket. */
+   Neither of the two rules from the plan deck therefore applies here: the color
+   no longer limits anything, since the lawn has no areas, and the copy cap makes
+   no sense when six foxes on the lawn are exactly six fox cards. BIOTOPE and
+   EVENT belong to areas and moves, not to animals standing on a lawn, so they
+   are out of the player's deck. */
 
-const DEKK_SLAKK = 4;     // kort igjen i stokken etter aapningshand og liv
+const DECK_SLACK = 4;     // cards left in the deck after the opening hand and life
 
-/** minste lovlige dekk mot denne lederen: hand + liv + noen trekk */
-function dekkMinst(lederKort){
-  return REGLER.apningshand + (lederKort ? lederKort.liv : 5) + DEKK_SLAKK;
+/** the smallest legal deck against this leader: hand + life + a few draws */
+function minDeckSize(leaderCard){
+  return RULES.openingHand + (leaderCard ? leaderCard.life : 5) + DECK_SLACK;
 }
 
-/** eksemplarene som kan vaere med: de som faktisk staar ute paa plenen */
-function dekkbareEksemplarer(eksemplarer){
-  return (eksemplarer || []).filter(e =>
-    e && e.x !== null && e.z !== null && SPECIES_BY_ID[e.art]);
+/** the specimens that may come along: the ones actually standing out on the lawn */
+function deckableSpecimens(specimens){
+  return (specimens || []).filter(e =>
+    e && e.x !== null && e.z !== null && SPECIES_BY_ID[e.species]);
 }
 
-/** kort-id-ene i dekket. valgt = Set med uid, null betyr alt som staar ute */
-function byggDekkStokk(eksemplarer, valgt){
-  return dekkbareEksemplarer(eksemplarer)
-    .filter(e => !valgt || valgt.has(e.uid))
-    .map(e => kortIdFor(e.art, e.niva));
+/** the card ids in the deck. chosen = Set of uids, null means everything out on the lawn */
+function buildDeckFromLawn(specimens, chosen){
+  return deckableSpecimens(specimens)
+    .filter(e => !chosen || chosen.has(e.uid))
+    .map(e => cardIdFor(e.species, e.level));
 }
 
-/* Klipper eller forlenger en stokk til noyaktig saa mange kort ved aa gaa
-   rundt og rundt i den. Tomt inn gir tomt ut. */
-function fyllStokk(kilde, antall){
-  if(!kilde || !kilde.length || antall <= 0) return [];
-  const stokk = [];
-  while(stokk.length < antall) stokk.push(kilde[stokk.length % kilde.length]);
-  return stokk;
+/* Cuts or extends a deck to exactly that many cards by going round and round
+   inside it. Empty in gives empty out. */
+function padDeck(source, count){
+  if(!source || !source.length || count <= 0) return [];
+  const deck = [];
+  while(deck.length < count) deck.push(source[deck.length % source.length]);
+  return deck;
 }
 
-/* Maskinen har ingen plen. Den faar planstokken sin som for, men klippet
-   eller forlenget til like mange kort som du stiller med, slik at ingen av
-   dere gaar tom foer den andre. */
-function byggAiStokk(lederKort, antall){
-  return fyllStokk(byggStokk(lederKort), antall);
+/* The machine has no lawn. It gets its plan deck as before, but cut or extended
+   to the same number of cards you bring, so neither of you runs out before the
+   other. */
+function buildAiDeck(leaderCard, count){
+  return padDeck(buildDeck(leaderCard), count);
 }
