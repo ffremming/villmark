@@ -94,6 +94,11 @@ brings the camera back.
 Runs with Chrome's fake camera, and stubs `CLASSIFIER.classify` — a real scan
 would pull 45 MB from Hugging Face.
 
+The last checks open a second tab with `navigator.deviceMemory` forced to 2, so
+`classify.js` computes `LOW_MEMORY` the way it does on a phone, and cover that
+SpeciesNet stays off there: 112 MB of fp16 has no wasm kernels and the run died
+inside inference on an iPhone.
+
 ```sh
 node test/camera.test.js
 ```

@@ -47,8 +47,25 @@ const missing  = new Set();   // models that do not exist, remembered for the se
 const wasmOnly = new Set();   // models where WebGPU is no good, remembered for the session
 let ortLoaded = null;
 
-/* Phones with little memory keep only one model alive at a time. */
+/* Phones with little memory keep only one model alive at a time.
+   navigator.deviceMemory does not exist in WebKit, so every iPhone lands here,
+   which is what we want. */
 const LOW_MEMORY = (navigator.deviceMemory || 4) <= 4;
+
+/* SpeciesNet is 112 MB and exported fp16. onnxruntime-web has no fp16 kernels
+   on the wasm backend, so the weights are cast to fp32 when the session is
+   built, and the 480x480 activations are laid on top of that. On an iPhone the
+   run died inside inference - the breadcrumb stopped at tensor-built.
+
+   Until the model is re-exported int8 (tools/export_speciesnet.py), phones use
+   iNat21 alone. It answers 58 of the 72 species exactly. Lynx, mountain hare,
+   wolverine and arctic fox stop at genus level there - a weaker answer, but an
+   honest one, and the floors in MIN_P_LEVEL still throw out the weak guesses
+   that SpeciesNet's blank veto used to catch.
+
+   Set CLASSIFIER.heavyModel = true from the console to test the big model on a
+   phone anyway. */
+let heavyModel = !LOW_MEMORY;
 
 /* --- error types app.js tells apart -------------------------------------- */
 class DownloadRequiredError extends Error {
@@ -167,9 +184,12 @@ async function loadModel(name, opt){
       fetchJson(base + '.meta.json'),
       fetchJson(base + '.labels.json'),
     ]);
-    const buf = await fetchWithProgress(base + '.onnx', opt.onProgress);
-
+    /* The other model goes before this one is read, not after. Releasing after
+       the read meant iNat21's session and SpeciesNet's 112 MB buffer were both
+       in memory at the same moment - the peak that killed the tab. */
     if(LOW_MEMORY) releaseOthers(name);
+
+    const buf = await fetchWithProgress(base + '.onnx', opt.onProgress);
 
     /* The WebGPU backend in onnxruntime-web 1.29 cannot handle per-channel
        quantized DequantizeLinear nodes: it requires scale and zero_point to
@@ -427,12 +447,16 @@ async function classifyOnce(source, opt){
   /* 2. SpeciesNet as the specialist. It knows Lepus timidus, Lynx lynx,
      Gulo gulo and Vulpes lagopus, which iNat21 only reaches at genus level. */
   let animalAnswer = null, blankP = 0;
-  T('speciesnet-needed');
-  const animal = await get('speciesnet');
-  if(animal){
-    const animalPred = await runRobust('speciesnet', animal, source, ort);
-    animalAnswer = SPECIESMAPPING.best(animalPred, 'speciesnet', mapOpt);
-    blankP = blankConfidence(animalPred);
+  if(!heavyModel){
+    T('speciesnet-skipped', 'low memory');
+  } else {
+    T('speciesnet-needed');
+    const animal = await get('speciesnet');
+    if(animal){
+      const animalPred = await runRobust('speciesnet', animal, source, ort);
+      animalAnswer = SPECIESMAPPING.best(animalPred, 'speciesnet', mapOpt);
+      blankP = blankConfidence(animalPred);
+    }
   }
   opt.onPhase && opt.onPhase('computing', 1);
   T('classify-done', 'both models');
@@ -470,6 +494,8 @@ async function status(){
   return {
     configured: configured(),
     base: MODEL_BASE,
+    lowMemory: LOW_MEMORY,
+    heavyModel,
     speciesnet: await isCached('speciesnet'),
     inat21: await isCached('inat21'),
     missing: [...missing],
@@ -488,6 +514,9 @@ return {
   classify, status, clearCache, configured, loadModel,
   get base(){ return MODEL_BASE; },
   set base(v){ MODEL_BASE = v.endsWith('/') ? v : v + '/'; },
+  get heavyModel(){ return heavyModel; },
+  set heavyModel(v){ heavyModel = !!v; },
+  LOW_MEMORY,
   MODELS, EXACT_THRESHOLD,
 };
 })();

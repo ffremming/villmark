@@ -724,10 +724,14 @@ document.addEventListener('click', e => {
 
 // ============================================================ main loop
 let last = performance.now();
+/* While the models run, the 3D scene is not drawn. The scan frame is empty at
+   that point anyway - the species is not known yet - so nothing is lost, and
+   the phone does not hold a GPU frame on top of an ONNX session. */
+let renderPaused = false;
 function loop(now){
   const dt = Math.min(0.05, (now - last)/1000);
   last = now;
-  const S = SCENES[current];
+  const S = renderPaused ? null : SCENES[current];
   if(S){
     if(S.update) S.update(dt);
     renderer.setClearColor(S.clear, S.alpha);
@@ -1510,10 +1514,12 @@ $('#scanGo').addEventListener('click', async () => {
      answer came up. */
   const frame = grabFrame();
   stopScan();
+  renderPaused = true;
   TRACE.mark('frame-grabbed', frame.width + 'x' + frame.height);
 
+  let res = null;
   try {
-    const res = await CLASSIFIER.classify(frame, {
+    res = await CLASSIFIER.classify(frame, {
       onPhase: scanPhase,
       confirmDownload: askForDownload,
       /* the collection breaks ties on genus and family: a species you are
@@ -1521,7 +1527,6 @@ $('#scanGo').addEventListener('click', async () => {
          never win over the fox */
       found: STATE.found,
     });
-    showScanResult(res);
   } catch(err){
     /* No fallback to the draw here. The scanner should say that it got no
        answer, not invent a species and a confidence. */
@@ -1536,7 +1541,12 @@ $('#scanGo').addEventListener('click', async () => {
       const reason = String(err && (err.message || err.name) || err).slice(0, 80);
       showScanError('ERROR: ' + reason.toUpperCase());
     }
+  } finally {
+    /* The species has to materialize now, so the scene starts drawing again
+       whether the models answered or not. */
+    renderPaused = false;
   }
+  if(res) showScanResult(res);
 });
 
 // ============================================================ finds

@@ -187,6 +187,31 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   c = await cam();
   check(!c.stream && !c.live, 'leaving the scanner stops the camera');
 
+  /* --- 6. a phone does not touch the 112 MB model ---
+     A second tab, opened with navigator.deviceMemory forced low, so classify.js
+     computes LOW_MEMORY the way it does on a phone. */
+  const t2 = await cdp.call('Target.createTarget', { url:'about:blank' });
+  const s2 = (await cdp.call('Target.attachToTarget', { targetId:t2.targetId, flatten:true })).sessionId;
+  await cdp.call('Runtime.enable', {}, s2);
+  await cdp.call('Page.enable', {}, s2);
+  await cdp.call('Page.addScriptToEvaluateOnNewDocument',
+    { source:"Object.defineProperty(navigator,'deviceMemory',{get:()=>2});" }, s2);
+  await cdp.call('Page.navigate', { url:addr }, s2);
+  await sleep(3500);
+
+  const phone = async (expression) => {
+    const r = await cdp.call('Runtime.evaluate',
+      { expression, returnByValue:true, awaitPromise:true }, s2);
+    if(r.exceptionDetails) throw new Error(r.exceptionDetails.text + '  <- ' + expression);
+    return r.result.value;
+  };
+  check(await phone('navigator.deviceMemory === 2'), 'the second tab reports a low-memory device');
+  check(await phone('CLASSIFIER.LOW_MEMORY === true'), 'classify.js sees it as low memory');
+  check(await phone('CLASSIFIER.heavyModel === false'),
+    'SpeciesNet is off on a low-memory device');
+  check((await phone('CLASSIFIER.status()')).heavyModel === false,
+    'the status report says SpeciesNet is off');
+
   cdp.close();
   server.close();
   cleanup();
