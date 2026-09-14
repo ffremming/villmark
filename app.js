@@ -1158,6 +1158,13 @@ function avbrytNiva(){
 
 $('#scanLukk').addEventListener('click', () => { LYD.klikk(); dirr(12); gaTil(forSkann); });
 
+/* Leaving a guest lawn goes back to the list you came from. */
+$('#feltBesokUt').addEventListener('click', () => {
+  LYD.klikk(); dirr(12);
+  VISIT.leave();
+  gaTil('lobby');
+});
+
 $('#mergeJa').addEventListener('click', godtaNiva);
 $('#mergeNei').addEventListener('click', avbrytNiva);
 

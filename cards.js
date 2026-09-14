@@ -298,24 +298,67 @@ const LEDERE = LEDERKORT.map(l => KORTBASE[l.id]);
 
 /* ---------------------------------------------------------- stokkbygging
    50 kort, bare i LEDERens to farger, maks 4 kopier av hvert kort.
-   Kortene legges runde for runde slik at kurven blir jevn. */
+
+   For ble stokken plukket som ett eksemplar av hvert kort i bassenget.
+   Det ga 50 forskjellige kort: ingen to partier lignet hverandre, fire-
+   kopier-regelen slo aldri inn, og halve stokken var mottrekkshendelser.
+   Na fylles en fast plan med ekte kopier. Planen sier hvor mange kort
+   stokken skal ha av hver kategori og hver kost, slik at kurven holder
+   uansett hvilke to farger lederen har. */
+const STOKKPLAN = {
+  art:      { 1:4, 2:7, 3:7, 4:7, 5:5, 6:4, 7:2 },   /* 36 */
+  hendelse: { 1:4, 2:5, 3:3 },                       /* 12 */
+};
+const STOKK_BIOTOP = 2;   /* ett av hver farge — bare en kan ligge ute om gangen */
+
 function byggStokk(leder){
-  let basseng = Object.values(KORTBASE)
-    .filter(k => k.kat !== 'leder' && leder.farger.includes(k.farger[0]))
-    .sort((a,b) => a.kost - b.kost || a.id.localeCompare(b.id));
-  /* naar bassenget er stoerre enn stokken: plukk jevnt spredt over
-     kostnadskurven. Tar vi bare de forste, blir stokken uten dyre kort. */
-  if(basseng.length > REGLER.stokk){
-    const steg = basseng.length / REGLER.stokk;
-    basseng = Array.from({length:REGLER.stokk},
-      (_, i) => basseng[Math.floor(i*steg)]);
-  }
-  const stokk = [];
-  for(let kopi = 0; kopi < REGLER.maksKopier && stokk.length < REGLER.stokk; kopi++){
-    for(const k of basseng){
-      if(stokk.length >= REGLER.stokk) break;
-      stokk.push(k.id);
+  const basseng = Object.values(KORTBASE)
+    .filter(k => k.kat !== 'leder' && leder.farger.includes(k.farger[0]));
+  /* kort med tekst forst, saa de sjeldne: stokken skal ha noe a gjore */
+  const vekt = k => (k.eff ? 2 : 0) + (k.utloser ? 1 : 0)
+                  + (k.nokler ? k.nokler.length : 0) + k.sjelden/10;
+
+  const stokk = [], kopier = {};
+  const legg = (kort, onsket) => {
+    let lagt = 0;
+    while(lagt < onsket && stokk.length < REGLER.stokk
+          && (kopier[kort.id] || 0) < REGLER.maksKopier){
+      kopier[kort.id] = (kopier[kort.id] || 0) + 1;
+      stokk.push(kort.id);
+      lagt++;
     }
+    return lagt;
+  };
+  /* Fyll en rute i planen. Mangler fargene kort til akkurat den kosten,
+     brukes naermeste kost i samme kategori, saa planen alltid gaar opp. */
+  const fyll = (kat, kost, antall) => {
+    const naer = basseng.filter(k => k.kat === kat).sort((a,b) =>
+      Math.abs(a.kost - kost) - Math.abs(b.kost - kost)
+      || vekt(b) - vekt(a) || a.id.localeCompare(b.id));
+    let igjen = antall;
+    for(const k of naer){
+      if(igjen <= 0) break;
+      igjen -= legg(k, Math.min(REGLER.maksKopier, igjen));
+    }
+  };
+  /* en BIOTOP av hver farge. Flere kopier er bortkastet: bare en kan
+     ligge ute, og den andre havner rett i komposten. */
+  for(const k of basseng.filter(k => k.kat === 'biotop')
+                        .sort((a,b) => a.id.localeCompare(b.id))
+                        .slice(0, STOKK_BIOTOP)) legg(k, 1);
+
+  for(const kat of ['art','hendelse'])
+    for(const kost of Object.keys(STOKKPLAN[kat]))
+      fyll(kat, Number(kost), STOKKPLAN[kat][kost]);
+
+  /* Har en farge for faa kort til a fylle planen, toppes det opp med de
+     beste ART-kortene som er igjen. */
+  const rest = basseng.filter(k => k.kat === 'art')
+    .sort((a,b) => vekt(b) - vekt(a) || a.kost - b.kost || a.id.localeCompare(b.id));
+  while(stokk.length < REGLER.stokk){
+    const for_ = stokk.length;
+    for(const k of rest) legg(k, 1);
+    if(stokk.length === for_) break;              // alt er brukt opp
   }
   return stokk;
 }

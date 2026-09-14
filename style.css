@@ -1017,6 +1017,31 @@ button,input{ font-family:inherit; }
 }
 .felt-plasser{ background:var(--gronn); color:var(--krem); }
 
+/* ---------- besoek hos en annen spiller ----------
+   Linja sier hvem sin plen du staar paa. Alt som endrer plenen er borte,
+   for en gjesteplen kan bare ses paa. */
+.felt-besok{
+  position:absolute; left:50%; top:calc(58px + var(--safe-t)); transform:translateX(-50%);
+  z-index:20; display:flex; align-items:center; gap:10px;
+  background:var(--ink); border:2px solid var(--gull);
+  padding:7px 8px 7px 12px; border-radius:0; white-space:nowrap;
+  box-shadow:0 4px 0 rgba(0,0,0,.45);
+}
+.felt-besok-navn{
+  font:400 8px/1.3 var(--f-tittel); letter-spacing:.06em; color:var(--gull);
+}
+.felt-besok-ut{
+  font:400 8px/1 var(--f-tittel); color:var(--ink); background:var(--gull);
+  border:0; padding:7px 9px; border-radius:0; cursor:pointer;
+  box-shadow:0 2px 0 #9a7716;
+}
+.felt-besok-ut:active{ transform:translateY(2px); box-shadow:none; }
+
+body.visiting .slette-hint,
+body.visiting #feltTom,
+body.visiting .chip-mynt,
+body.visiting .felt-vri{ display:none; }
+
 /* ---------- vri hageting ---------- */
 .felt-vri{
   position:absolute; left:50%; bottom:calc(84px + var(--safe-b)); transform:translateX(-50%);
