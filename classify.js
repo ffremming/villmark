@@ -467,9 +467,10 @@ async function classifyOnce(source, opt){
      turned into EAGLE OWL at 5%. An exact species hit survives - SpeciesNet
      says blank on every plant and fungus, which it does not know. */
   if(blankP >= BLANK_VETO && plantAnswer && plantAnswer.level > 0){
-    return { id:null, level:3, levelText: SPECIESMAPPING.LEVEL_TEXT[3],
+    return { id:null, level: SPECIESMAPPING.NO_MATCH,
+             levelText: SPECIESMAPPING.LEVEL_TEXT[SPECIESMAPPING.NO_MATCH],
              latin: plantAnswer.latin, common: plantAnswer.common,
-             p: plantAnswer.p, source:'speciesnet' };
+             from: plantAnswer.from, p: plantAnswer.p, source:'speciesnet' };
   }
 
   /* No model came through. Then app.js should fall back to the simulated scan. */

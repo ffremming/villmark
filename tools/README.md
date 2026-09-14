@@ -285,6 +285,41 @@ seaweeds. The result is always marked UNCERTAIN, so the player sees that it was
 a guess. The bridge is checked after genus and family, so a salmon hits
 `Salmo salar` exactly and never reaches the bridge.
 
+`GROUP_BRIDGE` also holds bridges for the other direction: groups the library
+has no family or order for at all. Whales and dolphins go to the porpoise
+(iNaturalist keeps `Cetacea` inside `Artiodactyla`, so without it a dolphin
+would come out as a roe deer), eared seals and the walrus to the true seals,
+horses, camels, pigs and elephants to the big deer, ducks, herons and grebes to
+the water birds, and falcons and vultures to the birds of prey. Each bridge
+names the level it answers at.
+
+## The wide net: order, class and kingdom
+
+Below family the ladder keeps going, so a label the library shares no family
+with still lands on something:
+
+| Level | Text | Reached by |
+|---|---|---|
+| 0 | CERTAIN | exact binomial |
+| 1 | NEAREST RELATIVE | same genus |
+| 2 | UNCERTAIN | same family, and the two coverage bridges |
+| 3 | DISTANT RELATIVE | same order, and the seal and whale bridges |
+| 4 | SIMILAR SPECIES | same class, and the remaining bridges |
+| 5 | SAME GROUP ONLY | same kingdom |
+| 6 | UNKNOWN SPECIES | nothing |
+
+`MIN_P_LEVEL` climbs with the level — `0.10 0.25 0.40 0.50 0.60 0.72` — so the
+wide net only fires when the model is close to certain about the little it did
+see. Every junk picture measured on the models landed between 1.4 % and 16.7 %,
+far below the floors for levels 3–5, so furniture still comes out as UNKNOWN
+SPECIES.
+
+Whenever the level is worse than CERTAIN the screen prints `MAPPED FROM <the
+name the model gave>` — on the scan frame, on the find screen and on the card
+in the collection — so a find never pretends the model named that species.
+`lookup()` returns that name in the `from` field, and `app.js` keeps it on the
+specimen as `origin`, which `store.js` saves with the lawn.
+
 ## Ties between several species
 
 When a genus or a family holds several of the game's species — `Vulpes` has
@@ -296,8 +331,8 @@ reached at genus level, and there the fox would always win.
 ## XP by confidence
 
 `LEVEL_XP` in `app.js` scales the reward: a certain species hit 1.0, nearest
-relative 0.6, uncertain 0.35. The simulated scan has no level and pays out in
-full as before.
+relative 0.6, uncertain 0.35, distant relative 0.22, similar species 0.14, same
+group only 0.08. The simulated scan has no level and pays out in full as before.
 
 ## Publishing
 

@@ -464,6 +464,11 @@ button,input{ font-family:inherit; }
   font:400 12px/1 var(--f-title); color:var(--gold);
   background:var(--ink); border:2px solid var(--gold2); padding:10px 14px;
 }
+/* where the find came from when the model named a relative instead */
+.reveal-from{
+  font:400 9px/1.5 var(--f-title); color:var(--cream2);
+  letter-spacing:.06em; text-align:center; max-width:78vw;
+}
 .reward-row{ display:flex; gap:10px; font:400 11px/1 var(--f-title); color:var(--cream); }
 .reward-row span{ display:flex; align-items:center; gap:5px;
   background:var(--ink); border:2px solid var(--line2); padding:8px 10px; }
@@ -556,6 +561,8 @@ button,input{ font-family:inherit; }
 .detail-name{ font:400 24px/1.2 var(--f-title); margin-top:10px;
   color:var(--cream); text-shadow:0 3px 0 var(--ink); }
 .detail-sci{ font:400 16px/1 var(--f-text); color:var(--cream2); margin:10px 0 20px; }
+.detail-from{ font:400 9px/1.5 var(--f-title); color:var(--cream2);
+  letter-spacing:.06em; margin:-12px 0 18px; }
 .detail-stats{ width:100%; max-width:340px; display:flex; flex-direction:column; gap:8px; }
 .stat{ display:grid; grid-template-columns:72px 1fr 34px; align-items:center; gap:8px; }
 .stat-n{ font:400 9px/1.4 var(--f-ui); letter-spacing:.06em; color:var(--cream2); }

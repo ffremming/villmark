@@ -32,6 +32,16 @@ function cleanProp(p){
   };
 }
 
+/** what the model named a mapped find, or null. Lawns saved before the mapping
+    screen existed have no origin, and read back as an exact find. */
+function cleanOrigin(o){
+  if(!o || typeof o !== 'object' || typeof o.name !== 'string' || !o.name) return null;
+  return {
+    name:      o.name.slice(0, 80),
+    levelText: typeof o.levelText === 'string' ? o.levelText.slice(0, 40) : '',
+  };
+}
+
 /** one scanned specimen, or null if the record is unusable */
 function cleanSpecimen(e){
   if(!e || typeof e !== 'object' || typeof e.species !== 'string') return null;
@@ -42,6 +52,7 @@ function cleanSpecimen(e){
     variant: typeof e.variant === 'string' ? e.variant : null,
     x:       e.x === null ? null : num(e.x, null),
     z:       e.z === null ? null : num(e.z, null),
+    origin:  cleanOrigin(e.origin),
   };
 }
 

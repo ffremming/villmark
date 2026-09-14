@@ -69,7 +69,8 @@ const STATE = {
   mapTarget: null,       // species chosen from the map - overrides a random scan
   targetSpecies: null,
   targetVariant: null,
-  targetLevel: 0,        // confidence level from speciesmapping: 0 certain, 1 relative, 2 uncertain
+  targetLevel: 0,        // confidence level from speciesmapping: 0 certain ... 5 same kingdom
+  targetFrom: null,      // the model's own name for what it saw, when it had to be mapped
   season: seasonFromDate(),
 };
 
@@ -99,8 +100,12 @@ function variantOf(id){ return STATE.variants[id] || null; }
    one level higher. */
 /* LEVEL_STEP lives in cards.js: the card and the animal grow in step. */
 
-function newSpecimen(species, variant){
-  const e = { uid: STATE.nextUid++, species, level:1, variant: variant || null, x:null, z:null };
+/* origin is what the model actually named, when the scan had to be mapped onto
+   a relative: {name, levelText}. It follows the specimen so the collection can
+   keep saying MAPPED FROM long after the scan. */
+function newSpecimen(species, variant, origin){
+  const e = { uid: STATE.nextUid++, species, level:1, variant: variant || null,
+              x:null, z:null, origin: origin || null };
   STATE.specimens.push(e);
   STATE.deck.add(e.uid);          // new finds join the deck right away
   STATE.found.add(species);
@@ -124,6 +129,15 @@ function statsAtLevel(sp, level){
 function displayName(id){
   const v = variantOf(id);
   return v ? VARIANTS[v].name + ' ' + SPECIES_BY_ID[id].name : SPECIES_BY_ID[id].name;
+}
+/** what the model named the first mapped find of this species, or null */
+function originOf(id){
+  const e = STATE.specimens.find(o => o.species === id && o.origin && o.origin.name);
+  return e ? e.origin : null;
+}
+/** one line of text for a mapped find, or '' when the hit was exact */
+function mappedFromText(origin){
+  return origin && origin.name ? 'MAPPED FROM ' + String(origin.name).toUpperCase() : '';
 }
 
 /* ---------- the deck ----------
@@ -1170,6 +1184,9 @@ function acceptLevel(){
   if(!pendingMerge) return;
   const { from, to } = pendingMerge;
   to.ex.level += 1;
+  /* The specimen that disappears may be the only one that carries where the
+     find came from, so the survivor takes it over. */
+  to.ex.origin = to.ex.origin || from.ex.origin || null;
   STATE.specimens = STATE.specimens.filter(e => e.uid !== from.ex.uid);
   STATE.lastPlaced = to.ex.uid;
   closeLevelDialog();
@@ -1268,6 +1285,7 @@ function resetScan(){
   STATE.targetSpecies = null;
   STATE.targetVariant = null;
   STATE.targetLevel = 0;
+  STATE.targetFrom = null;
   SCAN.clearSpecies();
   SCAN.setProgress(0);
   $('#scanMeterFill').style.width = '0%';
@@ -1370,6 +1388,7 @@ function showScanError(text){
    This is not recognition, so the frame never shows a percentage here. */
 function drawScan(species, label, done){
   STATE.targetLevel = 0;
+  STATE.targetFrom = null;
   setTarget(species);
   const lines = ['DRAWING FROM THE SPECIES BANK…','PICKING SPECIMEN…','BUILDING MODEL…'];
   let p = 0, i = -1;
@@ -1432,6 +1451,11 @@ function showScanResult(res){
   const raw = (res.latin || res.common || 'NO MATCH').toUpperCase();
 
   STATE.targetLevel = res.level;
+  /* An exact hit is its own name, so MAPPED FROM is only set when the answer
+     had to travel up the taxonomy to a relative. */
+  STATE.targetFrom = (res.level > 0 && res.from)
+    ? { name: res.from, levelText: res.levelText }
+    : null;
 
   if(!res.id){
     showScanError('UNKNOWN SPECIES · ' + raw + ' ' + percent + ' %');
@@ -1444,7 +1468,8 @@ function showScanResult(res){
   const vari = STATE.targetVariant;
   $('#scanReadout').textContent = raw + ' ' + percent + ' % → ' +
     (vari ? VARIANTS[vari].name + ' ' : '') + sp.name +
-    (vari ? ' — ODD COLOUR!' : ' — ' + res.levelText);
+    (vari ? ' — ODD COLOUR!' : ' — ' + res.levelText) +
+    (STATE.targetFrom ? ' · ' + mappedFromText(STATE.targetFrom) : '');
   $('#scanReadout').classList.add('hit');
   $('#scanMeterFill').style.width = '100%';
   TRACE.mark('result-on-screen');
@@ -1552,14 +1577,16 @@ $('#scanGo').addEventListener('click', async () => {
 // ============================================================ finds
 /* A certain species hit is worth more than a guess at genus or family.
    The index follows the levels in speciesmapping.js: 0 certain, 1 relative,
-   2 uncertain. The simulated scan has no level and gets full value. */
-const LEVEL_XP = [1, 0.6, 0.35];
+   2 uncertain, then the wide net at 3 order, 4 class, 5 kingdom. The simulated
+   scan has no level and gets full value. */
+const LEVEL_XP = [1, 0.6, 0.35, 0.22, 0.14, 0.08];
 
 function showFind(id, variant){
   const sp = SPECIES_BY_ID[id];
   const isNew = !STATE.found.has(id);
   variant = variant !== undefined ? variant : STATE.targetVariant;
   const level = STATE.targetLevel || 0;
+  const origin = STATE.targetFrom;
   const mult = (variant ? VARIANTS[variant].bonus : 1) * (LEVEL_XP[level] != null ? LEVEL_XP[level] : 1);
   $('#revealKicker').textContent = variant
     ? VARIANTS[variant].name + ' VARIANT!'
@@ -1567,6 +1594,11 @@ function showFind(id, variant){
       ? SPECIESMAPPING.LEVEL_TEXT[level] + ' · ' + (isNew ? 'NEW SPECIES' : 'DUPLICATE')
       : (isNew ? 'NEW SPECIES REGISTERED' : 'DUPLICATE REGISTERED');
   $('#revealKicker').classList.toggle('variant', !!variant);
+  /* The model rarely names the species in the library. Saying which name it did
+     give keeps the find honest: MAPPED FROM CANIS LUPUS FAMILIARIS. */
+  const fromLine = $('#revealFrom');
+  fromLine.textContent = mappedFromText(origin);
+  fromLine.hidden = !fromLine.textContent;
   const xp = Math.round((isNew ? 60 + sp.rarity*25 : 10) * mult);
   $('#revealXp').textContent = xp;
   $('#revealCard').innerHTML = cardFrame(sp, true, variant);
@@ -1577,7 +1609,7 @@ function showFind(id, variant){
   TRACE.mark('reveal-shown');
   $('#revealOk').textContent = isNew ? 'PLANT ON THE LAWN' : 'PLACE ON THE LAWN';
   $('#revealOk').onclick = () => {
-    newSpecimen(id, variant);   // duplicates are the point: two alike can be merged
+    newSpecimen(id, variant, origin);   // duplicates are the point: two alike can be merged
     toast('TAP THE LAWN TO PLACE ' + displayName(id));
     goTo('field');   // the lawn opens in placement mode - you pick the spot yourself
   };
@@ -1698,6 +1730,15 @@ function showDetail(id, ex){
   $('#detailSci').textContent  = sp.sci;
   $('#detailFact').textContent = sp.fact;
   $('#detailName').textContent += level > 1 ? '  Lv ' + level : '';
+  /* This specimen if it was mapped, otherwise the first mapped one of the
+     species - the card still carries where the find came from. */
+  const from = $('#detailFrom');
+  if(from){
+    const origin = (ex && ex.origin) || originOf(id);
+    from.textContent = mappedFromText(origin) +
+      (origin && origin.levelText ? ' · ' + origin.levelText : '');
+    from.hidden = !origin;
+  }
   /* READ MORE: the button carries the species id, and hides for species without an article */
   const more = $('#detailMore');
   if(more){

@@ -38,11 +38,11 @@ check('unknown canidae -> family',
 
 check('blank -> unknown',
   pick(M.best(sn(';;;;;;blank'), 'speciesnet')),
-  [null, 3]);
+  [null, M.NO_MATCH]);
 
 check('human -> unknown',
   pick(M.best(sn(';;;;;;human'), 'speciesnet')),
-  [null, 3]);
+  [null, M.NO_MATCH]);
 
 check('family level without a species',
   pick(M.best(sn('abc;mammalia;carnivora;ursidae;;;bear family'), 'speciesnet')),
@@ -59,7 +59,9 @@ check('cloudberry exact', pick(M.best(inat('Rubus chamaemorus', 'Rubus', 'Rosace
 check('another Picea -> genus', pick(M.best(inat('Picea glauca', 'Picea', 'Pinaceae'), 'inat21')), ['spruce', 1]);
 check('another Pinaceae -> family', pick(M.best(inat('Abies alba', 'Abies', 'Pinaceae'), 'inat21')), ['spruce', 2]);
 check('hepatica synonym', pick(M.best(inat('Anemone hepatica', 'Anemone', 'Ranunculaceae'), 'inat21')), ['hepatica', 0]);
-check('completely foreign', pick(M.best(inat('Zea mays', 'Zea', 'Poaceae'), 'inat21')), [null, 3]);
+/* Maize shares no genus, family or order with anything in the library, but it
+   is still a plant, so the wide net catches it at kingdom level. */
+check('completely foreign -> kingdom', M.best(inat('Zea mays', 'Zea', 'Poaceae'), 'inat21').level, 5);
 
 /* --- author names inside latin names, the way FloraSense and PlantNet write them --- */
 check('author name is stripped',
@@ -80,7 +82,7 @@ check('top 5 picks the exact hit', pick(M.best(mixed, 'inat21')), ['birch', 0]);
 /* --- too low a probability must be ignored --- */
 check('below minP is ignored',
   pick(M.best([{ label: { name: 'Picea abies', genus: 'Picea', family: 'Pinaceae' }, p: 0.01 }], 'inat21')),
-  [null, 3]);
+  [null, M.NO_MATCH]);
 
 /* --- rarity decides when several species share a family --- */
 const ericaceae = SPECIES.filter(s => (M.TAXONOMY[s.id] || {}).family === 'ericaceae');
@@ -130,6 +132,74 @@ check('SpeciesNet sea eagle only at genus level',
 check('iNat21 sea eagle exact',
   pick(M.best(withRank('Haliaeetus albicilla', { genus: 'Haliaeetus', family: 'Accipitridae' }), 'inat21')),
   ['seaeagle', 0]);
+
+/* --- the wide net: order, class and kingdom ------------------------------ */
+/* p has to clear MIN_P_LEVEL, which climbs with the level, so these use a high
+   confidence on purpose. */
+const at = (p, name, fields) => [{ label: Object.assign({ name }, fields), p }];
+
+check('unknown carnivore -> the order',
+  M.best(at(0.8, 'Crocuta crocuta',
+    { genus: 'Crocuta', family: 'Hyaenidae', order: 'Carnivora', class: 'Mammalia',
+      kingdom: 'Animalia' }), 'inat21').level,
+  3);
+
+check('bat -> mammal, class level',
+  M.best(at(0.8, 'Myotis myotis',
+    { genus: 'Myotis', family: 'Vespertilionidae', order: 'Chiroptera', class: 'Mammalia',
+      kingdom: 'Animalia' }), 'inat21').level,
+  4);
+
+check('beetle -> kingdom level only',
+  M.best(at(0.9, 'Lucanus cervus',
+    { genus: 'Lucanus', family: 'Lucanidae', order: 'Coleoptera', class: 'Insecta',
+      kingdom: 'Animalia' }), 'inat21').level,
+  5);
+
+check('a weak wide-net guess is thrown away',
+  pick(M.best(at(0.45, 'Lucanus cervus',
+    { genus: 'Lucanus', family: 'Lucanidae', order: 'Coleoptera', class: 'Insecta',
+      kingdom: 'Animalia' }), 'inat21')),
+  [null, M.NO_MATCH]);
+
+/* --- the group bridges --------------------------------------------------- */
+check('dolphin -> porpoise, not a deer',
+  pick(M.best(at(0.8, 'Delphinus delphis',
+    { genus: 'Delphinus', family: 'Delphinidae', order: 'Artiodactyla', class: 'Mammalia',
+      kingdom: 'Animalia' }), 'inat21')),
+  ['porpoise', 3]);
+
+check('sea lion -> a true seal',
+  M.best(at(0.8, 'Zalophus californianus',
+    { genus: 'Zalophus', family: 'Otariidae', order: 'Carnivora', class: 'Mammalia',
+      kingdom: 'Animalia' }), 'inat21').id.slice(-4),
+  'seal');
+
+check('horse -> a big hoofed animal',
+  M.best(at(0.8, 'Equus caballus',
+    { genus: 'Equus', family: 'Equidae', order: 'Perissodactyla', class: 'Mammalia',
+      kingdom: 'Animalia' }), 'inat21').level,
+  4);
+
+check('mallard -> a water bird',
+  M.best(at(0.8, 'Anas platyrhynchos',
+    { genus: 'Anas', family: 'Anatidae', order: 'Anseriformes', class: 'Aves',
+      kingdom: 'Animalia' }), 'inat21').level,
+  4);
+
+/* SpeciesNet writes cetartiodactyla where iNat writes artiodactyla */
+check('SpeciesNet order name is folded onto ours',
+  pick(M.best(sn('abc;mammalia;cetartiodactyla;giraffidae;giraffa;camelopardalis;giraffe'), 'speciesnet')),
+  [M.best(sn('abc;mammalia;artiodactyla;giraffidae;giraffa;camelopardalis;giraffe'), 'speciesnet').id, 4]);
+
+/* --- MAPPED FROM: the screen has to be able to name what the model saw ---- */
+check('an exact hit needs no mapped-from line',
+  M.best(inat('Picea abies', 'Picea', 'Pinaceae'), 'inat21').level, 0);
+check('a mapped hit carries the model name',
+  M.best(inat('Abies alba', 'Abies', 'Pinaceae'), 'inat21').from, 'abies alba');
+check('a SpeciesNet hit carries its own name',
+  M.best(sn('abc;mammalia;carnivora;canidae;nyctereutes;procyonoides;raccoon dog'), 'speciesnet').from,
+  'nyctereutes procyonoides');
 
 function pick(r) { return [r.id, r.level]; }
 
