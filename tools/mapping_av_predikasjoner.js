@@ -43,7 +43,11 @@ for (const [fasit, pred] of Object.entries(data.bilder)) {
   const erPlante = BY_ID[fasit] && BY_ID[fasit].kind !== 'dyr';
   const utenfor = data.kilde === 'speciesnet' && erPlante;
 
-  const riktig = utenfor
+  /* Filer som heter _ikke_* er ikke natur i det hele tatt - laptop, murvegg,
+     kaffekopp. Der er UKJENT ART det eneste riktige svaret. */
+  const ikkeNatur = fasit.startsWith('_ikke_');
+
+  const riktig = ikkeNatur || utenfor
     ? svar.id === null
     : svar.id === fasit || (!!gruppe && gruppe.ider.includes(svar.id));
   sum++;

@@ -49,6 +49,7 @@ function cleanSpecimen(e){
    specimens are dragged together, so the list is pruned on the way out
    rather than growing for the life of the lawn. */
 function liveUids(S){
+  if(!S.dekk) return S.eksemplarer.map(e => e.uid);
   const live = new Set(S.eksemplarer.map(e => e.uid));
   return [...S.dekk].filter(uid => live.has(uid));
 }

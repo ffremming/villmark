@@ -1,13 +1,28 @@
 # Tester
 
-Fire selvstendige testfiler. Ingen avhengigheter utenfor Node og Chrome.
+Fem selvstendige testfiler. Ingen avhengigheter utenfor Node og Chrome.
+
+## `dekk.test.js`
+
+Kjører `species.js` og `cards.js` i en `vm`-kontekst og dekker kortstokken som
+plenen bygger: at nivået ligger i kort-id-en og kan leses ut igjen, at et
+nivåkort bygges ved første oppslag og blir liggende, at kosten stiger med
+nivået og stopper på toppen av kurven, at bare eksemplarer som faktisk står
+ute blir kort, at fravalg virker, og at maskinen stiller med like mange kort
+som du gjør.
+
+```sh
+node test/dekk.test.js
+```
 
 ## `store.test.js`
 
 Kjører `store.js` i en `vm`-kontekst med en påtatt `localStorage`. Dekker at en
 plen kommer tilbake slik den ble lagret, at uid-tellerne klarer alt som står på
 plenen, at ødelagt eller ukjent lagring kastes uten å røre plenen, og at
-ingenting skrives mens du står på en annen spillers plen.
+ingenting skrives mens du står på en annen spillers plen. Dekker også dekket:
+at uid-ene kommer tilbake, at en uid som ikke finnes lenger blir luket bort,
+og at en plen lagret før dekkvelgeren får alt den eier i dekket.
 
 ```sh
 node test/store.test.js

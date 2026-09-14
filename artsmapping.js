@@ -235,17 +235,34 @@ function slaaOpp(label, kilde, funnet){
   return svar(null, 3);
 }
 
+/* Laveste sannsynlighet som godtas, per niva. Svakere bevis krever hoyere
+   sikkerhet: et eksakt artsnavn paa 12 % er verdt mer enn en familiegjetning
+   paa 12 %.
+
+   Tallene er malt, ikke gjettet. Modellen har ingen "ingenting her"-utgang,
+   saa et bilde av en PC gir alltid et svar - bare et svakt et. Malt paa aatte
+   bilder av bil, tastatur, skrivebord, kaffekopp og murvegg laa alle treffene
+   mellom 1,4 % og 12,5 %, og de eneste som naadde helt opp til en art laa paa
+   5-6 % (bil -> ULV, skrivebord -> HUBRO, tastatur -> SEI). Ekte funn laa paa
+   46-99 %, med ett unntak: bjork traff eksakt paa 12,5 %.
+
+   Derfor staar gulvet for eksakt artstreff lavt og gulvet for gjetninger
+   hoyt. Finkornede modeller med 10 000 klasser sprer sannsynligheten, saa et
+   eksakt navn er i seg selv sterkt bevis. */
+const MIN_P_NIVA = [0.10, 0.25, 0.40];
+
 /* Gaar gjennom topp-5 og tar det beste treffet, ikke bare det forste.
    En sikker treff-kandidat paa plass 3 slaar en familiegjetning paa plass 1.
    predikasjoner = [{label, p}, ...] sortert synkende paa p. */
 function beste(predikasjoner, kilde, opt){
   opt = opt || {};
-  const minP = opt.minP || 0.04;
+  const minP = opt.minP || 0.01;
   let best = null;
   for(const pred of predikasjoner){
     if(pred.p < minP) continue;
     const treff = slaaOpp(pred.label, kilde, opt.funnet);
     if(!treff || treff.niva === 3) continue;
+    if(pred.p < MIN_P_NIVA[treff.niva]) continue;
     if(!best || treff.niva < best.niva || (treff.niva === best.niva && pred.p > best.p)){
       best = { ...treff, p: pred.p, kilde };
     }
@@ -262,7 +279,7 @@ function beste(predikasjoner, kilde, opt){
   };
 }
 
-return { slaaOpp, beste, parseLabel, binomialAv, TAKSONOMI, NIVA_TEKST, IKKE_ART, GRUPPEBRO };
+return { slaaOpp, beste, parseLabel, binomialAv, TAKSONOMI, NIVA_TEKST, IKKE_ART, GRUPPEBRO, MIN_P_NIVA };
 })();
 
 if(typeof window !== 'undefined') window.ARTSMAPPING = ARTSMAPPING;

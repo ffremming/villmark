@@ -45,13 +45,16 @@ function nyState(){
       { uid:8, art:'blaaveis', niva:1, variant:null,     x:null, z:null },
     ],
     nesteUid: 9,
+    dekk: new Set([7, 8]),
+    dekkValgt: true,
     sistLagt: 8,
     sesong: 'vinter',
   };
 }
 
 const tom = () => ({ funnet:new Set(), varianter:{}, mynt:500, niva:3, pynt:[],
-  nestePyntUid:1, eksemplarer:[], nesteUid:1, sistLagt:null, sesong:'host' });
+  nestePyntUid:1, eksemplarer:[], nesteUid:1, dekk:new Set(), dekkValgt:false,
+  sistLagt:null, sesong:'host' });
 
 /* ---------------------------------------------------------- round trip */
 {
@@ -73,6 +76,38 @@ const tom = () => ({ funnet:new Set(), varianter:{}, mynt:500, niva:3, pynt:[],
   sjekk(b.sesong === 'host', 'sesongen lagres ikke - den foelger kalenderen');
   sjekk(b.sistLagt === null, 'ingen art staar og venter paa aa vokse fram');
   sjekk(Object.keys(localStorage.bag).length === 1, 'alt ligger under en noekkel');
+  sjekk(b.dekk instanceof Set && [...b.dekk].sort().join(',') === '7,8',
+    'dekket kommer tilbake som Set med uid');
+  sjekk(b.dekkValgt === true, 'et rort dekk huskes som rort');
+}
+
+/* ---------------------------------------------------------- the deck */
+{
+  /* A uid that is gone - two specimens dragged together - must not sit in
+     the saved deck forever. */
+  const { STORE } = nyStore();
+  const a = nyState();
+  a.dekk = new Set([7, 8, 99]);
+  STORE.flush(a);
+
+  const b = tom();
+  STORE.load(b);
+  sjekk(!b.dekk.has(99), 'en uid som ikke finnes lenger lagres ikke');
+  sjekk(b.dekk.has(7) && b.dekk.has(8), 'uid-ene som staar igjen beholdes');
+}
+{
+  /* A lawn saved before the deck editor existed plays with everything. */
+  const gammel = nyStore({ 'villmark-plen-v1': JSON.stringify({
+    v:1, mynt:100, niva:2, funnet:['rev'], varianter:{}, pynt:[],
+    nestePyntUid:1, nesteUid:3,
+    eksemplarer:[ { uid:1, art:'rev', niva:1, variant:null, x:0, z:0 },
+                  { uid:2, art:'rev', niva:1, variant:null, x:1, z:1 } ],
+  })});
+  const s = tom();
+  gammel.STORE.load(s);
+  sjekk([...s.dekk].sort().join(',') === '1,2',
+    'en plen lagret for dekkvelgeren faar alt den eier i dekket');
+  sjekk(s.dekkValgt === false, 'og regnes som urort');
 }
 
 /* ---------------------------------------------------------- uid counters */

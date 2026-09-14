@@ -60,6 +60,9 @@ function lagSide(navn){
     LYD:{ klikk(){}, naer(){}, treff(){}, skade(){}, seier(){}, tap(){} },
     dirr(){}, toast(t){ S.toaster.push(t); }, oppdaterHud(){},
     gaTil(){}, lagMini(){}, visningsNavn(x){ return x; },
+    /* Plenen til denne siden. Er den tom, faller motoren tilbake til
+       planstokken, akkurat som i en fane uten plen. */
+    dekkStokk: () => (S.stokk || []).slice(),
   };
 
   const ctx = vm.createContext(sandkasse);
@@ -122,6 +125,13 @@ function trykkArk(S, i){
   vert.KS.minLeder  = 'ld_bjorn';
   gjest.KS.minLeder = 'ld_gaupe';
 
+  /* To ulike plener, begge over minstemaalet, og begge med et eksemplar som
+     er dratt opp et nivaa. Verten regner ut hele kampen, saa gjestens stokk
+     maa komme dit over kanalen for at kortene skal stemme. */
+  const gjenta = (liste, n) => Array.from({length:n}, (_, i) => liste[i % liste.length]);
+  vert.stokk  = gjenta(['rev', 'ekorn', 'gran', 'bjorn@3', 'fluesopp'], 24);
+  gjest.stokk = gjenta(['hare', 'gaupe@2', 'jerv', 'blaveis'], 22);
+
   vert.spill.startVert('k1');
   gjest.spill.startGjest('k1');
   await ro();
@@ -136,6 +146,26 @@ function trykkArk(S, i){
   sjekk(!!vert.KS.p[0], 'verten har ikke startet spillet');
   sjekk(!!gjest.KS.p[0], 'gjesten har ikke faatt noen tilstand');
   if(!vert.KS.p[0] || !gjest.KS.p[0]){ console.log('avbryter'); process.exit(1); }
+
+  /* ---- dekkene ---- */
+  /* Alt av kort en spiller eier ligger i stokken, handa eller livskortene. */
+  const alleKort = p => [...p.stokk, ...p.hand, ...p.liv].sort().join(',');
+  sjekk(alleKort(vert.KS.p[0]) === vert.stokk.slice().sort().join(','),
+    'verten spiller med sin egen plen');
+  sjekk(alleKort(vert.KS.p[1]) === gjest.stokk.slice().sort().join(','),
+    'gjestens plen kom fram til verten');
+  sjekk(vert.sendt.length >= 0 && gjest.sendt.some(m => m.t === 'klar' && Array.isArray(m.stokk)),
+    'gjesten sender stokken sin med klarmeldingen');
+  sjekk(vert.KS.p[1].liv.length === 4,
+    'gjestens leder deler ut sine egne livskort, fikk ' + vert.KS.p[1].liv.length);
+
+  /* Nivaakortene maa kunne slaas opp hos begge, uten at noe er sendt om dem. */
+  const kortHos = (S, id) => vm.runInContext('KORTSPILL', ctxAv(S)) && vm.runInContext(
+    'kortAv(' + JSON.stringify(id) + ')', ctxAv(S));
+  sjekk(kortHos(vert, 'gaupe@2') && kortHos(vert, 'gaupe@2').niva === 2,
+    'verten kan bygge gjestens nivaakort selv');
+  sjekk(kortHos(gjest, 'bjorn@3').kraft >= kortHos(gjest, 'bjorn').kraft,
+    'et nivaakort er aldri svakere enn det samme kortet paa nivaa 1');
 
   /* ---- speiling ---- */
   sjekk(gjest.KS.p[0].leder.kort.id === 'ld_gaupe',

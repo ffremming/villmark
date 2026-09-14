@@ -293,8 +293,8 @@ function nyScene(clear, alpha=1, hfov=55){
     t0 += dt;
     oy.rotation.y += dt*0.12;
     const a = t0*0.55, r = 5.2;
-    rev.position.set(Math.cos(a)*r, 1 + Math.abs(Math.sin(t0*6))*0.12, Math.sin(a)*r);
-    rev.rotation.y = -a + Math.PI/2;
+    rev.position.set(Math.cos(a)*r, 1 + Math.abs(Math.sin(t0*5))*0.22, Math.sin(a)*r);
+    rev.rotation.y = -a - Math.PI/2;   // modellen ser mot +X
     S.cam.position.y = 15 + Math.sin(t0*0.5)*0.9;
     S.cam.lookAt(0, 2.5, 0);
   };
@@ -348,8 +348,10 @@ const FELT = (() => {
       o.fase += dt * (0.22 + SPECIES_BY_ID[o.art].fart/150);
       o.grp.position.x = o.base.x + Math.cos(o.fase)*o.r;
       o.grp.position.z = o.base.z + Math.sin(o.fase)*o.r;
-      o.grp.rotation.y = -o.fase + Math.PI/2;
-      o.grp.position.y = o.baseY + Math.abs(Math.sin(o.fase*6))*0.12;
+      o.grp.rotation.y = -o.fase - Math.PI/2;   // modellen ser mot +X
+      // hoppet gaar paa egen klokke, slik at trege arter ogsaa spretter synlig
+      o.hopp += dt * (4.2 + SPECIES_BY_ID[o.art].fart/40);
+      o.grp.position.y = o.baseY + Math.abs(Math.sin(o.hopp))*0.22;
     }
     for(const d of dammer) d.position.y = DAM_VANN + Math.sin(t0*1.2)*0.03;
   };
@@ -507,6 +509,7 @@ function byggFelt(){
     plukkbare.push(grp.userData.inner);
     arter.push({
       grp, ex, uid:ex.uid, art:ex.art, base:{x,z}, baseY, r:vandre, fase:rnd(0,6.28),
+      hopp: rnd(0, 6.28),
       plante: plante || vandre === 0,
       vokse: ny ? 0 : 1,
     });
@@ -1475,11 +1478,13 @@ const lagMini = (() => {
     cam.position.set(3.6, 2.9, 5.2); cam.lookAt(0, 0.55, 0);
     rt.setClearColor(0x000000, 0);
   }
-  return (id, variant) => {
-    const nokkel = id + '|' + (variant||'');
+  /* malHoyde fyller ruta: over 2.7 gaar de breie modellene ut av bildet */
+  return (id, variant, malHoyde) => {
+    const h = malHoyde || 2.1;
+    const nokkel = id + '|' + (variant||'') + '|' + h;
     if(MINI[nokkel]) return MINI[nokkel];
     if(!rt) oppsett();
-    const g = modellSkalert(id, 2.1, {variant});
+    const g = modellSkalert(id, h, {variant});
     g.rotation.y = -0.5;
     sc.add(g);
     rt.render(sc, cam);
@@ -1570,7 +1575,7 @@ function visDetalj(id, ex){
 function vareIkon(b){
   const id = b.vox || b.ikonVox;
   if(!id) return b.ikon;
-  try { return `<img class="vare-bilde" src="${lagMini(id)}" alt="">`; }
+  try { return `<img class="vare-bilde" src="${lagMini(id, null, 2.6)}" alt="">`; }
   catch { return b.ikon; }
 }
 

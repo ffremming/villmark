@@ -1,0 +1,49 @@
+Villmark artsmodeller
+=====================
+
+Denne pakken inneholder ONNX-konverterte kopier av to modeller fra andre
+opphavspersoner. Vektene er uendret; filene er konvertert fra PyTorch til
+ONNX og redusert i presisjon. Se README.md for en full beskrivelse av
+endringene.
+
+-------------------------------------------------------------------------
+SpeciesNet  (speciesnet.onnx, speciesnet.labels.json)
+
+  Copyright 2024 Google LLC
+
+  Lisensiert under Apache License, Version 2.0. Se LICENSE.
+  Kilde: https://github.com/google/cameratrapai
+  Vekter: https://www.kaggle.com/models/google/speciesnet (pyTorch/v4.0.3b)
+
+  Endret: eksportert til ONNX opset 17 med fast batchstorrelse 1, konvertert
+  til fp16. Labellisten er skrevet om fra tekstfil til JSON, uendret innhold
+  og rekkefolge.
+
+-------------------------------------------------------------------------
+birder resnet_v2_50_inat21  (inat21.onnx, inat21.labels.json)
+
+  Fra Birder-prosjektet.
+
+  Lisensiert under Apache License, Version 2.0. Se LICENSE.
+  Kilde: https://huggingface.co/birder-project/resnet_v2_50_inat21
+  Prosjekt: https://gitlab.com/birder/birder
+
+  Endret: 256px-varianten eksportert til ONNX opset 17 med fast
+  batchstorrelse 1, kvantisert til int8 (QDQ, per kanal, percentile-
+  kalibrering). Klasselisten er skrevet om til JSON og utvidet med slekt,
+  familie, orden, klasse og rekke.
+
+-------------------------------------------------------------------------
+iNaturalist 2021  (taksonomien i inat21.labels.json)
+
+  Artsnavn og taksonomiske rangeringer stammer fra iNat2021-konkurransens
+  kategoriliste.
+
+  Kilde: https://github.com/visipedia/inat_comp/tree/master/2021
+
+-------------------------------------------------------------------------
+MegaDetector
+
+  Ikke inkludert. SpeciesNet-pakken fra Kaggle inneholder MegaDetector v5a,
+  men Villmark bruker helbilde-klassifikatoren 4.0.3b, som ikke trenger en
+  detektor.

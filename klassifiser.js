@@ -33,6 +33,10 @@ const MODELLER = {
    kjorer vi ogsaa den andre modellen, og beste treff vinner. */
 const TERSKEL_EKSAKT = 0.45;
 
+/* Sier SpeciesNet "blank" med minst denne sikkerheten, er det ikke noe dyr i
+   bildet, og en svak gjetning fra iNat21 forkastes. */
+const BLANK_VETO = 0.60;
+
 const sesjoner = new Map();   // navn -> {session, meta, labels}
 const laster   = new Map();   // navn -> Promise, hindrer dobbel nedlasting
 const mangler  = new Set();   // modeller som ikke finnes, huskes ut okten
@@ -236,6 +240,16 @@ function tilTensor(kilde, meta, ort){
   return new ort.Tensor('float32', ut, [1, 3, h, w]);
 }
 
+/* Hvor sikker er SpeciesNet paa at bildet er tomt for dyr?
+   Labelformatet er "uuid;klasse;orden;familie;slekt;art;fellesnavn". */
+function blankSikkerhet(predikasjoner){
+  for(const pred of predikasjoner){
+    const felles = String(pred.label).split(';').pop().trim().toLowerCase();
+    if(felles === 'blank') return pred.p;
+  }
+  return 0;
+}
+
 function softmax(v){
   let maks = -Infinity;
   for(const x of v) if(x > maks) maks = x;
@@ -319,10 +333,25 @@ async function klassifiser(kilde, opt){
 
   /* 2. SpeciesNet som spesialist. Den kjenner Lepus timidus, Lynx lynx,
      Gulo gulo og Vulpes lagopus, som iNat21 bare naar paa slekt. */
-  let dyreSvar = null;
+  let dyreSvar = null, blankP = 0;
   const dyr = await hent('speciesnet');
-  if(dyr) dyreSvar = ARTSMAPPING.beste(await kjor(dyr, kilde, ort), 'speciesnet', mapopt);
+  if(dyr){
+    const dyrePred = await kjor(dyr, kilde, ort);
+    dyreSvar = ARTSMAPPING.beste(dyrePred, 'speciesnet', mapopt);
+    blankP = blankSikkerhet(dyrePred);
+  }
   opt.onFase && opt.onFase('regner', 1);
+
+  /* SpeciesNet har en egen "blank"-klasse for bilder uten dyr. Sier den blank
+     med tyngde, og iNat21 bare har en gjetning paa slekt eller familie, er
+     det ingenting der. Uten denne vetoretten ble et bilde av et skrivebord
+     til HUBRO paa 5 %. Et eksakt artstreff overlever - SpeciesNet sier blank
+     paa alle planter og sopp, som den ikke kjenner. */
+  if(blankP >= BLANK_VETO && planteSvar && planteSvar.niva > 0){
+    return { id:null, niva:3, nivaTekst: ARTSMAPPING.NIVA_TEKST[3],
+             latin: planteSvar.latin, felles: planteSvar.felles,
+             p: planteSvar.p, kilde:'speciesnet' };
+  }
 
   /* Ingen modell kom gjennom. Da skal app.js falle til simulert skann. */
   if(!dyreSvar && !planteSvar){

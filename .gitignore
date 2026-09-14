@@ -2,8 +2,12 @@
 VoxBox/
 .DS_Store
 
-# eksporterte artsmodeller - lastes opp til Hugging Face, ikke til git
-modeller/
+# eksporterte artsmodeller - lastes opp til Hugging Face, ikke til git.
+# Lisens og attribusjon foelger derimot med i repoet, saa de ikke gaar tapt.
+modeller/*
+!modeller/LICENSE
+!modeller/NOTICE
+!modeller/README.md
 .venv/
 __pycache__/
 tools/provebilder/

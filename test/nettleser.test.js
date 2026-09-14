@@ -176,13 +176,64 @@ const sov = ms => new Promise(r => setTimeout(r, ms));
   sjekk(await kjor(a, 'document.querySelector("#lobListe .lob-rad-navn").textContent') === 'BETA',
     'fane A ser riktig navn paa motparten');
 
-  /* --------- enspillerkampen skal fortsatt virke --------- */
+  /* --------- dekket kommer fra plenen --------- */
+  /* Kortstokken er plenen, saa en tom plen har ingen kort og kampen er
+     stengt. Vi setter ut nok arter til at dekket er lovlig. */
   const c = await nyFane();
   await sov(3000);
   await kjor(c, 'VM.gaTil("lobby")');
   await sov(800);
+  sjekk(await kjor(c, 'document.querySelector("#lobMotAI").disabled'),
+    'en tom plen gir ingen kort, saa kampen er stengt');
+  sjekk(await kjor(c, '!document.querySelector("#lobDekkHint").hidden'),
+    'og spilleren faar vite hvorfor');
+
+  await kjor(c, `(() => {
+    for(let i = 0; i < 20; i++){
+      const sp = SPECIES[i % SPECIES.length];
+      VM.STATE.eksemplarer.push({ uid:9200 + i, art:sp.id, niva: i === 0 ? 3 : 1,
+        variant:null, x:i, z:i });
+      VM.STATE.dekk.add(9200 + i);
+      VM.STATE.funnet.add(sp.id);
+    }
+    VM.gaTil('field'); })()`);
+  await sov(600);
+  await kjor(c, 'VM.gaTil("lobby")');
+  await sov(900);
+
+  sjekk(!(await kjor(c, 'document.querySelector("#lobMotAI").disabled')),
+    'en plen med nok arter aapner kampen');
+  const ruter = await kjor(c, 'document.querySelectorAll("#lobDekk .lob-kort").length');
+  sjekk(ruter === 20, 'dekkvelgeren viser en rute per art paa plenen (fikk ' + ruter + ')');
+  sjekk(await kjor(c, 'document.querySelectorAll("#lobDekk .lob-kort.med").length') === 20,
+    'alt som staar ute er med i dekket til noen tar det ut');
+  sjekk(await kjor(c, 'document.querySelector("#lobDekk .lob-kort-niva") !== null'),
+    'et eksemplar som er dratt opp et nivaa er merket');
+
+  /* --------- kort kan tas ut og settes inn igjen --------- */
+  const foerUt = await kjor(c, 'VM.dekkStokk().length');
+  await kjor(c, 'document.querySelector("#lobDekk .lob-kort").click()');
+  await sov(300);
+  sjekk(await kjor(c, 'VM.dekkStokk().length') === foerUt - 1,
+    'et kort som klikkes bort forsvinner fra dekket');
+  sjekk(await kjor(c, 'document.querySelectorAll("#lobDekk .lob-kort").length') === 20,
+    'men ruta blir staaende, saa den kan settes inn igjen');
+  await kjor(c, 'document.querySelector("#lobDekk .lob-kort").click()');
+  await sov(300);
+  sjekk(await kjor(c, 'VM.dekkStokk().length') === foerUt,
+    'og et nytt klikk setter det inn igjen');
+
+  /* --------- enspillerkampen skal fortsatt virke --------- */
   await kjor(c, 'document.querySelector("#lobMotAI").click()');
   await sov(1500);
+  /* Kortene flytter seg mens turene gaar, saa vi teller alle stedene et kort
+     kan staa. Summen skal vaere den stokken spilleren stilte med. */
+  const eier = i => `(p => p.stokk.length + p.hand.length + p.liv.length
+    + p.arter.length + p.kompost.length + (p.biotop ? 1 : 0))(KORTSPILL.KS.p[${i}])`;
+  sjekk(await kjor(c, eier(0)) === 20,
+    'kampen spilles med plenen, ikke med planstokken');
+  sjekk(await kjor(c, eier(1)) === 20,
+    'maskinen stiller med like mange kort');
   sjekk(await kjor(c, 'KORTSPILL.KS.nett === null'),
     'enspillerkampen bruker ikke nettet');
   sjekk(await kjor(c, 'KORTSPILL.KS.p[1].styring') === 'ai',
@@ -239,6 +290,23 @@ const sov = ms => new Promise(r => setTimeout(r, ms));
   await sov(600);
 
   /* --------- A utfordrer B --------- */
+  /* Begge maa ha en plen aa spille med: uten kort er utfordringen stengt. */
+  const sattUt = (fra, niva) => `(() => {
+    for(let i = 0; i < 18; i++){
+      const sp = SPECIES[(i + ${fra}) % SPECIES.length];
+      VM.STATE.eksemplarer.push({ uid:${fra} + i, art:sp.id, niva: i === 0 ? ${niva} : 1,
+        variant:null, x:i, z:i });
+      VM.STATE.dekk.add(${fra} + i);
+      VM.STATE.funnet.add(sp.id);
+    } })()`;
+  await kjor(a, sattUt(9300, 2));
+  await kjor(b, sattUt(9400, 4));
+  await kjor(a, 'VM.gaTil("field"); VM.gaTil("lobby")');
+  await kjor(b, 'VM.gaTil("field"); VM.gaTil("lobby")');
+  await sov(900);
+  sjekk(!(await kjor(a, 'document.querySelector("#lobMotAI").disabled')),
+    'fane A har et lovlig dekk foer utfordringen');
+
   await kjor(a, 'document.querySelector("#lobListe .lob-rad").click()');
   await sov(400);
   await kjor(a, 'document.querySelector("#lobVelgDyst").click()');
@@ -271,6 +339,14 @@ const sov = ms => new Promise(r => setTimeout(r, ms));
   }
   sjekk(await kjor(a, 'KORTSPILL.KS.nett.rolle') === 'vert', 'fane A er vert');
   sjekk(await kjor(b, 'KORTSPILL.KS.nett.rolle') === 'gjest', 'fane B er gjest');
+
+  /* Verten regner ut hele kampen, saa gjestens plen maa ha kommet dit.
+     Bare B har et eksemplar paa nivaa 4, saa kortet sier hvem stokken kom
+     fra. Nivaaet ligger i kort-id-en, og verten bygger kortet selv. */
+  const merke = (i, n) => `(p => [...p.stokk, ...p.hand, ...p.liv]
+    .some(id => typeof id === 'string' && id.endsWith('@${n}')))(KORTSPILL.KS.p[${i}])`;
+  sjekk(await kjor(a, merke(0, 2)), 'verten spiller med sin egen plen');
+  sjekk(await kjor(a, merke(1, 4)), 'gjestens plen kom fram til verten');
   sjekk(await kjor(a, 'KORTSPILL.KS.tur') !== await kjor(b, 'KORTSPILL.KS.tur'),
     'turen er speilvendt mellom fanene');
 

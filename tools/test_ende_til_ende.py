@@ -42,6 +42,20 @@ PROVEARTER = {
     "tare": "Laminaria_hyperborea",
 }
 
+# Motiver som IKKE er natur. Modellene har ingen "ingenting her"-utgang, saa
+# de svarer alltid noe - jobben er at svaret skal bli for svakt til aa godtas.
+# Prefikset _ikke_ betyr at testen krever UKJENT ART.
+PROVE_IKKE_NATUR = {
+    "_ikke_laptop": "Laptop",
+    "_ikke_tastatur": "Computer_keyboard",
+    "_ikke_skjerm": "Computer_monitor",
+    "_ikke_skrivebord": "Desk",
+    "_ikke_kontor": "Office",
+    "_ikke_kaffekopp": "Coffee_cup",
+    "_ikke_bil": "Car",
+    "_ikke_murvegg": "Brickwork",
+}
+
 WIKI = "https://en.wikipedia.org/api/rest_v1/page/summary/"
 HODER = {"User-Agent": "villmark-test/1.0 (artsmodell-verifisering)"}
 
@@ -55,7 +69,7 @@ def _hent(url: str, timeout: int = 60) -> bytes:
 def last_ned(mappe: pathlib.Path) -> None:
     """Henter ett bilde per art. Arter uten bilde hoppes over, ikke krasj."""
     mappe.mkdir(parents=True, exist_ok=True)
-    for artsid, artikkel in PROVEARTER.items():
+    for artsid, artikkel in {**PROVEARTER, **PROVE_IKKE_NATUR}.items():
         sti = mappe / f"{artsid}.jpg"
         if sti.exists():
             continue

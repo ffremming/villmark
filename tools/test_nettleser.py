@@ -121,8 +121,13 @@ def main() -> None:
                     feil += 1
                     print(f"FEIL  {navn}: {svar['feil']}")
                     continue
-                ventet = fasit.get(navn)
-                ok = ventet is None or svar.get("id") == ventet
+                # _ikke_* er laptop, murvegg og liknende: eneste riktige
+                # svar er at ingenting gjenkjennes.
+                if navn.startswith("_ikke_"):
+                    ok = svar.get("id") is None
+                else:
+                    ventet = fasit.get(navn)
+                    ok = ventet is None or svar.get("id") == ventet
                 if not ok:
                     feil += 1
                 print(
