@@ -96,7 +96,7 @@ function variantAv(id){ return STATE.varianter[id] || null; }
 /* ---------- eksemplarer og nivaa ----------
    Samme art kan staa flere ganger paa plenen. To eksemplarer av samme art
    paa samme nivaa kan dras sammen til ett eksemplar ett nivaa hoyere. */
-const NIVA_STEG = 0.15;          // +15 % paa alle stats per nivaa
+/* NIVA_STEG staar i cards.js: kortet og dyret skal vokse i takt. */
 
 function nyttEksemplar(art, variant){
   const e = { uid: STATE.nesteUid++, art, niva:1, variant: variant || null, x:null, z:null };

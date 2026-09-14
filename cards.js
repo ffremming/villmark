@@ -73,7 +73,7 @@ const KOSTRANG = (() => {
 /* Et eksemplar paa nivaa 3 har ingen rad i KOSTRANG, saa den skalerte
    rastyrken plasseres paa stigen av alle rastyrker i stedet. Stigen slutter
    paa kost 7: over det gir et hoyere nivaa bare merket, ikke mer kraft. */
-const NIVA_KORTSTEG = 0.15;      // samme steg som NIVA_STEG i app.js
+const NIVA_STEG = 0.15;          // +15 % paa alle stats per nivaa
 const STYRKESTIGE = SPECIES.map(sp => rastyrke(sp.angrep, sp.hp))
                            .sort((a,b) => a - b);
 
@@ -86,7 +86,7 @@ function kostFraStyrke(styrke){
 
 function kortKost(sp, niva){
   if(!(niva > 1)) return KOSTRANG[sp.id];
-  const f = 1 + NIVA_KORTSTEG*(niva - 1);
+  const f = 1 + NIVA_STEG*(niva - 1);
   return kostFraStyrke(rastyrke(sp.angrep*f, sp.hp*f));
 }
 function kortKraft(sp, niva){ return KRAFTKURVE[kortKost(sp, niva)]; }

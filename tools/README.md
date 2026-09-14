@@ -205,6 +205,30 @@ topp-5, så gruppebroen fyrte ikke. Broen redder tangartene bare når modellen
 i det minste ser at det er en alge. I praksis er `tare`, `sukkertare` og
 `grisetang` fortsatt vanskelige å fange.
 
+## Når modellen ikke skal svare
+
+Ingen av modellene har en «dette er ikke en organisme»-utgang. iNat21 fordeler
+alltid sannsynlighet over sine 10 000 arter, også når du peker kameraet på en
+laptop. Uten et gulv ble et bilde av et skrivebord til `HUBRO` på 5,1 %, en bil
+til `ULV` på 6,4 % og et tastatur til `SEI` på 5,6 %.
+
+To mekanismer stopper det:
+
+**Gulv per nivå** — `MIN_P_NIVA` i `artsmapping.js` er `[0.10, 0.25, 0.40]`.
+Svakere bevis krever høyere sikkerhet: et eksakt artsnavn på 12 % er verdt mer
+enn en familiegjetning på 12 %. Tallene er valgt mot måledata — ekte funn ligger
+på 46–99 %, med `bjork` som unntak på 12,5 %, mens alle falske lå under 17 %.
+
+**Blank-veto** — `BLANK_VETO` i `klassifiser.js`. SpeciesNet har en egen
+`blank`-klasse for bilder uten dyr. Sier den blank med minst 60 % sikkerhet, og
+iNat21 bare har en gjetning på slekt eller familie, forkastes gjetningen. Et
+eksakt artstreff overlever, siden SpeciesNet sier blank på alle planter og sopp.
+
+Regresjonstesten dekker dette: bildene som heter `_ikke_*` i `provebilder/` er
+laptop, tastatur, skjerm, skrivebord, kontor, kaffekopp, bil og murvegg, og
+testen krever `UKJENT ART` for hvert av dem. Målt: 18/18 riktig, der de åtte
+falske gir 1,8–16,7 % og avvises.
+
 ## Arter ingen modell kjenner
 
 Fem arter har null dekning: `torsk`, `sei`, `tare`, `sukkertare` og

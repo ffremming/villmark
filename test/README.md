@@ -33,7 +33,9 @@ node test/store.test.js
 Kjører to kortspillmotorer i hver sin `vm`-kontekst og lar dem spille en hel
 kamp mot hverandre gjennom et stubbet nettlag. Verifiserer speilvending av
 brettet, at gjestens hånd holdes skjult, at handlinger og spørsmål kommer fram
-begge veier, og at begge sider ender med samme resultat.
+begge veier, og at begge sider ender med samme resultat. De to sidene får hver
+sin plen, så det testes også at gjestens kortstokk kommer fram til verten, og
+at verten bygger gjestens nivåkort selv ut fra kort-id-en.
 
 ```sh
 node test/protokoll.test.js
@@ -50,6 +52,10 @@ speilvendt tur. Dekker også besøk: at gjesten ser verten sin plen, at plenen e
 merket som gjesteplen, og at gjesten får sin egen plen tilbake når hen går ut.
 Til slutt at plenen skrives til `localStorage` og kommer tilbake etter at sida
 lastes på nytt. Sjekker også at enspillerkampen mot maskinen fortsatt virker.
+
+Dekker dekkvelgeren i lobbyen: at en tom plen stenger kampen og sier hvorfor,
+at hver art som står ute får sin egen rute, at et kort kan tas ut og settes inn
+igjen, og at kampen spilles med plenen — ikke med planstokken.
 
 ```sh
 node test/nettleser.test.js
@@ -75,7 +81,7 @@ prosjektet.
 
 ## Felles
 
-Alle fire skriver `Alle ... gikk gjennom` og avslutter med kode 0 når de er
+Alle fem skriver `Alle ... gikk gjennom` og avslutter med kode 0 når de er
 grønne. Nettlesertestene krever Google Chrome på `/Applications/Google Chrome.app`,
 starter en lokal filtjener selv, og rydder bort nettleserprosessene sine også
 når de feiler underveis.
