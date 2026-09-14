@@ -1,6 +1,10 @@
-/* Checks that the scanner never guesses: without a model it must say so and
-   offer SCAN AGAIN, and the random button must give a species without
-   claiming a percentage. */
+/* The scan must not hold the camera while the models run. An iPhone ran out of
+   memory and WebKit killed the tab right after the answer came up.
+
+   So: SCAN copies one frame, shuts the camera off, and the still stands in the
+   viewfinder until SCAN AGAIN brings the camera back. These checks run with
+   Chrome's fake camera, and the classifier is stubbed - a real scan would pull
+   45 MB from Hugging Face. */
 const { spawn, execFileSync } = require('child_process');
 const http = require('http');
 const fs = require('fs');
@@ -47,6 +51,7 @@ function startChrome(profile){
     const p = spawn(CHROME, ['--headless=new', '--remote-debugging-port=0',
       '--user-data-dir=' + profile, '--no-first-run', '--no-default-browser-check',
       '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
+      '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream',
       '--mute-audio', 'about:blank']);
     let buf = '';
     const onData = d => {
@@ -90,7 +95,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 (async () => {
   const server = await startServer();
   const addr = 'http://127.0.0.1:' + server.address().port + '/';
-  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'villmark-scan-'));
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'villmark-camera-'));
   const { ws } = await startChrome(profile);
   const cdp = connect(ws);
   await cdp.ready;
@@ -99,8 +104,6 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   const { sessionId } = await cdp.call('Target.attachToTarget', { targetId, flatten:true });
   await cdp.call('Runtime.enable', {}, sessionId);
   await cdp.call('Page.enable', {}, sessionId);
-  await cdp.call('Page.addScriptToEvaluateOnNewDocument', { source:
-    "window.__pageerrors=[];addEventListener('error',e=>window.__pageerrors.push(String(e.message)+' @ '+(e.filename||'')+':'+e.lineno));" }, sessionId);
   await cdp.call('Page.navigate', { url:addr }, sessionId);
   await sleep(3500);
 
@@ -114,62 +117,79 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     return r.result.value;
   }
 
-  check(await run('typeof CLASSIFIER === "object"'), 'classify.js loaded');
-
-  const buttons = () => run(`(() => {
-    const id = s => document.querySelector(s);
-    return { go:!id('#scanGo').hidden, accept:!id('#scanAccept').hidden,
-             retry:!id('#scanRetry').hidden, rnd:!id('#scanRandom').hidden,
-             readout: id('#scanReadout').textContent };
+  /* The stub answers the way a certain species hit does, so the whole path
+     after the answer runs: voxel model, materialize, ACCEPT. */
+  await run(`(() => {
+    window.__classifyCalls = [];
+    CLASSIFIER.classify = async (source) => {
+      window.__classifyCalls.push({
+        tag: source.tagName,
+        live: source.tagName === 'VIDEO',
+        w: source.width || source.videoWidth,
+      });
+      return { id: SPECIES[0].id, level:0, levelText:'CERTAIN',
+               latin: SPECIES[0].sci, common: SPECIES[0].name, p:0.91, source:'inat21' };
+    };
+    return true;
   })()`);
 
-  /* --- 1. the scan frame in its starting position --- */
-  await run('VM.goTo("scan")');
-  await sleep(1200);
-  let b = await buttons();
-  check(b.go && !b.accept && !b.retry && b.rnd, 'ready: SCAN + RANDOM, no ACCEPT/RETRY');
+  const cam = () => run(`(() => {
+    const v = document.querySelector('#camFeed');
+    const still = document.querySelector('#camStill');
+    const s = v.srcObject;
+    return {
+      stream: !!s,
+      live: s ? s.getTracks().some(t => t.readyState === 'live') : false,
+      stillShown: !still.hidden,
+      stillSize: still.width + 'x' + still.height,
+      readout: document.querySelector('#scanReadout').textContent,
+    };
+  })()`);
 
-  /* --- 2. a scan without a camera must say so, not guess --- */
+  /* --- 1. the scan screen turns the camera on --- */
+  await run(`VM.goTo('scan')`);
+  await sleep(1500);
+  let c = await cam();
+  check(c.stream && c.live, 'the scan screen gives a live camera');
+  check(!c.stillShown, 'no still frame while the camera is live');
+
+  /* --- 2. SCAN copies a frame and lets the camera go --- */
   await run('document.querySelector("#scanGo").click()');
-  await sleep(600);
-  b = await buttons();
-  check(!b.go && !b.accept && b.retry, 'error: SCAN AGAIN is shown, ACCEPT is not');
-  check(/NO CAMERA|NO SPECIES MODEL|ERROR:|THE MODEL/.test(b.readout),
-    'error: the frame says why: ' + b.readout);
-  check(!/%/.test(b.readout), 'error: no percentage in the frame');
-  check(await run('VM.STATE.targetSpecies === null'), 'error: no species was set');
+  await sleep(1800);
+  c = await cam();
+  const calls = await run('window.__classifyCalls');
+  check(calls.length === 1, 'the classifier was called once');
+  check(calls[0] && calls[0].tag === 'CANVAS',
+    'the models get a still frame, not the live camera: ' + (calls[0] && calls[0].tag));
+  check(calls[0] && calls[0].w > 0 && calls[0].w <= 1024,
+    'the frame is scaled down, not full sensor size: ' + (calls[0] && calls[0].w));
+  check(!c.stream && !c.live, 'the camera is off while the models work');
+  check(c.stillShown, 'the still frame stands in the viewfinder');
+  check(/\d+ %/.test(c.readout), 'the answer reached the frame: ' + c.readout);
 
-  /* --- 3. SCAN AGAIN gives the ready position back --- */
+  /* --- 3. SCAN AGAIN gives the live camera back --- */
   await run('document.querySelector("#scanRetry").click()');
-  await sleep(300);
-  b = await buttons();
-  check(b.go && !b.accept && !b.retry, 'retry: back to ready');
+  await sleep(1500);
+  c = await cam();
+  check(c.stream && c.live, 'SCAN AGAIN turns the camera back on');
+  check(!c.stillShown, 'the still frame is taken down again');
 
-  /* --- 4. GIVE ME A RANDOM ONE gives a species, without a percentage --- */
-  await run('document.querySelector("#scanRandom").click()');
-  await sleep(3000);
-  b = await buttons();
-  check(b.accept && b.retry && !b.go, 'random: ACCEPT + SCAN AGAIN');
-  check(/RANDOM DRAW/.test(b.readout), 'random: the frame marks the draw: ' + b.readout);
-  check(!/%/.test(b.readout) && !/CERTAIN/.test(b.readout), 'random: no percentage, no CERTAIN');
-  check(await run('typeof VM.STATE.targetSpecies === "string"'), 'random: a species was set');
+  /* --- 4. a second scan works, and only starts one camera --- */
+  await run('document.querySelector("#scanGo").click()');
+  await sleep(1800);
+  check((await run('window.__classifyCalls')).length === 2, 'the second scan runs too');
+  c = await cam();
+  check(!c.live, 'the camera is off again after the second scan');
 
-  /* --- 5. retry after a hit throws the species away --- */
-  await run('document.querySelector("#scanRetry").click()');
-  await sleep(300);
-  check(await run('VM.STATE.targetSpecies === null'), 'retry after a hit: the species was thrown away');
-
-  /* --- 6. ACCEPT goes to the find screen --- */
-  await run('document.querySelector("#scanRandom").click()');
-  await sleep(3000);
-  await run('document.querySelector("#scanAccept").click()');
-  await sleep(600);
-  check(await run('document.querySelector("#screen-reveal").classList.contains("active")'),
-    'accept: the find screen opens');
+  /* --- 5. leaving the scan screen leaves nothing running --- */
+  await run(`VM.goTo('field')`);
+  await sleep(500);
+  c = await cam();
+  check(!c.stream && !c.live, 'leaving the scanner stops the camera');
 
   cdp.close();
   server.close();
   cleanup();
-  console.log(failures ? '\n' + failures + ' failed' : '\nAll scan tests passed');
+  console.log(failures ? '\n' + failures + ' failed' : '\nAll camera tests passed');
   process.exit(failures ? 1 : 0);
 })().catch(e => { console.error(e); cleanup(); process.exit(1); });

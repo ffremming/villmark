@@ -177,7 +177,7 @@ def main() -> None:
     common.write_meta(
         NAME,
         {
-            "kilde": args.model,
+            "source": args.model,
             "precision": precision,
             "input": [h, w],
             "layout": "NCHW",
@@ -185,7 +185,7 @@ def main() -> None:
             "mean": mean,
             "std": std,
             "softmax": True,
-            "labelformat": "inat21",
+            "labelFormat": "inat21",
         },
         labels,
     )

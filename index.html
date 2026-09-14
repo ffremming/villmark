@@ -19,6 +19,8 @@
 
 <div id="camLayer" hidden>
   <video id="camFeed" playsinline muted autoplay></video>
+  <!-- the frame the scan actually ran on, shown while the camera is off -->
+  <canvas id="camStill" hidden></canvas>
   <div class="cam-fallback" id="camFallback"></div>
 </div>
 
@@ -411,6 +413,7 @@
   <div id="flash"></div>
 </div>
 
+<script src="trace.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="species.js"></script>
 <script src="cards.js"></script>

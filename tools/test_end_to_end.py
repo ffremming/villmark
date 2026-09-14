@@ -150,7 +150,7 @@ def main() -> None:
 
     if args.out:
         args.out.write_text(
-            json.dumps({"source": meta["labelformat"], "images": everything},
+            json.dumps({"source": meta["labelFormat"], "images": everything},
                        ensure_ascii=False, indent=1),
             encoding="utf-8",
         )

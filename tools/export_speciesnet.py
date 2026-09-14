@@ -94,7 +94,7 @@ def main() -> None:
     common.write_meta(
         NAME,
         {
-            "kilde": args.model,
+            "source": args.model,
             "precision": precision,
             "input": [SIZE, SIZE],
             "layout": "NHWC",
@@ -102,7 +102,7 @@ def main() -> None:
             "mean": [0.0, 0.0, 0.0],
             "std": [1.0, 1.0, 1.0],
             "softmax": True,
-            "labelformat": "speciesnet",
+            "labelFormat": "speciesnet",
         },
         labels,
     )

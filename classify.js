@@ -37,6 +37,10 @@ const EXACT_THRESHOLD = 0.45;
    in the picture, and a weak guess from iNat21 is discarded. */
 const BLANK_VETO = 0.60;
 
+/* Breadcrumb, so a phone that dies mid-scan still says where. trace.js may be
+   absent (diagnostics.html, tests), so the call is guarded. */
+const T = (step, extra) => { if(typeof TRACE !== 'undefined') TRACE.mark(step, extra); };
+
 const sessions = new Map();   // name -> {session, meta, labels}
 const loading  = new Map();   // name -> Promise, prevents a double download
 const missing  = new Set();   // models that do not exist, remembered for the session
@@ -81,9 +85,15 @@ async function fetchWithProgress(url, onProgress){
 
   if(cache){
     const hit = await cache.match(url);
-    if(hit){ onProgress && onProgress(1); return hit.arrayBuffer(); }
+    if(hit){
+      onProgress && onProgress(1);
+      const buf = await hit.arrayBuffer();
+      T('fetch-from-cache', Math.round(buf.byteLength / 1e6) + ' MB');
+      return buf;
+    }
   }
 
+  T('fetch-network-start', url.split('/').pop());
   const response = await fetch(url);
   if(!response.ok) throw new ModelUnavailableError('HTTP ' + response.status + ' for ' + url);
 
@@ -95,20 +105,28 @@ async function fetchWithProgress(url, onProgress){
     return buf;
   }
 
-  const chunks = [];
+  /* One buffer, allocated up front from content-length, and every chunk is
+     written straight into it. The old version kept a chunk list, then joined
+     it into a second buffer, then took a third copy for the cache - three
+     times 112 MB on the phone at once, which is what killed the tab. */
+  const buf = new Uint8Array(total);
   let read = 0;
   const reader = response.body.getReader();
   for(;;){
     const { done, value } = await reader.read();
     if(done) break;
-    chunks.push(value);
+    if(read + value.length > total){
+      reader.cancel();
+      throw new ModelUnavailableError('longer than content-length for ' + url);
+    }
+    buf.set(value, read);
     read += value.length;
     onProgress && onProgress(read / total);
   }
-  const buf = new Uint8Array(read);
-  let ptr = 0;
-  for(const b of chunks){ buf.set(b, ptr); ptr += b.length; }
-  if(cache) try { await cache.put(url, new Response(buf.slice().buffer)); } catch(_){}
+  if(read !== total) throw new ModelUnavailableError('truncated download for ' + url);
+  T('fetch-done', Math.round(read / 1e6) + ' MB');
+  if(cache) try { await cache.put(url, new Response(buf)); } catch(_){}
+  T('fetch-cached');
   return buf.buffer;
 }
 
@@ -170,12 +188,16 @@ async function loadModel(name, opt){
        nothing to fall back to there. */
     if(!webgpuOk){
       ep = ['wasm'];
+      T('session-create-start', name + ' wasm ' + meta.precision);
       session = await ort.InferenceSession.create(buf, { executionProviders: ep, graphOptimizationLevel:'all' });
+      T('session-create-done', name);
     } else {
       const spare = buf.slice(0);
       try {
         ep = ['webgpu', 'wasm'];
+        T('session-create-start', name + ' webgpu ' + meta.precision);
         session = await ort.InferenceSession.create(buf, { executionProviders: ep, graphOptimizationLevel:'all' });
+        T('session-create-done', name);
       } catch(e){
         /* WebGPU also fails silently on a number of Android GPUs. */
         console.warn('CLASSIFIER: WebGPU is no good for', name, '-', e.message);
@@ -320,9 +342,11 @@ async function runRobust(name, entry, source, ort){
 
 async function run(entry, source, ort){
   const tensor = toTensor(source, entry.meta, ort);
+  T('tensor-built', entry.name + ' ' + entry.meta.input.join('x'));
   const input = {};
   input[entry.session.inputNames[0]] = tensor;
   const out = await entry.session.run(input);
+  T('infer-done', entry.name);
   const raw = out[entry.session.outputNames[0]].data;
   const p   = entry.meta.softmax === false ? raw : softmax(raw);
   return topK(p, entry.labels, 5);
@@ -334,6 +358,20 @@ async function run(entry, source, ort){
    opt.confirmDownload(info) -> Promise<bool>
    Returns {id, level, levelText, latin, common, p, source} */
 async function classify(source, opt){
+  try {
+    return await classifyOnce(source, opt);
+  } finally {
+    /* SpeciesNet is 112 MB and only a minority of scans need it. On a phone it
+       must not stay in memory while the voxel model is built and the find
+       screen opens - that is where WebKit was killing the tab. The file is in
+       the cache, so the next scan that needs it pays no download, only a
+       session build. iNat21 is a quarter of the size and stays loaded, so the
+       common scan is still fast. */
+    if(LOW_MEMORY) release('speciesnet');
+  }
+}
+
+async function classifyOnce(source, opt){
   opt = opt || {};
   const ort = await loadOrt();
 
@@ -370,6 +408,7 @@ async function classify(source, opt){
      480x480 - and hits 58 of the 72 species exactly, against SpeciesNet's 21.
      In the common case the scan is done here, and the heavy model is never
      downloaded. */
+  T('classify-start');
   let plantAnswer = null;
   const plant = await get('inat21');
   if(plant){
@@ -377,8 +416,10 @@ async function classify(source, opt){
     plantAnswer = SPECIESMAPPING.best(await runRobust('inat21', plant, source, ort), 'inat21', mapOpt);
     opt.onPhase && opt.onPhase('computing', 0.5);
 
+    T('inat21-answer', plantAnswer.level + ' ' + Math.round((plantAnswer.p || 0) * 100) + '%');
     if(plantAnswer.id && plantAnswer.level === 0 && plantAnswer.p >= EXACT_THRESHOLD){
       opt.onPhase && opt.onPhase('computing', 1);
+      T('classify-done', 'inat21 only');
       return plantAnswer;
     }
   }
@@ -386,6 +427,7 @@ async function classify(source, opt){
   /* 2. SpeciesNet as the specialist. It knows Lepus timidus, Lynx lynx,
      Gulo gulo and Vulpes lagopus, which iNat21 only reaches at genus level. */
   let animalAnswer = null, blankP = 0;
+  T('speciesnet-needed');
   const animal = await get('speciesnet');
   if(animal){
     const animalPred = await runRobust('speciesnet', animal, source, ort);
@@ -393,6 +435,7 @@ async function classify(source, opt){
     blankP = blankConfidence(animalPred);
   }
   opt.onPhase && opt.onPhase('computing', 1);
+  T('classify-done', 'both models');
 
   /* SpeciesNet has its own "blank" class for pictures without animals. If it
      says blank with weight, and iNat21 only has a guess at genus or family

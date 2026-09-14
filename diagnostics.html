@@ -32,6 +32,7 @@
 <button id="copy">COPY THE WHOLE REPORT</button>
 <textarea id="report" readonly></textarea>
 
+<script src="trace.js"></script>
 <script src="species.js"></script>
 <script src="speciesmapping.js"></script>
 <script src="classify.js"></script>
@@ -70,6 +71,14 @@ function testImage(){
 }
 
 (async () => {
+  /* A phone that runs out of memory takes the tab with it and leaves no
+     console. trace.js writes every step to disk, so the last one before the
+     kill is readable here after the reload. */
+  const crash = TRACE.lastCrash();
+  const sc = step('last crash');
+  if(crash) sc.fail(new Error(TRACE.report()));
+  else sc.ok('no killed run recorded');
+
   step('browser').ok(navigator.userAgent);
   step('secure context').ok(window.isSecureContext + '  (the Cache API needs true)');
   step('crossOriginIsolated').ok(String(window.crossOriginIsolated) +

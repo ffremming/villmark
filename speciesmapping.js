@@ -236,17 +236,35 @@ function lookup(label, source, found){
   return answer(null, 3);
 }
 
+/* The lowest probability accepted, per level. Weaker evidence demands higher
+   confidence: an exact species name at 12 % is worth more than a family guess
+   at 12 %.
+
+   The numbers are measured, not guessed. The model has no "nothing here" exit,
+   so a picture of a PC always gives an answer - just a weak one. Measured on
+   eight pictures of a car, a keyboard, a desk, a coffee cup and a brick wall,
+   every hit landed between 1.4 % and 12.5 %, and the only ones that reached a
+   species at all sat at 5-6 % (car -> WOLF, desk -> EAGLE OWL, keyboard ->
+   SAITHE). Real finds landed at 46-99 %, with one exception: birch hit exactly
+   at 12.5 %.
+
+   That is why the floor for an exact species hit sits low and the floor for
+   guesses sits high. Fine-grained models with 10,000 classes spread the
+   probability, so an exact name is strong evidence in itself. */
+const MIN_P_LEVEL = [0.10, 0.25, 0.40];
+
 /* Walks the top 5 and takes the best hit, not just the first one.
    A certain candidate in position 3 beats a family guess in position 1.
    predictions = [{label, p}, ...] sorted descending on p. */
 function best(predictions, source, opt){
   opt = opt || {};
-  const minP = opt.minP || 0.04;
+  const minP = opt.minP || 0.01;
   let best = null;
   for(const pred of predictions){
     if(pred.p < minP) continue;
     const hit = lookup(pred.label, source, opt.found);
     if(!hit || hit.level === 3) continue;
+    if(pred.p < MIN_P_LEVEL[hit.level]) continue;
     if(!best || hit.level < best.level || (hit.level === best.level && pred.p > best.p)){
       best = { ...hit, p: pred.p, source };
     }
@@ -263,7 +281,7 @@ function best(predictions, source, opt){
   };
 }
 
-return { lookup, best, parseLabel, binomialOf, TAXONOMY, LEVEL_TEXT, NOT_A_SPECIES, GROUP_BRIDGE };
+return { lookup, best, parseLabel, binomialOf, TAXONOMY, LEVEL_TEXT, NOT_A_SPECIES, GROUP_BRIDGE, MIN_P_LEVEL };
 })();
 
 if(typeof window !== 'undefined') window.SPECIESMAPPING = SPECIESMAPPING;

@@ -201,8 +201,25 @@ async function waitFor(N, expression, ms = 20000, name = expression){
   check(await waitFor(A, 'document.querySelector("#lobbyList .lobby-row-name").textContent === "BETA"',
     20000, 'the name BETA'), 'the name travels over presence');
 
+  /* Both sides need a lawn to play with: a deck that is too small declines the
+     challenge instead of starting a battle that is already decided. */
+  const placed = from => `(() => {
+    for(let i = 0; i < 18; i++){
+      const sp = SPECIES[(i + ${from}) % SPECIES.length];
+      VM.STATE.specimens.push({ uid:${from} + i, species:sp.id, level:1,
+        variant:null, x:i, z:i });
+      VM.STATE.deck.add(${from} + i);
+      VM.STATE.found.add(sp.id);
+    }
+    VM.goTo('field'); VM.goTo('lobby'); })()`;
+  await A.run(placed(9300));
+  await B.run(placed(9400));
+  await sleep(900);
+
   /* challenge */
   await A.run('document.querySelector("#lobbyList .lobby-row").click()');
+  await sleep(500);
+  await A.run('document.querySelector("#lobbyPickDuel").click()');
   check(await waitFor(B, 'document.querySelector("#lobbyList .lobby-row").classList.contains("challenging")',
     20000, 'the challenge arrives'), 'the challenge reaches the other side');
 

@@ -694,6 +694,7 @@ let beforeScan = 'field';   // the tab the scanner was opened from, so the cross
    any other screen ends the visit, so the tabs need no special handling. */
 const VISIT_SCREENS = ['field','detail'];
 function goTo(name){
+  TRACE.mark('goto', name);
   if(name === 'scan' && current !== 'scan' && current !== 'splash') beforeScan = current;
   if(VISIT.active() && !VISIT_SCREENS.includes(name)) VISIT.leave();
   /* If we leave the duel while a network battle is running, the opponent has
@@ -1280,23 +1281,58 @@ async function startScan(){
   resetScan();
   if(mapEncounter) $('#scanReadout').textContent = 'ENCOUNTER ON THE MAP · TAP SCAN';
 
-  const video = $('#camFeed');
-  if(!camStream){
-    try {
-      camStream = await navigator.mediaDevices.getUserMedia({
-        video:{ facingMode:{ ideal:'environment' } }, audio:false });
-      video.srcObject = camStream;
-      $('#camFallback').style.display = 'none';
-    } catch(err){
-      $('#camFallback').style.display = 'block';
-      video.style.display = 'none';
-    }
-  }
+  $('#camStill').hidden = true;
+  await startCamera();
   if(!mapEncounter) $('#scanReadout').textContent = readyText();
+}
+
+let camStarting = null;
+async function startCamera(){
+  const video = $('#camFeed');
+  if(camStream) return;
+  /* getUserMedia twice at once gives two streams and two permission prompts */
+  if(camStarting) return camStarting;
+  camStarting = (async () => {
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:{ ideal:'environment' } }, audio:false });
+    video.srcObject = camStream;
+    video.style.display = '';
+    $('#camFallback').style.display = 'none';
+  } catch(err){
+    $('#camFallback').style.display = 'block';
+    video.style.display = 'none';
+  }
+  })().finally(() => { camStarting = null; });
+  return camStarting;
 }
 function stopScan(){
   if(camStream){ camStream.getTracks().forEach(t => t.stop()); camStream = null; }
   $('#camFeed').srcObject = null;
+}
+
+/* The camera holds decode buffers for as long as it runs, and the models need
+   every megabyte the phone has. So the frame is copied once, at the size the
+   models actually use, and the camera is shut off for the rest of the scan.
+   The still stands in the frame so the viewfinder does not go black. */
+function grabFrame(){
+  const v = $('#camFeed');
+  const still = $('#camStill');
+  const side = Math.min(v.videoWidth, v.videoHeight);
+  /* 512 on the short side: the biggest model crops a square and scales it to
+     480, so more pixels than this are thrown away anyway. */
+  const k = Math.min(1, 512 / side);
+  still.width  = Math.round(v.videoWidth  * k);
+  still.height = Math.round(v.videoHeight * k);
+  still.getContext('2d').drawImage(v, 0, 0, still.width, still.height);
+  still.hidden = false;
+  return still;
+}
+
+/** back to a live viewfinder - the camera is only on when it is needed */
+async function resumeCamera(){
+  $('#camStill').hidden = true;
+  if(current === 'scan' && !camStream) await startCamera();
 }
 SCENES.scan.exit = stopScan;
 
@@ -1304,12 +1340,14 @@ SCENES.scan.exit = stopScan;
 
 /** the hit is on screen, and the player decides whether to accept it */
 function finishHit(id, vari){
+  TRACE.mark('finish-hit', id);
   $('#scanBeam').classList.remove('run');
   flashScreen();
   if(vari){ SOUND.rare(); vibrate([30,60,30,60,90]); }
   else    { SOUND.find(); vibrate(60); }
   scanButtons('done', { hit:true });
-  $('#scanAccept').onclick = () => { SOUND.click(); showFind(id); };
+  TRACE.mark('scan-idle');
+  $('#scanAccept').onclick = () => { TRACE.mark('accept-tap', id); SOUND.click(); showFind(id); };
 }
 
 /** no species came out. The frame says why, and SCAN AGAIN stands ready. */
@@ -1385,6 +1423,7 @@ function askForDownload(info){
 }
 
 function showScanResult(res){
+  TRACE.mark('result-in', res.id || 'no-id');
   const percent = Math.round((res.p || 0) * 100);
   const raw = (res.latin || res.common || 'NO MATCH').toUpperCase();
 
@@ -1396,6 +1435,7 @@ function showScanResult(res){
   }
 
   setTarget(res.id);
+  TRACE.mark('voxel-built', res.id);
   const sp = SPECIES_BY_ID[res.id];
   const vari = STATE.targetVariant;
   $('#scanReadout').textContent = raw + ' ' + percent + ' % → ' +
@@ -1403,8 +1443,9 @@ function showScanResult(res){
     (vari ? ' — ODD COLOUR!' : ' — ' + res.levelText);
   $('#scanReadout').classList.add('hit');
   $('#scanMeterFill').style.width = '100%';
+  TRACE.mark('result-on-screen');
 
-  materialize(() => finishHit(res.id, vari));
+  materialize(() => { TRACE.mark('materialize-done'); finishHit(res.id, vari); });
 }
 
 function scanPhase(phase, fraction){
@@ -1420,6 +1461,8 @@ function scanPhase(phase, fraction){
 $('#scanRetry').addEventListener('click', () => {
   SOUND.click(); vibrate(12);
   resetScan();
+  /* the camera was shut off for the scan, so SCAN AGAIN has to bring it back */
+  resumeCamera().then(() => { $('#scanReadout').textContent = readyText(); });
 });
 
 $('#scanRandom').addEventListener('click', () => {
@@ -1437,6 +1480,7 @@ $('#scanRandom').addEventListener('click', () => {
 $('#scanGo').addEventListener('click', async () => {
   const button = $('#scanGo');
   if(button.disabled) return;
+  TRACE.mark('scan-tap');
   SOUND.scan(); vibrate(25);
   scanButtons('running');
   $('#scanBeam').classList.add('run');
@@ -1460,8 +1504,16 @@ $('#scanGo').addEventListener('click', async () => {
   if(!modelReady()){  showScanError('NO SPECIES MODEL · TRY AGAIN OR DRAW'); return; }
   if(!cameraReady()){ showScanError('NO CAMERA · TRY AGAIN OR DRAW');        return; }
 
+  /* The frame is taken here, and the camera is shut off before the models get
+     the machine. On an iPhone the live camera plus two ONNX sessions plus the
+     3D scene was over the limit, and WebKit killed the tab right after the
+     answer came up. */
+  const frame = grabFrame();
+  stopScan();
+  TRACE.mark('frame-grabbed', frame.width + 'x' + frame.height);
+
   try {
-    const res = await CLASSIFIER.classify($('#camFeed'), {
+    const res = await CLASSIFIER.classify(frame, {
       onPhase: scanPhase,
       confirmDownload: askForDownload,
       /* the collection breaks ties on genus and family: a species you are
@@ -1508,9 +1560,11 @@ function showFind(id, variant){
   const xp = Math.round((isNew ? 60 + sp.rarity*25 : 10) * mult);
   $('#revealXp').textContent = xp;
   $('#revealCard').innerHTML = cardFrame(sp, true, variant);
+  TRACE.mark('reveal-card-built');
   SCENES.reveal.setSpecies(id, 3.0, {variant});
   SCENES.reveal.baseY = -0.9;
   goTo('reveal');
+  TRACE.mark('reveal-shown');
   $('#revealOk').textContent = isNew ? 'PLANT ON THE LAWN' : 'PLACE ON THE LAWN';
   $('#revealOk').onclick = () => {
     newSpecimen(id, variant);   // duplicates are the point: two alike can be merged
@@ -1760,6 +1814,12 @@ startGeo();
 setSeasonButton();
 requestAnimationFrame(loop);
 setTimeout(() => $('#boot').classList.add('done'), 420);
+
+/* A memory kill leaves no console on a phone, so the previous run reports
+   itself here instead. The full list is in diagnostics.html. */
+if(TRACE.previous && TRACE.previous.crashed){
+  setTimeout(() => toast('LAST RUN DIED AT: ' + TRACE.previous.last.step), 1200);
+}
 
 // ---------- season ----------
 function setSeasonButton(){

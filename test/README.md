@@ -1,100 +1,121 @@
-# Tester
+# Tests
 
-Seks selvstendige testfiler. Ingen avhengigheter utenfor Node og Chrome.
+Six standalone test files. No dependencies outside Node and Chrome.
 
-## `dekk.test.js`
+## `deck.test.js`
 
-Kjører `species.js` og `cards.js` i en `vm`-kontekst og dekker kortstokken som
-plenen bygger: at nivået ligger i kort-id-en og kan leses ut igjen, at et
-nivåkort bygges ved første oppslag og blir liggende, at kosten stiger med
-nivået og stopper på toppen av kurven, at bare eksemplarer som faktisk står
-ute blir kort, at fravalg virker, og at maskinen stiller med like mange kort
-som du gjør.
+Runs `species.js` and `cards.js` in a `vm` context and covers the deck the lawn
+builds: that the level sits in the card id and can be read back out, that a
+level card is built on the first lookup and then stays, that the cost rises
+with the level and stops at the top of the curve, that only specimens actually
+placed become cards, that deselecting works, and that the machine brings as
+many cards as you do.
 
 ```sh
-node test/dekk.test.js
+node test/deck.test.js
 ```
 
 ## `store.test.js`
 
-Kjører `store.js` i en `vm`-kontekst med en påtatt `localStorage`. Dekker at en
-plen kommer tilbake slik den ble lagret, at uid-tellerne klarer alt som står på
-plenen, at ødelagt eller ukjent lagring kastes uten å røre plenen, og at
-ingenting skrives mens du står på en annen spillers plen. Dekker også dekket:
-at uid-ene kommer tilbake, at en uid som ikke finnes lenger blir luket bort,
-og at en plen lagret før dekkvelgeren får alt den eier i dekket.
+Runs `store.js` in a `vm` context with a fake `localStorage`. Covers that a
+lawn comes back the way it was saved, that the uid counters clear everything on
+the lawn, that broken or unknown saves are thrown away without touching the
+lawn, and that nothing is written while you are standing on another player's
+lawn. Also covers the deck: that the uids come back, that a uid which no longer
+exists is weeded out, and that a lawn saved before the deck editor gets
+everything it owns in the deck.
 
 ```sh
 node test/store.test.js
 ```
 
-## `protokoll.test.js`
+## `protocol.test.js`
 
-Kjører to kortspillmotorer i hver sin `vm`-kontekst og lar dem spille en hel
-kamp mot hverandre gjennom et stubbet nettlag. Verifiserer speilvending av
-brettet, at gjestens hånd holdes skjult, at handlinger og spørsmål kommer fram
-begge veier, og at begge sider ender med samme resultat. De to sidene får hver
-sin plen, så det testes også at gjestens kortstokk kommer fram til verten, og
-at verten bygger gjestens nivåkort selv ut fra kort-id-en.
+Runs two card-game engines in separate `vm` contexts and lets them play a whole
+battle against each other through a stubbed network layer. Verifies that the
+board is mirrored, that the guest's hand stays hidden, that actions and
+questions get through both ways, and that both sides end with the same result.
+The two sides get a lawn each, so it also tests that the guest's deck reaches
+the host, and that the host builds the guest's level cards itself from the card
+id.
 
 ```sh
-node test/protokoll.test.js
+node test/protocol.test.js
 ```
 
-Motorens animasjonspauser fjernes i sandkassen, så en full kamp tar sekunder.
+The animation pauses of the engine are removed in the sandbox, so a full battle
+takes seconds.
 
-## `nettleser.test.js`
+## `browser.test.js`
 
-Åpner spillet i tre faner i ekte Chrome og styrer dem over DevTools-protokollen.
-Dekker lobbyen: spillerlista, valget mellom å besøke og å utfordre, utfordring,
-merket ved navnet, godkjenning, og at begge parter havner i samme kamp med
-speilvendt tur. Dekker også besøk: at gjesten ser verten sin plen, at plenen er
-merket som gjesteplen, og at gjesten får sin egen plen tilbake når hen går ut.
-Til slutt at plenen skrives til `localStorage` og kommer tilbake etter at sida
-lastes på nytt. Sjekker også at enspillerkampen mot maskinen fortsatt virker.
+Opens the game in three tabs of a real Chrome and drives them over the DevTools
+protocol. Covers the lobby: the player list, the choice between visiting and
+challenging, the challenge itself, the mark next to the name, accepting, and
+that both parties end up in the same battle with a mirrored turn. Also covers
+visiting: that the guest sees the host's lawn, that the lawn is marked as a
+guest lawn, and that the guest gets its own lawn back on the way out. Finally
+that the lawn is written to `localStorage` and comes back after the page is
+reloaded. Also checks that the solo battle against the machine still works.
 
-Dekker dekkvelgeren i lobbyen: at en tom plen stenger kampen og sier hvorfor,
-at hver art som står ute får sin egen rute, at et kort kan tas ut og settes inn
-igjen, og at kampen spilles med plenen — ikke med planstokken.
+Covers the deck editor in the lobby: that an empty lawn closes the battle and
+says why, that every species placed gets a slot of its own, that a card can be
+taken out and put back in, and that the battle is played with the lawn — not
+with the plan deck.
 
 ```sh
-node test/nettleser.test.js
+node test/browser.test.js
 ```
 
-Bruker `?fake-nett`, altså `BroadcastChannel` mellom faner. Trenger ingen
-Supabase-konto.
+Uses `?fake-net`, that is, `BroadcastChannel` between tabs. Needs no Supabase
+account.
 
-## `skann.test.js`
+## `scan.test.js`
 
-Åpner spillet i Chrome og styrer skanneren. Dekker at skanneren aldri gjetter:
-uten modell eller kamera skriver ruta hvorfor den ikke fikk svar, den viser
-ingen prosent, og ingen art blir satt. Dekker også `SKANN PÅ NYTT`, som tar
-ruta tilbake til utgangsstillingen og kaster arten, og `GI MEG EN TILFELDIG`,
-som gir en art merket som trekning — uten prosent og uten ordet `SIKKER` —
-og som først havner i samlingen når du trykker `GODTA TREFF`.
+Opens the game in Chrome and drives the scanner. Covers that the scanner never
+guesses: without a model or a camera the frame says why it got no answer, it
+shows no percentage, and no species is set. Also covers `SCAN AGAIN`, which
+takes the frame back to its starting position and throws the species away, and
+`GIVE ME A RANDOM ONE`, which gives a species marked as a draw — with no
+percentage and without the word `CERTAIN` — and which only ends up in the
+collection once you press `ACCEPT MATCH`.
 
 ```sh
-node test/skann.test.js
+node test/scan.test.js
+```
+
+## `camera.test.js`
+
+Covers the memory rule the scanner lives by on a phone: the camera must not be
+running while the models are. An iPhone ran out of memory and WebKit killed the
+tab right after the answer came up. So `SCAN` copies one scaled-down frame,
+shuts the camera off, and puts the still in the viewfinder until `SCAN AGAIN`
+brings the camera back.
+
+Runs with Chrome's fake camera, and stubs `CLASSIFIER.classify` — a real scan
+would pull 45 MB from Hugging Face.
+
+```sh
+node test/camera.test.js
 ```
 
 ## `supabase.test.js`
 
-Samme flyt, men mot ekte Supabase. Starter to atskilte Chrome-profiler, siden
-økt og navn ligger i `localStorage`: to faner i samme nettleser ville delt
-identitet og aldri sett hverandre i lobbyen.
+The same flow, but against a real Supabase. Starts two separate Chrome
+profiles, since the session and the name live in `localStorage`: two tabs in
+the same browser would share an identity and never see each other in the lobby.
 
 ```sh
 node test/supabase.test.js
 ```
 
-Krever at `window.VILLMARK_NETT` i `index.html` har ekte nøkler, og at anonym
-innlogging er slått på i prosjektet. Mangler nøklene, hopper testen over seg
-selv i stedet for å feile. Hver kjøring lager et par anonyme brukere i
-prosjektet.
+Requires `window.VILLMARK_NET` in `index.html` to hold real keys, and anonymous
+sign-in to be switched on in the project. Without the keys the test skips
+itself instead of failing. Every run creates a couple of anonymous users in the
+project.
 
-## Felles
+## Common
 
-Alle seks skriver `Alle ... gikk gjennom` og avslutter med kode 0 når de er
-grønne. Nettlesertestene krever Google Chrome på `/Applications/Google Chrome.app`,
-starter en lokal filtjener selv, og rydder bort nettleserprosessene sine også
-når de feiler underveis.
+All six print `All ... passed` and exit with code 0 when they are green. The
+browser tests need Google Chrome at `/Applications/Google Chrome.app`, start a
+local file server themselves, and clean up their browser processes even when
+they fail halfway through.
