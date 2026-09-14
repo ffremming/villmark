@@ -75,7 +75,7 @@ def main() -> None:
     eksempel = torch.zeros(1, STORRELSE, STORRELSE, 3, dtype=torch.float32)
     felles.eksporter_onnx(NHWCInnpakning(klass.model), eksempel, fp32)
 
-    ut = felles.UT / f"{NAVN}.int8.onnx"
+    ut = felles.UT / f"{NAVN}.onnx"
     if args.kalibrering:
         leser = felles.Kalibrering(args.kalibrering, forbehandle, "bilde")
         felles.kvantiser_int8(fp32, ut, leser)

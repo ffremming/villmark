@@ -1182,6 +1182,188 @@ furu: {
   ],
 },
 
+hjort: {
+  intro:'Hjorten er Norges mest tallrike store hjortedyr og selve symbolet på vestlandsnaturen. Brølet i september bærer over hele dalen.',
+  tall:[
+    ['KROPP','skulderhøyde 1,1–1,5 m'],
+    ['VEKT','hann 120–230 kg, hunn 70–120 kg'],
+    ['LEVETID','10–15 år'],
+    ['MAT','gras, urter, lauv, skudd, innmark'],
+    ['HVOR','Vestlandet og Midt-Norge, i spredning østover'],
+    ['STATUS','livskraftig, bestanden har vokst kraftig'],
+  ],
+  avsnitt:[
+    { t:'SLIK LEVER DEN',
+      b:'Hjorten beiter mer gras og urter enn elgen og trekker mellom sommerbeite i høyden og vinterbeite nede i liene. Brunsten går i september og oktober. Da samler de største hjortene et harem av koller og brøler for å holde konkurrenter unna, og kampene kan bli harde. Kalvene kommer i juni.'},
+    { t:'KJENN DEN IGJEN',
+      b:'Gråbrun vinterpels, rødbrun sommerpels og et gulhvitt speil bak. Hannen har greinete gevir som felles hver vår. Hjorten er mellom rådyr og elg i størrelse, med lengre hals og mer gras-beitende profil enn elgen.'},
+    { t:'MENNESKE OG ART',
+      b:'Hjortejakta er den største jakta i Norge målt i antall felte dyr, med titusenvis felt hvert år. Beiteskader på innmark og eng er en betydelig konflikt på Vestlandet, og trafikkulykker øker der bestanden er tett.'},
+  ],
+  funfacts:[
+    'Brølet er lavfrekvent og bærer langt. Dypere brøl signaliserer større kropp, og hjorter vurderer hverandre på lyden før de går til kamp.',
+    'Geviret kan veie over ti kilo og bygges opp på under fire måneder.',
+    'Hjorten svømmer godt og krysser fjorder mellom beiteområder.',
+    'Kalven har hvite flekker som forsvinner utover første høsten.',
+  ],
+},
+
+piggsvin: {
+  intro:'Piggsvinet er nattens hagevandrer. Det ruller seg til en pigget ball, går i ordentlig vinterdvale, og går tilbake i antall i Norge.',
+  tall:[
+    ['KROPP','20–30 cm'],
+    ['VEKT','0,6–1,5 kg, tyngst før dvale'],
+    ['LEVETID','3–7 år'],
+    ['MAT','biller, meitemark, larver, snegler, åtsler'],
+    ['HVOR','Sør-Norge og langs kysten til Trøndelag'],
+    ['STATUS','går tilbake, rødlistet i Norge'],
+  ],
+  avsnitt:[
+    { t:'SLIK LEVER DEN',
+      b:'Piggsvinet er nattaktivt og går flere kilometer på en natt på jakt etter insekter og mark. Om høsten spiser det seg opp og går i ekte vinterdvale fra oktober til april, med kroppstemperatur ned mot noen få grader. Dvalereiret bygges av løv under en busk, i en vedstabel eller under en terrasse.'},
+    { t:'KJENN DEN IGJEN',
+      b:'Ingen forveksling er mulig. Ryggen er dekket av pigger, buken er hårete, og dyret triller seg sammen når det blir truet. Om natta høres det som kraftig rasling i løvet, langt mer bråkete enn størrelsen tilsier.'},
+    { t:'MENNESKE OG ART',
+      b:'Piggsvinet er presset av trafikk, robotklippere, nettinggjerder og hager uten løv og kratt. Det kan hjelpes med en løvhaug i et hjørne, en passasje under gjerdet og ingen klipping etter mørkets frembrudd. Melk skal ikke settes ut; piggsvin tåler ikke laktose.'},
+  ],
+  funfacts:[
+    'Et piggsvin har rundt 6 000 pigger, og de er omdannede hår.',
+    'En egen ringmuskel langs ryggen trekker piggdekket sammen som en snurpepose når dyret ruller seg.',
+    'I dvale kan hjertet gå ned fra rundt 190 til under 20 slag i minuttet.',
+    'Piggsvin som veier under 600 gram i oktober overlever sjelden vinteren.',
+  ],
+},
+
+lunde: {
+  intro:'Lunden er den mest kjente sjøfuglen i Norge, med sitt fargede nebb og oppreiste gange. Koloniene på Røst har hatt dramatisk svikt i ungeproduksjonen.',
+  tall:[
+    ['KROPP','28–30 cm'],
+    ['VINGESPENN','50–60 cm'],
+    ['VEKT','350–500 g'],
+    ['MAT','sil og tobis, småsild, krepsdyr'],
+    ['HVOR','sjøfuglkolonier fra Rogaland til Finnmark'],
+    ['STATUS','rødlistet, kraftig tilbakegang'],
+  ],
+  avsnitt:[
+    { t:'SLIK LEVER DEN',
+      b:'Lunden graver reirganger i torvjord på bratte øyskråninger, eller bruker sprekker i ur. Hvert par får én unge i året, og begge foreldrene bærer småfisk inn til gangen. Utenom hekketida lever lunden hele året ute på åpent hav, og da mister den også fargene på nebbet.'},
+    { t:'KJENN DEN IGJEN',
+      b:'Svart rygg, hvit buk, hvitt ansikt og et høyt, trekantet nebb i rødt, gult og blågrått i sommerdrakt. Den flyr med raske vingeslag lavt over sjøen og lander klossete. På land står den oppreist på oransje svømmeføtter.'},
+    { t:'MENNESKE OG ART',
+      b:'Lundekolonien på Røst var en gang blant Europas største. Svikt i tilgangen på sil og tobis har gitt år på år uten at ungene overlever, og bestanden er sterkt redusert. Årsakene henger sammen med endringer i havet og i næringskjeden, ikke med jakt.'},
+  ],
+  funfacts:[
+    'Lunden bærer et titalls småfisk på tvers i nebbet samtidig. Pigger i ganen og en bevegelig overkjeve holder fangsten på plass mens den åpner for flere.',
+    'Nebbets sterke farger er sesongpynt. Ytterlagene felles etter hekkesesongen og nebbet blir mindre og mattere.',
+    'Lunden bruker vingene til å svømme under vann og kan dykke over 40 meter.',
+    'Ungen forlater gangen alene om natta og finner veien ut til havet uten foreldrene.',
+  ],
+},
+
+krykkje: {
+  intro:'Krykkja er måken som hekker på loddrette berghyller, ofte midt i byer som Vardø og Tromsø. Den har hatt en av de kraftigste bestandsnedgangene av alle norske fugler.',
+  tall:[
+    ['KROPP','38–40 cm'],
+    ['VINGESPENN','90–105 cm'],
+    ['VEKT','350–500 g'],
+    ['MAT','småfisk og krepsdyr fra overflaten'],
+    ['HVOR','sjøfuglkolonier langs kysten, mest i nord'],
+    ['STATUS','sterkt truet'],
+  ],
+  avsnitt:[
+    { t:'SLIK LEVER DEN',
+      b:'Krykkja bygger reir av tang, gras og skitt på smale hyller i loddrette vegger, der rev og mink ikke kommer til. Den henter mat i overflaten på åpent hav og kan fly langt fra kolonien på næringssøk. Om vinteren trekker den ut i Nord-Atlanteren og kommer ikke til land før neste vår.'},
+    { t:'KJENN DEN IGJEN',
+      b:'Liten, elegant måke med rent gult nebb uten rød flekk, svarte vingespisser som ser dyppet i blekk ut, og korte, svarte bein. Ropet er et tydelig kriti-veik som har gitt fuglen navnet.'},
+    { t:'MENNESKE OG ART',
+      b:'Bestanden har falt over 80 prosent siden 1980-tallet, og hovedårsaken knyttes til mindre og dårligere tilgjengelig mat i havet. Flere kolonier har flyttet inn i byer, der bygninger erstatter berghyller, noe som gir konflikt med beboere. Kunstige krykkjehotell er prøvd ut flere steder i nord.'},
+  ],
+  funfacts:[
+    'Krykkja er den mest tallrike måkearten i verden, men går likevel kraftig tilbake.',
+    'Den henter nesten all mat fra de øverste metrene av vannet og kan ikke dykke dypt etter fisk som har trukket ned.',
+    'Ungene sitter helt stille på den smale hylla i ukevis. De har sterkere klør enn andre måkeunger.',
+    'I motsetning til de fleste måker følger ikke krykkja fiskebåter og søppelplasser i særlig grad.',
+  ],
+},
+
+sild: {
+  intro:'Silda har formet norsk historie mer enn nesten noen annen art. Stimene teller milliarder, og når de forsvant, ble hele kystsamfunn lagt ned.',
+  tall:[
+    ['LENGDE','25–40 cm'],
+    ['VEKT','100–400 g'],
+    ['LEVETID','opptil 20 år'],
+    ['MAT','raudåte og annet dyreplankton'],
+    ['HVOR','Norskehavet og kysten, gyting på Møre og i Lofoten'],
+    ['STATUS','norsk vårgytende sild er forvaltet med kvoter'],
+  ],
+  avsnitt:[
+    { t:'SLIK LEVER DEN',
+      b:'Norsk vårgytende sild beiter i Norskehavet om sommeren, overvintrer i fjorder og dyphavsområder, og gyter på bunnen langs kysten om vinteren og våren. Eggene klebes til grus og stein, og larvene driver nordover med strømmen til Barentshavet. Silda er selve mellomleddet i havets næringskjede: den spiser plankton og blir spist av torsk, sei, sjøfugl og hval.'},
+    { t:'KJENN DEN IGJEN',
+      b:'Sølvblank, slank fisk med én ryggfinne og kjølformet buk. Skjellene løsner lett. Brisling er mindre og har skarpere bukkjøl, makrell har stripete rygg og to ryggfinner.'},
+    { t:'MENNESKE OG ART',
+      b:'Sildefisket bygde byer og eksportnæringer langs hele kysten. Bestanden kollapset på slutten av 1960-tallet etter hardt fiske, og var nær utradert. Streng regulering fra 1970-tallet bygde den opp igjen, og gjenoppbyggingen regnes som en av de store suksessene i norsk fiskeriforvaltning.'},
+  ],
+  funfacts:[
+    'En sildestim kan telle milliarder av individer og snu som én kropp når en predator kommer.',
+    'Silda holder stimen samlet ved hjelp av sidelinja, som registrerer trykkbølger fra naboene.',
+    'En hunnsild gyter titusenvis av egg, og de klebes fast til bunnen i stedet for å flyte.',
+    'Silda kommuniserer også med lyd fra svømmeblæra, en slags høyfrekvent klikking.',
+  ],
+},
+
+eik: {
+  intro:'Eika er det rikeste treet vi har. En gammel eik kan huse over tusen arter, og enkelte trær er eldre enn husene rundt dem.',
+  tall:[
+    ['HØYDE','20–35 m'],
+    ['ALDER','400–1 000 år'],
+    ['VOKSESTED','varme, næringsrike lier på Sør- og Vestlandet'],
+    ['FRUKT','nøtter, altså eikenøtter, i september'],
+    ['BRUK','skipsbygging, tønner, gulv, møbler'],
+    ['STATUS','livskraftig, hule eiker er utvalgt naturtype'],
+  ],
+  avsnitt:[
+    { t:'SLIK LEVER DEN',
+      b:'Eika vokser sakte og blir enormt gammel. Med alderen får den døde greiner, hulrom og løs bark, og det er nettopp da den blir viktigst: hulrommene fylles av mold der biller, sopp og fugler lever. Eikenøttene spres av nøtteskrike og ekorn, som graver dem ned som vinterlager og glemmer en del av dem.'},
+    { t:'KJENN DEN IGJEN',
+      b:'Blad med runde fliker og svært kort stilk, nøtter på lang stilk hos sommereik. Barken er grov og dypt oppsprukket på gamle trær. Kronen er bred og kroket når treet har vokst fritt.'},
+    { t:'MENNESKE OG ART',
+      b:'Eik var strategisk råstoff i seilskutetida og ble hogd hardt til flåtebygging. I dag er hule eiker med omkrets over to meter en utvalgt naturtype med eget vern, fordi de bærer et stort antall sjeldne arter. Et enkelt gammelt tre kan derfor være mer verdifullt enn hele skogen rundt.'},
+  ],
+  funfacts:[
+    'En gammel eik kan huse over tusen arter insekter, lav og sopp, mange av dem finnes ikke andre steder.',
+    'Eika bruker 40–60 år før den setter sine første nøtter.',
+    'Eikenøtter er giftige for hester og sau i større mengder, men er viktig mat for villsvin og fugl.',
+    'Garvestoffer i eikeved gjør at tønner gir smak til whisky, vin og konjakk.',
+  ],
+},
+
+barlind: {
+  intro:'Barlinden er et bartre uten kongler og med giftige nåler. Veden ga Europas beste langbuer, og et stoff fra treet ble til kreftmedisin.',
+  tall:[
+    ['HØYDE','5–15 m, ofte flerstammet'],
+    ['ALDER','flere hundre år, europeiske trær over 1 000'],
+    ['VOKSESTED','skyggefulle, frostfrie lier langs kysten'],
+    ['FRØ','i et rødt, bløtt bærlignende frøbeger'],
+    ['GIFT','taksin i nåler, ved og frø'],
+    ['STATUS','fredet i Norge'],
+  ],
+  avsnitt:[
+    { t:'SLIK LEVER DEN',
+      b:'Barlinden er et skyggetre som vokser ekstremt sakte og tåler å stå under andre trær i hundrevis av år. Den lager ingen kongler; frøet sitter i stedet i et rødt, bløtt beger som fugler spiser og sprer. Arten er vintergrønn og krever mildt kystklima uten harde frostperioder.'},
+    { t:'KJENN DEN IGJEN',
+      b:'Mørke, flate nåler i to rader langs kvisten, uten stikk. Barken er rødbrun og flasser i flak. De røde frøbegerne i august og september gjør treet umulig å forveksle.'},
+    { t:'MENNESKE OG ART',
+      b:'Barlind og kristtorn er fredet i Norge, og trærne kan ikke hogges eller skades. Hele planten er giftig for både folk og husdyr, unntatt det røde fruktkjøttet rundt frøet; selve frøet er giftig. Fra barlindbark ble cellegiften taxol først utvunnet, og den er i dag en standardbehandling mot flere kreftformer.'},
+  ],
+  funfacts:[
+    'Engelske langbuer ble laget av barlind, fordi veden har hard kjerne og elastisk yteved som gir naturlig fjæring.',
+    'Fuglen spiser det røde begeret og slipper frøet ufordøyd. Frøet er giftig, begeret er det ikke.',
+    'Barlind kan sette nye skudd fra gammel stamme og rot, og et tre kan fornye seg selv i tusen år.',
+    'Én mundfull nåler kan være dødelig for hest og storfe.',
+  ],
+},
+
 /* ============================================================ VIDDA */
 rein: {
   intro:'Reinen er viddas flokkdyr og den eneste hjorteart der begge kjønn har gevir. Norge har de siste bestandene av villrein i Europa.',
@@ -1287,6 +1469,136 @@ rosslyng: {
   ],
 },
 
+moskus: {
+  intro:'Moskusen er et istidsdyr som fortsatt går på Dovrefjell. Flokken stiller seg i ring med hornene ut når den blir truet, et forsvar som virket mot ulv i tusenvis av år.',
+  tall:[
+    ['KROPP','skulderhøyde 1,2–1,5 m'],
+    ['VEKT','okse 250–400 kg, ku 180–250 kg'],
+    ['LEVETID','12–20 år'],
+    ['MAT','gras, starr, lyng, vier'],
+    ['HVOR','Dovrefjell, utsatt bestand'],
+    ['STATUS','innført bestand på rundt 200 dyr'],
+  ],
+  avsnitt:[
+    { t:'SLIK LEVER DEN',
+      b:'Moskusen er bygget for kulde og går ute på vidda hele vinteren. Den beiter på vindblåste rabber der snøen er tynn, og sparer energi ved å bevege seg lite. Kalvene fødes i april og mai, midt i vinterens siste uker, og holder varmen tett inntil kua. Okser kjemper om kuene i august ved å løpe mot hverandre og smelle pannene sammen.'},
+    { t:'KJENN DEN IGJEN',
+      b:'Massiv, mørk kropp med lang pels som henger nesten ned til bakken, og brede horn som møtes i en hjelm over pannen. Selv om den ser ut som en okse, er moskusen nærmere i slekt med sau og geit.'},
+    { t:'MENNESKE OG ART',
+      b:'Moskus ble satt ut på Dovre fra Grønland i 1930- og 1940-årene og har siden holdt seg der. Dyra virker rolige, men er raske og farlige når de føler seg trengt. Anbefalt avstand er minst 200 meter, og flere personer er skadet av moskus som ble presset av fotografer.'},
+  ],
+  funfacts:[
+    'Underullen heter qiviut og er varmere enn sau per gram. Den felles i store flak om våren og kan samles i terrenget.',
+    'Moskusen er nærmere i slekt med geit og sau enn med okser, tross navnet.',
+    'Dovreflokken stammer fra noen få dyr hentet fra Øst-Grønland.',
+    'En moskus kan sprinte i over 50 km/t, langt raskere enn et menneske.',
+  ],
+},
+
+heilo: {
+  intro:'Heiloen er viddas fløyte. Den trillende tonen over lyngen er lyden av norsk høyfjell om sommeren.',
+  tall:[
+    ['KROPP','26–29 cm'],
+    ['VINGESPENN','65–75 cm'],
+    ['VEKT','150–220 g'],
+    ['MAT','insekter, meitemark, larver, bær'],
+    ['HVOR','høyfjell og myr i hele landet'],
+    ['STATUS','livskraftig'],
+  ],
+  avsnitt:[
+    { t:'SLIK LEVER DEN',
+      b:'Heiloen hekker på åpen fjellhei og myr, i en enkel grop i bakken med fire spettede egg. Ungene finner maten selv fra første dag. Om høsten trekker arten sørover til Vest-Europa og Nord-Afrika, ofte i store flokker sammen med vipe. Om våren kommer den tidlig tilbake, gjerne før snøen har sluppet fjellet helt.'},
+    { t:'KJENN DEN IGJEN',
+      b:'Gullspettet rygg, svart ansikt og buk i sommerdrakt, avgrenset av en hvit stripe langs siden. Om vinteren er den langt lysere under. Lokketonen er en klar, litt vemodig fløyte på to toner.'},
+    { t:'MENNESKE OG ART',
+      b:'Heiloen tåler ferdsel dårlig i hekketida og forlater reiret ved forstyrrelse. Arten er knyttet til åpen fjellhei, og gjengroing i lavere strøk presser den oppover. Den er samtidig en av de mest tallrike vadefuglene i norsk fjell.'},
+  ],
+  funfacts:[
+    'Heiloen halter med utslått vinge og later som den er skadet for å lokke rovdyr bort fra reiret.',
+    'Fuglen er en av de raskeste flyverne blant vadefugler og kan holde over 80 km/t på trekk.',
+    'Ungene er dunkledde og løper fra reiret få timer etter klekking.',
+    'Heilo og vipe flokker seg sammen på jorder om høsten før trekket sørover.',
+  ],
+},
+
+krekling: {
+  intro:'Kreklingen dekker vidda i svarte, tette matter. Den bruker kjemi mot naboplantene, og bæret er mat for både fugl og folk.',
+  tall:[
+    ['HØYDE','10–30 cm, krypende'],
+    ['BLOMSTRING','april–juni, små og uanselige'],
+    ['BÆR','svarte, saftige, modne fra august'],
+    ['VOKSESTED','fjellhei, furumo, kystlynghei'],
+    ['BRUK','saft, syltetøy, blandet med andre bær'],
+    ['STATUS','livskraftig og svært vanlig'],
+  ],
+  avsnitt:[
+    { t:'SLIK LEVER DEN',
+      b:'Krekling er en vintergrønn dvergbusk som brer seg i matter over store arealer. Den skiller ut stoffer som hemmer spiring hos andre planter, og kan derfor dominere vidda nesten alene i flere tiår. Mattene brytes opp av brann, som gir andre arter en sjanse igjen. Bladene er smale og rullet sammen for å spare vann i vind og kulde.'},
+    { t:'KJENN DEN IGJEN',
+      b:'Tette, mørke matter av korte, nålaktige blad langs krypende stengler, og svarte, blanke bær rett på stengelen. Bæret smaker vannaktig og mildt, uten den syrligheten blåbær og tyttebær har.'},
+    { t:'MENNESKE OG ART',
+      b:'Krekling er en viktig vinterkost for rype og en del av det tradisjonelle bærgrunnlaget i nord, ofte blandet med andre bær for smakens skyld. Der kreklingmattene dominerer, blir rekrutteringen av bjørk og annen vegetasjon dårligere, og det påvirker hele beitegrunnlaget i fjellet.'},
+  ],
+  funfacts:[
+    'Kreklingen driver kjemisk krigføring: stoffer fra bladene hemmer spiring og soppsamarbeid hos konkurrentene.',
+    'En sammenhengende kreklingmatte kan være over hundre år gammel.',
+    'Bæret inneholder mye fargestoff og brukes til å gi farge til saft av andre bær.',
+    'Krekling finnes både på Svalbard og i Sør-Norge, og også på den sørlige halvkule.',
+  ],
+},
+
+skrubbaer: {
+  intro:'Skrubbæret lurer øyet. Det som ser ut som fire hvite kronblad er egentlig blad, og den ekte blomsten er den lille svarte klasen i midten.',
+  tall:[
+    ['HØYDE','10–25 cm'],
+    ['BLOMSTRING','juni–juli'],
+    ['BÆR','røde, modne i august'],
+    ['VOKSESTED','fjellhei, fuktig lyngmark, kystnær hei'],
+    ['FAMILIE','kornellfamilien'],
+    ['STATUS','livskraftig'],
+  ],
+  avsnitt:[
+    { t:'SLIK LEVER DEN',
+      b:'Skrubbæret er en liten flerårig plante som sprer seg med utløpere under mosen. Den svarte klasen i midten er en samling ekte blomster, og de fire hvite flikene rundt er høyblad som gjør det hele synlig for insekter. Planten trives i fuktig, kjølig lyngmark og finnes både i fjellet og ned mot kysten i nord.'},
+    { t:'KJENN DEN IGJEN',
+      b:'Fire brede blad i kors på stengelen og den karakteristiske hvite firkanten med svart midte. Etter blomstringen kommer små, klare røde bær i klase.'},
+    { t:'MENNESKE OG ART',
+      b:'Bærene er spiselige, men melne og nesten uten smak, og har vært brukt som drøye i grøt og i blandinger. Planten er i slekt med kornelltrærne som dyrkes i hager. Den tåler tråkk dårlig og forsvinner raskt fra stinære partier.'},
+  ],
+  funfacts:[
+    'Blomsten åpner seg eksplosivt: når et insekt berører den, spretter pollenbærerne opp og kaster pollen på besøkeren.',
+    'De hvite kronbladene er egentlig høyblad, altså omdannede blad.',
+    'Planten kalles også hønsebær i deler av landet.',
+    'Skrubbær finnes både i Skandinavia og i Nord-Amerika og Øst-Asia.',
+  ],
+},
+
+dvergbjork: {
+  intro:'Dvergbjørka er et helt tre i miniatyr. Den holder seg under snødekket om vinteren og slipper unna frostbrann og vind.',
+  tall:[
+    ['HØYDE','20–80 cm, sjelden over en meter'],
+    ['BLAD','runde, 5–15 mm, med butt tannet kant'],
+    ['VOKSESTED','myr, fjellhei, tundra'],
+    ['UTBREDELSE','fjellet i hele landet, nordlige strøk'],
+    ['BRUK','beite for rein og rype'],
+    ['STATUS','livskraftig, i spredning med varmere klima'],
+  ],
+  avsnitt:[
+    { t:'SLIK LEVER DEN',
+      b:'Dvergbjørka vokser lavt og tett, akkurat lavt nok til å være dekket av snø hele vinteren. Snøen isolerer mot de verste temperaturene og mot uttørking i vind, som er den virkelige trusselen i fjellet. Den tåler surt og vått, og er derfor vanlig både på myr og på tørre rabber der snøen legger seg.'},
+    { t:'KJENN DEN IGJEN',
+      b:'Små, nesten runde blad med butte tenner langs kanten, på stive, forgreinede, brune kvister. Om høsten farges mattene knallrøde og oransje og setter farge på hele vidda.'},
+    { t:'MENNESKE OG ART',
+      b:'Dvergbjørk er viktig vinterbeite for rype, som lever av knopper og skudd. Med varmere klima brer dvergbjørk og vier seg oppover og utover i fjellet, en prosess som kalles forbusking av tundraen, og som endrer beitene for både rein og fugl.'},
+  ],
+  funfacts:[
+    'Dvergbjørka er i slekt med vanlig bjørk og lager de samme raklene, bare i miniformat.',
+    'Den kan bli flere tiår gammel selv om den bare er knehøy.',
+    'Røde dvergbjørkmatter er en stor del av høstfargene på vidda.',
+    'Arten finnes helt til Svalbard, der den kryper langs bakken i noen få centimeters høyde.',
+  ],
+},
+
 /* ============================================================ FJORDEN */
 oter: {
   intro:'Oteren er et mårdyr som har flyttet inn i sjøen. Den fisker i fjæra, hviler på land, og trenger ferskvann å skylle pelsen i for å holde varmen.',
@@ -1389,6 +1701,188 @@ tare: {
     'Stortarens fot kan holde igjen i bølger som slår med flere tonn kraft.',
     'Alginat fra tare gjør at iskrem ikke blir kornete og at sårbandasjer holder fukt.',
     'Tare vokser raskere enn nesten alle landplanter, og binder store mengder CO2 mens den gjør det.',
+  ],
+},
+
+havert: {
+  intro:'Haverten er den største selen som yngler i Norge. Hannen kan bli tre meter lang, og ungene fødes hvite på land om høsten.',
+  tall:[
+    ['LENGDE','hunn 1,8–2 m, hann 2,3–3 m'],
+    ['VEKT','hunn 150–200 kg, hann 250–350 kg'],
+    ['LEVETID','25–35 år'],
+    ['MAT','sei, torsk, steinbit, flatfisk'],
+    ['HVOR','kolonier fra Rogaland til Finnmark, tettest i Froan og Lofoten'],
+    ['STATUS','forvaltet med kvoter'],
+  ],
+  avsnitt:[
+    { t:'SLIK LEVER DEN',
+      b:'Haverten samles i kolonier på skjær og holmer om høsten for å føde. Ungene har hvit ullpels de første ukene og kan ikke svømme; de ligger på land og dier en melk med svært høyt fettinnhold, og vokser flere kilo i døgnet. Etter at mora forlater dem, skifter de pels og går på sjøen selv. Voksne haverter dykker dypt og jakter fisk nær bunnen.'},
+    { t:'KJENN DEN IGJEN',
+      b:'Langt, rett hodeprofil uten tydelig panne, og nesebor som står parallelt. Steinkobben er mindre, har rundt hode med kort snute og V-formede nesebor. Hannen har kraftig, rynket hals.'},
+    { t:'MENNESKE OG ART',
+      b:'Havert konkurrerer med fiskeriene og er hovedvert for kveisparasitten som finnes i torskefisk. Derfor er det kvotejakt. Kolonier er sårbare for forstyrrelse i yngletida om høsten, når ungene ligger forsvarsløse på land.'},
+  ],
+  funfacts:[
+    'Havertungen tar på seg over to kilo i døgnet på melk som inneholder rundt 50 prosent fett.',
+    'Hannene kjemper om plassene i kolonien og har arr og fortykket hud på halsen etter bitt.',
+    'Haverten kan dykke over 200 meter og bli nede i 20 minutter.',
+    'Norge har to selarter som yngler langs fastlandskysten: havert og steinkobbe.',
+  ],
+},
+
+nise: {
+  intro:'Nisa er verdens minste tannhval og den vanligste hvalen i norske farvann. Den finner fisk med klikkelyder langt over det vi kan høre.',
+  tall:[
+    ['LENGDE','1,4–1,9 m'],
+    ['VEKT','50–70 kg'],
+    ['LEVETID','10–20 år'],
+    ['MAT','sild, sil, torskefisk, brisling'],
+    ['HVOR','hele kysten, ofte inne i fjorder og nær land'],
+    ['STATUS','livskraftig, men bifangst i garn er et problem'],
+  ],
+  avsnitt:[
+    { t:'SLIK LEVER DEN',
+      b:'Nisa lever i små grupper på to til fire dyr og holder seg gjerne på grunt vann nær kysten. Den har en høy stoffskiftefart og må spise nesten kontinuerlig, rundt 10 prosent av kroppsvekten daglig. Ungen fødes om sommeren og følger mora i omtrent et år. Nisa hopper sjelden og er lett å overse: du ser en liten trekantfinne rulle over overflaten og så er den borte.'},
+    { t:'KJENN DEN IGJEN',
+      b:'Liten, mørk hval med rund snute uten nebb og en lav, trekantet ryggfinne. Delfiner har tydelig nebb og høy, buet finne. Nisa viser aldri halen når den dykker.'},
+    { t:'MENNESKE OG ART',
+      b:'Den største trusselen er bifangst: nisa vikler seg inn i bunngarn og drukner. Flere tusen dyr regnes å gå tapt hvert år i norske farvann. Akustiske pingere på garn og endrede fiskemetoder er de mest aktuelle tiltakene.'},
+  ],
+  funfacts:[
+    'Nisa lager klikkelyder over 100 kHz, langt over menneskets hørselsgrense, og bruker ekkoet til å se med lyd.',
+    'De høyfrekvente lydene er trolig en måte å unngå spekkhoggere på, som ikke hører så høyt.',
+    'Nisa må puste flere ganger i minuttet og kan ikke sove som oss. Halve hjernen hviler om gangen.',
+    'Den svømmer ofte langt inn i fjorder og opp i elvemunninger etter fisk.',
+  ],
+},
+
+laks: {
+  intro:'Laksen vokser seg stor i havet og finner tilbake til sin egen elv for å gyte. Villaksen er både nasjonalsymbol og forvaltningskonflikt.',
+  tall:[
+    ['LENGDE','50–120 cm'],
+    ['VEKT','1–20 kg, storlaks over 10 kg'],
+    ['LEVETID','4–8 år'],
+    ['MAT','krepsdyr og fisk i havet, insekter som ungfisk'],
+    ['HVOR','over 400 norske lakseelver, beiteområder i Nord-Atlanteren'],
+    ['STATUS','mange bestander er svekket eller truet'],
+  ],
+  avsnitt:[
+    { t:'SLIK LEVER DEN',
+      b:'Laksen klekkes i elva og lever der i to til fem år som ungfisk. Så forvandler den seg til smolt, blir sølvblank og vandrer ut i havet, helt til områdene ved Færøyene og Grønland. Etter ett til tre år i havet vender den tilbake til den samme elva den kom fra, og gyter på grus om høsten. Mange dør etter gyting, men noen overlever og gyter flere ganger.'},
+    { t:'KJENN DEN IGJEN',
+      b:'Slank, sølvblank fisk med V-formet hale, smal halerot og svarte flekker mest over sidelinja. Sjøørreten er mer kvadratisk i halen, tykkere i haleroten og har flekker også under sidelinja. I gytedrakt blir hannlaksen mørk med krok på underkjeven.'},
+    { t:'MENNESKE OG ART',
+      b:'Villaksen er presset av lakselus og rømt oppdrettslaks som gyter i elvene og blander seg genetisk med villfisken, i tillegg til parasitten Gyrodactylus salaris, vannkraft og forsuring. Norge har en stor andel av verdens gjenværende atlantiske villaks, og elvefisket er strengt regulert med kvoter og fangstrapportering.'},
+  ],
+  funfacts:[
+    'Laksen finner tilbake til hjemmeelva på lukt, og feiler svært sjelden.',
+    'Den kan hoppe flere meter opp i fossestryk for å komme videre oppover elva.',
+    'I havet vokser laksen mange ganger raskere enn den gjorde i elva, fordi maten er helt annerledes.',
+    'Ungfisken i elva har tydelige mørke merker langs siden og ser ikke ut som laks i det hele tatt.',
+  ],
+},
+
+sei: {
+  intro:'Seien er torskefisken som går i stim og jakter i overflaten. Den står under kaikanter langs hele kysten og er den første fisken mange fanger.',
+  tall:[
+    ['LENGDE','40–100 cm, opptil 130 cm'],
+    ['VEKT','1–10 kg, storsei mer'],
+    ['LEVETID','opptil 20 år'],
+    ['MAT','sild, sil, krill, småfisk'],
+    ['HVOR','hele kysten og Norskehavet'],
+    ['STATUS','forvaltet med kvoter, bestandene er i god forfatning'],
+  ],
+  avsnitt:[
+    { t:'SLIK LEVER DEN',
+      b:'Seien vokser opp i tareskog og på grunt vann nær land, der småseien står i stim. Etter hvert trekker den dypere og lenger ut. Voksen sei jakter aktivt i stim og driver sildestimer opp mot overflaten, ofte sammen med sjøfugl som utnytter det samme byttet. Gytingen skjer på vinteren langs Mørekysten og i Lofoten.'},
+    { t:'KJENN DEN IGJEN',
+      b:'Mørk rygg, sølvgrå sider, rett og lys sidelinje og underbitt, altså underkjeven stikker fram. Torsken har overbitt, buet lys sidelinje og skjeggtråd. Lyren har større øyne og kraftig buet sidelinje.'},
+    { t:'MENNESKE OG ART',
+      b:'Sei er en av de viktigste kommersielle artene i Norge og selges både fersk, saltet og som fiskekaker og farse. For fritidsfiskere er småsei ofte den første fangsten på en pilk fra brygga. Fisket reguleres med kvoter og redskapsbegrensninger.'},
+  ],
+  funfacts:[
+    'Seien går i store stimer under kaikanten og jager sild opp i overflata, ofte med måker rett over.',
+    'Ung sei kalles pale eller mort i mange deler av landet.',
+    'Seien svømmer raskere enn torsken og jakter aktivt i vannmassene i stedet for langs bunnen.',
+    'Store seistimer kan ses fra land som mørke flekker som beveger seg under overflaten.',
+  ],
+},
+
+sukkertare: {
+  intro:'Sukkertaren er den myke, krusete taren i fjæra. Den har forsvunnet fra store deler av Sørlandet, og er samtidig i ferd med å bli en dyrket ressurs.',
+  tall:[
+    ['LENGDE','1–3 m'],
+    ['ALDER','2–4 år'],
+    ['VOKSESTED','skjermet hardbunn ned til 20–30 m'],
+    ['BLAD','udelt, krusete, uten fliker'],
+    ['BRUK','mat, fôr, gjødsel, biodrivstoff'],
+    ['STATUS','sterkt redusert på Sør- og Vestlandet'],
+  ],
+  avsnitt:[
+    { t:'SLIK LEVER DEN',
+      b:'Sukkertaren fester seg med en liten rotlignende fot og vokser i skjermede områder der bølgene ikke slår for hardt. Den vokser raskest på vinteren og våren når vannet er kaldt og næringsrikt. Varmt sommervann, nedslamming og begroing er tre ting den tåler dårlig, og alle tre har økt langs sørlandskysten.'},
+    { t:'KJENN DEN IGJEN',
+      b:'Ett langt, udelt blad med krusete kanter og en kort stilk. Stortaren er stivere, har en høy, ru stilk og et blad som er delt i brede fliker.'},
+    { t:'MENNESKE OG ART',
+      b:'Store sukkertareskoger langs Skagerrak er erstattet av trådalger og slam, og tapet er anslått til opp mot 80 prosent i deler av området. Samtidig dyrkes sukkertare kommersielt på tau langs kysten, til mat, fôr og industri, fordi den vokser raskt uten gjødsel eller ferskvann.'},
+  ],
+  funfacts:[
+    'Det hvite belegget på tørket sukkertare er mannitol, et sukkeralkohol. Det er derfor den heter sukkertare.',
+    'Sukkertare kan vokse flere centimeter i døgnet i gode perioder.',
+    'Den dyrkes på tau i sjøen og krever verken gjødsel, ferskvann eller landareal.',
+    'I Japan er nær slektninger av sukkertare grunnlaget for dashi, den klassiske kraften.',
+  ],
+},
+
+grisetang: {
+  intro:'Grisetangen er den lange, seige tangen i fjæra med luftblærer på rekke. Hver blære er ett år, så du kan lese alderen rett av planten.',
+  tall:[
+    ['LENGDE','0,5–2 m'],
+    ['ALDER','10–15 år, enkelte eldre'],
+    ['VOKSESTED','skjermet fjære, mellom flo og fjære'],
+    ['BLÆRER','én ny per år langs hovedgreina'],
+    ['BRUK','tangmel, gjødsel, fôrtilsetning'],
+    ['STATUS','livskraftig'],
+  ],
+  avsnitt:[
+    { t:'SLIK LEVER DEN',
+      b:'Grisetang lever i tidevannssonen og ligger tørt hver gang det er fjære. Den tåler både uttørking, frost og saltsvingninger, og er derfor helt dominerende i skjermede fjærer. Luftblærene løfter tangen opp mot lyset når vannet stiger. Under tangmattene finnes et helt dyresamfunn av snegler, tanglus, krabber og yngel som bruker den som skjul.'},
+    { t:'KJENN DEN IGJEN',
+      b:'Lange, flate, olivenbrune remser uten midtribbe, med enkeltstående luftblærer med jevne mellomrom. Blæretang har blærer i par og tydelig midtribbe i remsa.'},
+    { t:'MENNESKE OG ART',
+      b:'Grisetang høstes langs kysten og tørkes til tangmel, som brukes i dyrefôr og gjødsel. Høsting må skje med omtanke, for planten vokser sakte og bruker mange år på å bygge seg opp igjen. Tangbeltet er samtidig et av de mest artsrike miljøene i fjæra.'},
+  ],
+  funfacts:[
+    'Grisetang setter én luftblære i året. Teller du blærene langs hovedgreina, teller du år.',
+    'Planter med over femti blærer er vanlige, altså tang som er eldre enn mange av dem som plukker den.',
+    'Tangen kan miste over halvparten av vanninnholdet ved fjære og likevel komme seg helt når vannet kommer tilbake.',
+    'Under tangmattene er temperaturen mye stabilere enn utenfor, og der overlever småkryp både frost og sol.',
+  ],
+},
+
+alegras: {
+  intro:'Ålegras er ikke tang, men en blomsterplante som har flyttet ut i havet. Engene den danner er barnehage for torskeyngel og et stort karbonlager.',
+  tall:[
+    ['LENGDE','30–100 cm'],
+    ['BLOMSTRING','sommer, under vann'],
+    ['VOKSESTED','bløtbunn på 1–10 m dyp i skjermede bukter'],
+    ['SPREDNING','jordstengler og frø'],
+    ['ROLLE','oppvekstområde for fiskeyngel'],
+    ['STATUS','engene er en truet naturtype flere steder'],
+  ],
+  avsnitt:[
+    { t:'SLIK LEVER DEN',
+      b:'Ålegras har røtter, stengler, blomster og frø, akkurat som landplanter, men hele livsløpet foregår under vann. Pollenet er langt og trådformet og driver med strømmen fra blomst til blomst. Plantene binder sammen bløtbunnen med jordstengler, demper bølger og hindrer erosjon, og danner tette enger der yngel kan gjemme seg.'},
+    { t:'KJENN DEN IGJEN',
+      b:'Lange, smale, gressgrønne blad som bøyer seg med strømmen, festet i sand eller mudder. I motsetning til tang står ålegras i bløt bunn og ikke på stein, og bladene er tydelig grønne, ikke brune.'},
+    { t:'MENNESKE OG ART',
+      b:'Ålegrasenger er blant de mest verdifulle grunne naturtypene vi har, og de er presset av mudring, utfylling, brygger, ankring og nedslamming. Tapet rammer torskeyngel og annen fisk direkte. Restaurering av enger prøves ut flere steder langs kysten.'},
+  ],
+  funfacts:[
+    'Ålegras lagrer karbon i bunnsedimentet langt raskere per kvadratmeter enn en skog på land gjør i jorda.',
+    'Pollenet er trådformet og flyter med strømmen, en av få planter i verden som pollineres under vann.',
+    'Tørket ålegras ble brukt som isolasjon i vegger og som madrassfyll, og holder seg i over hundre år.',
+    'En ålegraseng kan bestå av kloner som har levd i flere hundre år.',
   ],
 },
 

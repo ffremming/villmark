@@ -44,15 +44,32 @@ const REGLER = {
 
 /* ---------------------------------------------------------- avledede tall
    Stats kommer fra artsdataene i species.js, slik at kortet og dyret
-   alltid forteller det samme. */
-function kortKraft(sp){
-  const rad = sp.angrep*100 + sp.hp*20;
-  return Math.max(1000, Math.min(10000, Math.round(rad/1000)*1000));
-}
-function kortKost(sp){
-  const k = Math.round(kortKraft(sp)/1000) - 1 + (sp.sjelden >= 5 ? 1 : 0);
-  return Math.max(1, Math.min(10, k));
-}
+   alltid forteller det samme.
+
+   Kosten er rangbasert, ikke absolutt. Rastyrken til artene ligger tett
+   (1160 til 6080), saa en direkte omregning stappet fire av fem arter i
+   kost 1 og 2: SOL-stokken vokste til 10 mens ingenting kostet mer enn
+   seks. Na sorteres artene etter rastyrke og fordeles over kurven, slik
+   at bassenget har dyre kort a bruke SOL paa ut spillet. Rekkefolgen er
+   den samme som for, saa bjornen er fortsatt dyrest og hvitveisen
+   billigst. */
+const KOSTKURVE  = [[0.19,1], [0.38,2], [0.55,3], [0.70,4], [0.83,5], [0.93,6], [1.00,7]];
+const KRAFTKURVE = { 1:2000, 2:3000, 3:4000, 4:5000, 5:6000, 6:7000, 7:9000 };
+
+const KOSTRANG = (() => {
+  const sortert = SPECIES.slice()
+    .sort((a,b) => (a.angrep*100 + a.hp*20) - (b.angrep*100 + b.hp*20)
+                || a.id.localeCompare(b.id));
+  const m = {};
+  sortert.forEach((sp, i) => {
+    const andel = (i + 1) / sortert.length;
+    m[sp.id] = KOSTKURVE.find(([grense]) => andel <= grense)[1];
+  });
+  return m;
+})();
+
+function kortKost(sp){ return KOSTRANG[sp.id]; }
+function kortKraft(sp){ return KRAFTKURVE[kortKost(sp)]; }
 function kortMottrekk(sp){
   if(sp.forsvar >= 22) return 2000;
   if(sp.forsvar >= 11) return 1000;
@@ -98,15 +115,19 @@ function effHeltekst(e){
 }
 
 /* ---------------------------------------------------------- ART-kortene
-   Nokkelord og effekt per art. Kost, kraft og mottrekk er avledet. */
+   Nokkelord og effekt per art. Kost, kraft og mottrekk er avledet.
+   maks-tallene folger kostkurven: 'ko' rekker om lag kost minus tre,
+   'hvil' om lag kost minus en. Med 13 arter paa kost 1 og 72 totalt
+   dekker maks 2 en tredel av bassenget og maks 4 to tredeler, saa
+   fjerning treffer noe men ikke alt. */
 const ARTSKORT = {
   /* GRANSKOGEN */
-  rev:       { nokler:[],              eff:E('ved_spill','hvil',{maks:4}),      utloser:E('utloser','kraft',{verdi:2000}) },
+  rev:       { nokler:['SPRANG'],      eff:E('ved_spill','hvil',{maks:4}),      utloser:E('utloser','kraft',{verdi:2000}) },
   ekorn:     { nokler:['SPRANG'],      eff:E('ved_spill','sol',{verdi:1}),      utloser:E('utloser','trekk',{verdi:1}) },
   bjorn:     { nokler:['DOBBELTHOGG'], eff:E('ved_spill','ko',{maks:4}) },
   ulv:       { nokler:['DOBBELTHOGG'], eff:E('nar_angrep','selvkraft',{verdi:1000}) },
   gran:      { nokler:['VERN'],        eff:E('aktiver','kraft',{verdi:1000}) },
-  fluesopp:  { nokler:[],              eff:E('ved_spill','hvil',{maks:5}),      utloser:E('utloser','hvil',{maks:5}) },
+  fluesopp:  { nokler:[],              eff:E('ved_spill','hvil',{maks:3}),      utloser:E('utloser','hvil',{maks:3}) },
   kantarell: { nokler:[],              eff:E('ved_spill','trekk',{verdi:1}),    utloser:E('utloser','trekk',{verdi:1}) },
   /* FJELLET */
   hare:      { nokler:['SPRANG'],      eff:null,                                utloser:E('utloser','trekk',{verdi:1}) },
@@ -119,11 +140,11 @@ const ARTSKORT = {
   molte:     { nokler:[],              eff:E('ved_spill','sol',{verdi:1}),      utloser:E('utloser','sol',{verdi:1}) },
   bjork:     { nokler:['VERN'],        eff:null,                                utloser:E('utloser','kraft',{verdi:2000}) },
   /* KYSTEN */
-  hubro:     { nokler:['FORTAER'],     eff:E('ved_spill','hvil',{maks:4}) },
+  hubro:     { nokler:['FORTAER'],     eff:E('ved_spill','hvil',{maks:5}) },
   havorn:    { nokler:['SPRANG'],      eff:E('nar_angrep','selvkraft',{verdi:1000}) },
   furu:      { nokler:['VERN'],        eff:E('aktiver','kraft',{verdi:1000}) },
   /* VIDDA */
-  rein:      { nokler:[],              eff:E('ved_spill','kraft',{verdi:2000}) },
+  rein:      { nokler:['VERN'],        eff:E('ved_spill','kraft',{verdi:2000}) },
   rype:      { nokler:['SPRANG'],      eff:E('ved_spill','trekk',{verdi:1}),    utloser:E('utloser','trekk',{verdi:1}) },
   fjellrev:  { nokler:['SPRANG'],      eff:E('ved_spill','sol',{verdi:1}),      utloser:E('utloser','sol',{verdi:1}) },
   rosslyng:  { nokler:['VERN'],        eff:null,                                utloser:E('utloser','kraft',{verdi:2000}) },
@@ -134,30 +155,49 @@ const ARTSKORT = {
   tare:      { nokler:['VERN'],        eff:null,                                utloser:E('utloser','kraft',{verdi:2000}) },
 };
 
+/* Artene uten egen rad over sto for femti av de syttito ART-kortene, alle
+   uten tekst og dermed utbyttbare. De far na ett nokkelord fra sine egne
+   tall, saa et kort skiller seg fra et annet paa mer enn kraft. Ett hvert,
+   for at bassenget ikke skal renne over av VERN og DOBBELTHOGG. */
+function avledeNokler(sp){
+  if(sp.kind === 'dyr'){
+    if(sp.angrep  >= 28) return ['DOBBELTHOGG'];
+    if(sp.fart    >= 30) return ['SPRANG'];
+    if(sp.forsvar >= 22) return ['VERN'];
+    return [];
+  }
+  return sp.forsvar >= 14 ? ['VERN'] : [];
+}
+
 /* ---------------------------------------------------------- HENDELSE-kortene
    Hvert kort er avledet av artens forste trekk i species.js.
-   Dyretrekk blir MOTTREKK-hendelser. Plantetrekk blir HOVED-hendelser. */
+   Dyretrekk blir MOTTREKK-hendelser. Plantetrekk blir HOVED-hendelser.
+
+   Kosten til plantehendelsene sto for i angrepsstyrken til trekket, og
+   alle ti havnet paa 2. Na staar prisen ved siden av virkningen, slik at
+   en fjerning koster mer enn en oppladning. */
 const PLANTEHENDELSE = {
-  gran:      E('hoved','hvil',{maks:5}),
-  fluesopp:  E('hoved','ko',{maks:3}),
-  kantarell: E('hoved','trekk',{verdi:2}),
-  blaveis:   E('hoved','kraft',{verdi:3000}),
-  tyttebaer: E('hoved','trekk',{verdi:2}),
-  molte:     E('hoved','sol',{verdi:1}),
-  bjork:     E('hoved','hvil',{maks:4}),
-  furu:      E('hoved','ko',{maks:2}),
-  rosslyng:  E('hoved','kraft',{verdi:4000}),
-  tare:      E('hoved','hvil',{maks:6}),
+  gran:      { kost:3, eff:E('hoved','hvil',{maks:4}) },
+  fluesopp:  { kost:4, eff:E('hoved','ko',{maks:3}) },
+  kantarell: { kost:2, eff:E('hoved','trekk',{verdi:2}) },
+  blaveis:   { kost:1, eff:E('hoved','kraft',{verdi:3000}) },
+  tyttebaer: { kost:2, eff:E('hoved','trekk',{verdi:2}) },
+  molte:     { kost:1, eff:E('hoved','sol',{verdi:1}) },
+  bjork:     { kost:2, eff:E('hoved','hvil',{maks:3}) },
+  furu:      { kost:3, eff:E('hoved','ko',{maks:2}) },
+  rosslyng:  { kost:2, eff:E('hoved','kraft',{verdi:4000}) },
+  tare:      { kost:3, eff:E('hoved','hvil',{maks:4}) },
 };
 
-/* ---------------------------------------------------------- BIOTOP-kortene */
+/* ---------------------------------------------------------- BIOTOP-kortene
+   BIOTOPen virker hver tur den staar, saa fjerningen her er holdt lavt. */
 const BIOTOPKORT = {
-  granskogen:{ navn:'SKOGHOLTET', kost:2, eff:E('aktiver','kraft',{verdi:2000}) },
-  fjellet:   { navn:'STEINURA',   kost:2, eff:E('aktiver','hvil',{maks:3}) },
+  granskogen:{ navn:'SKOGHOLTET', kost:3, eff:E('aktiver','kraft',{verdi:2000}) },
+  fjellet:   { navn:'STEINURA',   kost:2, eff:E('aktiver','hvil',{maks:2}) },
   myra:      { navn:'TORVMYRA',   kost:1, eff:E('aktiver','kraft',{verdi:1000}) },
   kysten:    { navn:'BERGVEGGEN', kost:2, eff:E('aktiver','hvil',{maks:2}) },
   vidda:     { navn:'LYNGHEIA',   kost:1, eff:E('aktiver','kraft',{verdi:1000}) },
-  fjorden:   { navn:'TARESKOGEN', kost:2, eff:E('aktiver','kraft',{verdi:2000}) },
+  fjorden:   { navn:'TARESKOGEN', kost:3, eff:E('aktiver','kraft',{verdi:2000}) },
 };
 
 /* ---------------------------------------------------------- LEDER-kortene

@@ -20,6 +20,7 @@ const LOBBY = 'villmark-lobby';
 const HJERTESLAG = 2000;   // lokal transport: hvor ofte vi roper at vi lever
 const GLEMSEL    = 6000;   // lokal transport: naar en stille spiller regnes som borte
 const SVARFRIST  = 30000;  // hvor lenge en utfordring staar aapen
+const FIELD_DEADLINE = 8000;   // how long we wait for another player's lawn
 
 /* ============================================================ tilstand */
 const N = {
@@ -31,10 +32,11 @@ const N = {
   kampId:null,
   rolle:null,                // 'vert' | 'gjest'
   motpart:null,              // id til den vi spiller mot
-  lyttere:{ spillere:[], utfordring:[], melding:[], borte:[], status:[] },
+  lyttere:{ spillere:[], utfordring:[], melding:[], borte:[], status:[], fieldRequest:[] },
   tilkoblet:false,           // kanalen staar
   sporet:false,              // serveren har registrert oss, saa andre ser oss
   utestaaende:null,          // utfordringen vi selv har sendt
+  pendingField:null,         // the lawn we asked for ourselves
   sb:null,
 };
 
@@ -90,6 +92,21 @@ function lobbyMelding(m){
     clearTimeout(u.frist);
     N.utestaaende = null;
     u.res(m.godtatt ? { godtatt:true, kampId:u.kampId } : { godtatt:false });
+    return;
+  }
+
+  /* A visit is one question and one answer: the guest asks, the owner
+     replies with a snapshot of the lawn. Nothing is stored anywhere. */
+  if(m.t === 'field-ask'){
+    rop('fieldRequest', m.fra);
+    return;
+  }
+  if(m.t === 'field-reply'){
+    const p = N.pendingField;
+    if(!p || p.fra !== m.fra) return;
+    clearTimeout(p.frist);
+    N.pendingField = null;
+    p.res({ navn:m.navn, felt:m.felt });
   }
 }
 
@@ -370,6 +387,37 @@ function svarUtfordring(fraId, kampId, godtatt){
   T.kringkast({ t:'utfordring-svar', fra:N.meg.id, til:fraId, kampId, godtatt });
 }
 
+/* ------------------------------------------------ visiting a lawn */
+/** Ask a player for their lawn. Resolves with {navn, felt}, or null if the
+    answer never came. Only one question stands at a time. */
+function askField(tilId){
+  cancelField();
+  return new Promise(res => {
+    const frist = setTimeout(() => {
+      if(N.pendingField && N.pendingField.fra === tilId){
+        N.pendingField = null;
+        res(null);
+      }
+    }, FIELD_DEADLINE);
+    N.pendingField = { fra:tilId, res, frist };
+    T.kringkast({ t:'field-ask', fra:N.meg.id, til:tilId });
+  });
+}
+
+/** Answer someone who asked for our lawn. */
+function sendField(tilId, felt){
+  T.kringkast({ t:'field-reply', fra:N.meg.id, til:tilId, navn:N.meg.navn, felt });
+}
+
+/** Stop waiting - the answer is dropped if it turns up later. */
+function cancelField(){
+  const p = N.pendingField;
+  if(!p) return;
+  clearTimeout(p.frist);
+  N.pendingField = null;
+  p.res(null);
+}
+
 function paa(navn, f){
   N.lyttere[navn].push(f);
   return () => {
@@ -389,6 +437,7 @@ return {
   lobbyInn: () => T.lobbyInn(),
   lobbyUt:  () => T.lobbyUt(),
   utfordre, avbrytUtfordring, svarUtfordring,
+  askField, sendField, cancelField,
   kampInn, kampUt, send, paa,
 };
 })();

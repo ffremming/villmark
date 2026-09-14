@@ -2,10 +2,16 @@
 
     python tools/test_parity.py --modell speciesnet --bilder bilder/
 
-Krav for godkjent: samme topp-1 paa hvert bilde, og maks 1e-3 avvik mellom
-sannsynlighetene. Kvantisering flytter alltid litt paa tallene, saa for int8
-loser vi kravet til topp-1 pluss maks 0.05 avvik - da fanger vi ekte
-eksportfeil uten aa felle modellen for normal kvantiseringsstoy.
+Krav for godkjent: samme topp-1 paa hvert bilde, og et avvik i sannsynlighet
+som holder seg innenfor det presisjonen tilsier.
+
+Grensene er satt etter hva tallformatene faktisk kan:
+  fp32  1e-4   ren eksport, bare grafoptimalisering skiller
+  fp16  1e-2   fp16 har rundt tre siffer, saa 0.003 paa en p=0.45 er normalt
+  int8  5e-2   kvantisering flytter mer, men topp-1 skal staa
+
+Feil topp-1 er alltid en feil, uansett presisjon. Det er den som avslorer
+gale layout, mean/std eller labelrekkefolge.
 """
 
 from __future__ import annotations
@@ -21,6 +27,11 @@ import onnxruntime as ort
 import felles
 
 BILDETYPER = {".jpg", ".jpeg", ".png", ".webp"}
+
+
+def navn_av(label) -> str:
+    """iNat21-labels er objekter, SpeciesNet-labels er strenger."""
+    return label["name"] if isinstance(label, dict) else str(label)
 
 
 def last_torch(modellnavn: str):
@@ -67,13 +78,13 @@ def main() -> None:
     ap.add_argument("--antall", type=int, default=20)
     args = ap.parse_args()
 
-    onnx_sti = felles.UT / f"{args.modell}.int8.onnx"
+    onnx_sti = felles.UT / f"{args.modell}.onnx"
     meta_sti = felles.UT / f"{args.modell}.meta.json"
     if not onnx_sti.exists():
         raise SystemExit(f"fant ikke {onnx_sti} - kjor eksportskriptet forst")
     meta = json.loads(meta_sti.read_text(encoding="utf-8"))
     labels = json.loads((felles.UT / f"{args.modell}.labels.json").read_text(encoding="utf-8"))
-    grense = 0.05 if meta["presisjon"] == "int8" else 1e-3
+    grense = {"fp32": 1e-4, "fp16": 1e-2, "int8": 5e-2}.get(meta["presisjon"], 1e-2)
 
     net, forbehandle = last_torch(args.modell)
     net.eval()
@@ -93,16 +104,23 @@ def main() -> None:
 
         t_topp = felles.topp5(torch_logits, labels)
         o_topp = felles.topp5(onnx_logits, labels)
-        samme = str(t_topp[0][0]) == str(o_topp[0][0])
+        t_navn = navn_av(t_topp[0][0])
+        o_navn = navn_av(o_topp[0][0])
+        samme = t_navn == o_navn
         avvik = abs(t_topp[0][1] - o_topp[0][1])
 
-        if not samme or avvik > grense:
+        if not samme:
             feil += 1
-            print(f"AVVIK {sti.name}: torch={t_topp[0]}  onnx={o_topp[0]}")
+            print(f"FEIL  {sti.name}: torch sa {t_navn}, onnx sa {o_navn}")
+        elif avvik > grense:
+            feil += 1
+            print(f"AVVIK {sti.name}: {t_navn}  p {t_topp[0][1]:.4f} mot {o_topp[0][1]:.4f}"
+                  f"  (avvik {avvik:.4f} > {grense})")
         else:
-            print(f"ok    {sti.name}: {t_topp[0][0]}  ({t_topp[0][1]:.3f}, avvik {avvik:.4f})")
+            print(f"ok    {sti.name}: {t_navn}  ({t_topp[0][1]:.3f}, avvik {avvik:.4f})")
 
-    print(f"\n{len(filer) - feil}/{len(filer)} bilder innenfor grensen {grense}")
+    print(f"\n{len(filer) - feil}/{len(filer)} bilder innenfor grensen "
+          f"{grense} for {meta['presisjon']}")
     sys.exit(1 if feil else 0)
 
 

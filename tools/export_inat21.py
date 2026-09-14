@@ -157,7 +157,7 @@ def main() -> None:
     fp32 = felles.UT / f"{NAVN}.fp32.onnx"
     felles.eksporter_onnx(net, torch.zeros(1, 3, h, w, dtype=torch.float32), fp32)
 
-    ut = felles.UT / f"{NAVN}.int8.onnx"
+    ut = felles.UT / f"{NAVN}.onnx"
     if args.kalibrering:
         felles.kvantiser_int8(fp32, ut, felles.Kalibrering(args.kalibrering, forbehandle, "bilde"))
         presisjon = "int8"

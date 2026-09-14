@@ -107,7 +107,7 @@ def main() -> None:
         print(f"provebilder i {mappe}")
         last_ned(mappe)
 
-    onnx_sti = felles.UT / f"{args.modell}.int8.onnx"
+    onnx_sti = felles.UT / f"{args.modell}.onnx"
     if not onnx_sti.exists():
         raise SystemExit(f"fant ikke {onnx_sti} - kjor eksportskriptet forst")
     meta = json.loads((felles.UT / f"{args.modell}.meta.json").read_text(encoding="utf-8"))

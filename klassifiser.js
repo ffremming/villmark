@@ -7,7 +7,9 @@
      - proxy = true, slik at inferensen ligger i en worker og 3D-scenen
        fortsetter aa animere mens telefonen regner
 
-   Modellene ligger ikke i repoet. Sett MODELL_BASE til HF-repoet ditt. */
+   Modellene ligger ikke i repoet. Sett MODELL_BASE til HF-repoet ditt.
+   Filene som maa ligge der, per modell:
+     <navn>.onnx  <navn>.meta.json  <navn>.labels.json */
 
 const KLASSIFISER = (() => {
 'use strict';
@@ -16,8 +18,7 @@ const ORT_VERSJON = '1.29.0';
 const ORT_BASE    = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@' + ORT_VERSJON + '/dist/';
 const CACHE_NAVN  = 'villmark-modeller-v1';
 
-/* Byttes ut med ditt eget HF-repo naar eksportskriptene har kjort.
-   Filene som maa ligge der: <navn>.int8.onnx, <navn>.meta.json, <navn>.labels.json */
+/* Byttes ut med ditt eget HF-repo naar eksportskriptene har kjort. */
 let MODELL_BASE = 'https://huggingface.co/DITT-BRUKERNAVN/villmark-modeller/resolve/main/';
 
 const MODELLER = {
@@ -31,6 +32,7 @@ const TERSKEL_DYR = 0.45;
 
 const sesjoner = new Map();   // navn -> {session, meta, labels}
 const laster   = new Map();   // navn -> Promise, hindrer dobbel nedlasting
+const mangler  = new Set();   // modeller som ikke finnes, huskes ut okten
 let ortLastet = null;
 
 /* Telefoner med lite minne holder bare en modell i live om gangen. */
@@ -117,10 +119,19 @@ async function lastModell(navn, opt){
   const spec = MODELLER[navn];
   if(!spec) throw new ModellUtilgjengeligFeil('ukjent modell: ' + navn);
 
+  /* Har filene manglet en gang, mangler de resten av okten ogsaa. Uten dette
+     banker hvert eneste skann paa tre 404-er som aldri kommer til aa svare. */
+  if(mangler.has(navn)) throw new ModellUtilgjengeligFeil(navn + ' finnes ikke paa ' + MODELL_BASE);
+
   /* Modellen lastes aldri uten at spilleren har sagt ja. Telefoner paa
-     mobildata skal ikke tape 55 MB fordi noen trykket SKANN. */
+     mobildata skal ikke tape 55 MB fordi noen trykket SKANN.
+     Storrelsen hentes med HEAD, saa dialogen viser den faktiske fila og ikke
+     et anslag - fp16 og int8 er dobbelt saa store som hverandre. */
   const iCache = await erCachet(navn);
-  if(!iCache && !opt.godkjent) throw new NedlastingKrevesFeil({ ...spec });
+  if(!iCache && !opt.godkjent){
+    const mb = await filStorrelseMb(navn);
+    throw new NedlastingKrevesFeil({ ...spec, mb: mb || spec.mb });
+  }
 
   const jobb = (async () => {
     const ort  = await lastOrt();
@@ -129,7 +140,7 @@ async function lastModell(navn, opt){
       hentJson(base + '.meta.json'),
       hentJson(base + '.labels.json'),
     ]);
-    const buf = await hentMedFremdrift(base + '.int8.onnx', opt.onFremdrift);
+    const buf = await hentMedFremdrift(base + '.onnx', opt.onFremdrift);
 
     if(SMALT_MINNE) frigjorAndre(navn);
 
@@ -148,14 +159,27 @@ async function lastModell(navn, opt){
   })();
 
   laster.set(navn, jobb);
-  jobb.catch(() => laster.delete(navn));
+  jobb.catch(e => {
+    laster.delete(navn);
+    if(e && e.navn === 'ModellUtilgjengelig') mangler.add(navn);
+  });
   return jobb;
+}
+
+/* HEAD mot modellfila. Null hvis den ikke svarer - da brukes anslaget. */
+async function filStorrelseMb(navn){
+  try {
+    const svar = await fetch(MODELL_BASE + navn + '.onnx', { method:'HEAD' });
+    if(!svar.ok) return 0;
+    const n = Number(svar.headers.get('content-length'));
+    return n ? Math.round(n / 1e6) : 0;
+  } catch(_){ return 0; }
 }
 
 async function erCachet(navn){
   try {
     const cache = await caches.open(CACHE_NAVN);
-    return !!(await cache.match(MODELL_BASE + navn + '.int8.onnx'));
+    return !!(await cache.match(MODELL_BASE + navn + '.onnx'));
   } catch(_){ return false; }
 }
 
@@ -244,52 +268,64 @@ async function klassifiser(kilde, opt){
   opt = opt || {};
   const ort = await lastOrt();
 
+  /* Returnerer modellen, eller null naar den ikke finnes eller spilleren sa
+     nei. Null er viktig: har du bare lastet opp den ene modellen, skal den
+     andre hoppes over i stillhet i stedet for aa rive med seg hele skannet. */
   const hent = async (navn) => {
+    const fremdrift = { onFremdrift: a => opt.onFase && opt.onFase('laster', a) };
     try {
-      return await lastModell(navn, {
-        onFremdrift: a => opt.onFase && opt.onFase('laster', a),
-      });
+      return await lastModell(navn, fremdrift);
     } catch(e){
+      if(e.navn === 'ModellUtilgjengelig'){
+        console.warn('KLASSIFISER: hopper over', navn, '-', e.message);
+        return null;
+      }
       if(e.navn !== 'NedlastingKreves') throw e;
       const ja = opt.bekreftNedlasting ? await opt.bekreftNedlasting(e.info) : false;
-      if(!ja) throw e;
-      return lastModell(navn, {
-        godkjent: true,
-        onFremdrift: a => opt.onFase && opt.onFase('laster', a),
-      });
+      if(!ja) return null;
+      try {
+        return await lastModell(navn, { godkjent: true, ...fremdrift });
+      } catch(e2){
+        if(e2.navn === 'ModellUtilgjengelig'){
+          console.warn('KLASSIFISER: hopper over', navn, '-', e2.message);
+          return null;
+        }
+        throw e2;
+      }
     }
   };
 
   const mapopt = { funnet: opt.funnet };
 
-  /* 1. Dyremodellen forst. Den treffer 12 av de 16 dyrene eksakt. */
+  /* 1. Dyremodellen forst. Den treffer 12 av de 16 viltkamera-artene eksakt. */
+  let dyreSvar = null;
   const dyr = await hent('speciesnet');
-  opt.onFase && opt.onFase('regner', 0);
-  const dyrePred = await kjor(dyr, kilde, ort);
-  const dyreSvar = ARTSMAPPING.beste(dyrePred, 'speciesnet', mapopt);
-  opt.onFase && opt.onFase('regner', 0.5);
+  if(dyr){
+    opt.onFase && opt.onFase('regner', 0);
+    dyreSvar = ARTSMAPPING.beste(await kjor(dyr, kilde, ort), 'speciesnet', mapopt);
+    opt.onFase && opt.onFase('regner', 0.5);
 
-  /* Bare et eksakt artstreff avslutter her. Paa slekts- eller familieniva
-     kjorer vi plantemodellen ogsaa: den kjenner Haliaeetus albicilla og
-     Phoca vitulina eksakt, som SpeciesNet bare naar paa slekt og familie. */
-  if(dyreSvar.id && dyreSvar.niva === 0 && dyreSvar.p >= TERSKEL_DYR){
-    opt.onFase && opt.onFase('regner', 1);
-    return dyreSvar;
+    /* Bare et eksakt artstreff avslutter her. Paa slekts- eller familieniva
+       kjorer vi plantemodellen ogsaa: den kjenner Haliaeetus albicilla og
+       Phoca vitulina eksakt, som SpeciesNet bare naar paa slekt og familie. */
+    if(dyreSvar.id && dyreSvar.niva === 0 && dyreSvar.p >= TERSKEL_DYR){
+      opt.onFase && opt.onFase('regner', 1);
+      return dyreSvar;
+    }
   }
 
-  /* 2. Ellers plantemodellen, som ogsaa dekker sopp. */
+  /* 2. Plantemodellen, som ogsaa dekker sopp og det meste av fisk. */
   let planteSvar = null;
-  try {
-    const plante = await hent('inat21');
-    const pred = await kjor(plante, kilde, ort);
-    planteSvar = ARTSMAPPING.beste(pred, 'inat21', mapopt);
-  } catch(e){
-    if(e.navn !== 'NedlastingKreves') throw e;
-    /* Spilleren sa nei til plantemodellen. Da faar dyresvaret staa. */
-  }
+  const plante = await hent('inat21');
+  if(plante) planteSvar = ARTSMAPPING.beste(await kjor(plante, kilde, ort), 'inat21', mapopt);
   opt.onFase && opt.onFase('regner', 1);
 
+  /* Ingen modell kom gjennom. Da skal app.js falle til simulert skann. */
+  if(!dyreSvar && !planteSvar){
+    throw new ModellUtilgjengeligFeil('ingen av modellene kunne lastes');
+  }
   if(!planteSvar) return dyreSvar;
+  if(!dyreSvar)   return planteSvar;
   if(!dyreSvar.id) return planteSvar;
   if(!planteSvar.id) return dyreSvar;
   if(planteSvar.niva !== dyreSvar.niva) return planteSvar.niva < dyreSvar.niva ? planteSvar : dyreSvar;
@@ -308,12 +344,14 @@ async function status(){
     base: MODELL_BASE,
     speciesnet: await erCachet('speciesnet'),
     inat21: await erCachet('inat21'),
+    mangler: [...mangler],
   };
 }
 
 async function tomCache(){
   try { await caches.delete(CACHE_NAVN); } catch(_){}
   frigjorAndre(null);
+  mangler.clear();
 }
 
 return {

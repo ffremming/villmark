@@ -107,7 +107,7 @@ def skriv_meta(navn: str, meta: dict, labels: list) -> None:
 
 def kopier_som(kilde: pathlib.Path, navn: str) -> pathlib.Path:
     """Gir modellen navnet klassifiser.js forventer: <navn>.int8.onnx."""
-    maal = UT / f"{navn}.int8.onnx"
+    maal = UT / f"{navn}.onnx"
     if kilde.resolve() != maal.resolve():
         shutil.copy2(kilde, maal)
     return maal

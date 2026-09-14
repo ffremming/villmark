@@ -7,3 +7,6 @@ modeller/
 .venv/
 __pycache__/
 tools/provebilder/
+
+# birder cacher vektene her naar tools kjores fra repo-rota
+models/

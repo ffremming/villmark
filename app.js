@@ -71,6 +71,15 @@ const STATE = {
   sesong: sesongFraDato(),
 };
 
+/* The lawn from last time, straight off this phone. Nothing is fetched from
+   the network: what you built is yours and stays here. */
+STORE.load(STATE);
+const saveLawn = () => STORE.save(STATE);
+addEventListener('pagehide', () => STORE.flush(STATE));
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState === 'hidden') STORE.flush(STATE);
+});
+
 /** trekk variant ved skanning - de fleste funn er vanlige */
 function trekkVariant(){
   let r = Math.random();
@@ -497,7 +506,81 @@ function byggFelt(){
   }
   PLASS.synk();
   visVriPanel();
+  saveLawn();
 }
+
+// ------------------------------------------------ VISITING ANOTHER LAWN
+/* The lawn is drawn straight from STATE, so a visit parks our own lawn,
+   drops the guest lawn into the same fields and builds as usual. Going
+   back puts everything where it was.
+
+   Two rules keep the visit harmless: STORE holds every write while a guest
+   lawn sits in STATE, and the lawn is read-only - you pan, zoom and open
+   cards, but nothing can be moved, turned, bought or merged. */
+const VISIT = (() => {
+  let parked = null;      // our own lawn while someone else's is on screen
+  let host   = '';        // whose lawn we are standing on
+
+  const FIELDS = ['funnet','varianter','pynt','eksemplarer','sesong','sistLagt'];
+
+  /** what we hand to a player who asks to see our lawn */
+  function snapshot(){
+    return {
+      sesong:      STATE.sesong,
+      funnet:      [...STATE.funnet],
+      varianter:   STATE.varianter,
+      /* things still waiting to be placed are nobody else's business */
+      pynt:        STATE.pynt.filter(p => p.x !== null && p.z !== null),
+      eksemplarer: STATE.eksemplarer.filter(e => e.x !== null && e.z !== null),
+    };
+  }
+
+  function park(){
+    const p = {};
+    for(const k of FIELDS) p[k] = STATE[k];
+    return p;
+  }
+
+  /** step onto someone else's lawn */
+  function enter(navn, d){
+    if(!d) return false;
+    if(!parked) parked = park();
+    STORE.hold(true);
+    host = navn || 'EN SPILLER';
+
+    STATE.funnet      = new Set(Array.isArray(d.funnet) ? d.funnet : []);
+    STATE.varianter   = (d.varianter && typeof d.varianter === 'object') ? d.varianter : {};
+    STATE.pynt        = Array.isArray(d.pynt) ? d.pynt.slice() : [];
+    STATE.eksemplarer = Array.isArray(d.eksemplarer) ? d.eksemplarer.slice() : [];
+    STATE.sesong      = SESONGER.includes(d.sesong) ? d.sesong : STATE.sesong;
+    STATE.sistLagt    = null;
+
+    velgPynt(null);
+    $('#feltBesokNavn').textContent = 'PLENEN TIL ' + host;
+    $('#feltBesok').hidden = false;
+    document.body.classList.add('visiting');
+    FELT.tilPunkt(0, 0);
+    gaTil('field');
+    settSesongKnapp();
+    return true;
+  }
+
+  /** back to our own lawn */
+  function leave(){
+    if(!parked) return;
+    for(const k of FIELDS) STATE[k] = parked[k];
+    parked = null; host = '';
+    STORE.hold(false);
+    document.body.classList.remove('visiting');
+    $('#feltBesok').hidden = true;
+    velgPynt(null);
+    FELT.tilPunkt(0, 0);
+    byggFelt();
+    settSesongKnapp();
+  }
+
+  return { enter, leave, snapshot, active: () => !!parked, get host(){ return host; } };
+})();
 
 // ------------------------------------------------ SKANN (3D over kamera)
 const SKANN = (() => {
@@ -574,8 +657,12 @@ SCENES.collection = null;   // ren HTML
 // ============================================================ ruting
 let aktiv = 'splash';
 let forSkann = 'field';   // fanen skanneren ble aapnet fra, saa krysset gaar tilbake dit
+/* A visit lives on the lawn and on the species card it opens. Leaving for
+   any other screen ends the visit, so the tabs need no special handling. */
+const VISIT_SCREENS = ['field','detail'];
 function gaTil(navn){
   if(navn === 'scan' && aktiv !== 'scan' && aktiv !== 'splash') forSkann = aktiv;
+  if(VISIT.active() && !VISIT_SCREENS.includes(navn)) VISIT.leave();
   /* Gaar vi ut av dysten mens en nettkamp loper, maa motparten faa beskjed. */
   if(aktiv === 'battle' && navn !== 'battle') KORTSPILL.forlat();
   const forrige = SCENES[aktiv];
@@ -646,6 +733,7 @@ function loop(now){
     }
     const px = e.clientX, py = e.clientY;
     stoppHold();
+    if(VISIT.active()) return;  // guest lawn: only look, drag and zoom
     if(PLASS.aktiv()){          // ny ting ventes satt ut: fingeren styrer den
       PLASS.pek(px, py);
       return;
@@ -751,6 +839,7 @@ function plukkArt(px, py){
     visDetalj(o.art, o.ex);
     return;
   }
+  if(VISIT.active()) return;      // nothing on a guest lawn can be turned
   velgPynt(pyntUnder(px, py));   // trykk paa hageting = vri den, trykk paa graset = velg bort
 }
 
@@ -774,6 +863,7 @@ function velgPynt(o){
 function visVriPanel(){
   const panel = $('#feltVri');
   if(!panel) return;
+  if(VISIT.active()){ panel.hidden = true; return; }
   /* dammen er rund - den har ingenting aa vri */
   const id = PLASS.aktiv() ? PLASS.varenId() : valgtPynt ? valgtPynt.p.id : null;
   const navn = id && id !== 'dam'
@@ -887,7 +977,7 @@ function slippFlytting(){
 
   const makker = finnMakker(o);
   if(makker) visNivaDialog(o, makker);
-  else { LYD.steg(); dirr(28); }
+  else { LYD.steg(); dirr(28); saveLawn(); }
 }
 
 // ---------- plassering for haand ----------
@@ -1266,8 +1356,9 @@ $('#scanGo').addEventListener('click', async () => {
     });
     visSkannResultat(svar);
   } catch(err){
-    if(err.navn === 'NedlastingKreves'){
-      /* Spilleren sa nei. Spillet skal fortsatt kunne spilles. */
+    /* Modeller som mangler hoppes over inne i klassifiser.js. Kommer vi hit,
+       kom ingen av dem gjennom, eller spilleren sa nei til begge. */
+    if(err.navn === 'ModellUtilgjengelig' || err.navn === 'NedlastingKreves'){
       toast('SKANNER UTEN MODELL');
     } else {
       console.warn('skann feilet:', err);
@@ -1367,7 +1458,10 @@ const lagMini = (() => {
 
 // ============================================================ bro til battle.js
 /* Kortspillet ligger i sin egen fil og trenger noen faa ting herfra. */
-window.VM = { STATE, LYD, dirr, toast, lagMini, oppdaterHud, gaTil, visningsNavn };
+window.VM = { STATE, LYD, dirr, toast, lagMini, oppdaterHud, gaTil, visningsNavn,
+  fieldSnapshot: () => VISIT.snapshot(),
+  visitField: (navn, felt) => VISIT.enter(navn, felt),
+};
 
 
 /** "Nv 2 x3" under miniatyren */
@@ -1481,6 +1575,7 @@ function startDyst(){ if(!KORTSPILL.KS.nett) KORTSPILL.start(); }
 function oppdaterHud(){
   $$('.hud-mynt').forEach(el => el.textContent = STATE.mynt);
   $$('.hud-niva').forEach(el => el.textContent = STATE.niva);
+  saveLawn();
 }
 let toastId;
 function toast(txt){

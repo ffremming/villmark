@@ -13,3 +13,6 @@ speciesnet>=5.0
 
 # plantemodellen
 birder>=0.7
+
+# nettlesertesten, valgfri - drar med seg en Chromium
+# playwright>=1.40

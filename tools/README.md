@@ -59,9 +59,14 @@ python tools/export_inat21.py     --kalibrering bilder/
 Ut i `modeller/`:
 
 ```
-speciesnet.int8.onnx    speciesnet.meta.json    speciesnet.labels.json
-inat21.int8.onnx        inat21.meta.json        inat21.labels.json
+speciesnet.onnx    speciesnet.meta.json    speciesnet.labels.json
+inat21.onnx        inat21.meta.json        inat21.labels.json
 ```
+
+Presisjonen står i `meta.json`, ikke i filnavnet — samme fil heter det samme
+enten den er int8 eller fp16, så `klassifiser.js` slipper å gjette.
+`<navn>.fp32.onnx` er en mellomfil som bare trengs av `test_parity.py`; den
+kan slettes etterpå.
 
 `meta.json` bærer inndataform, layout og normalisering, slik at
 `klassifiser.js` slipper å gjette. SpeciesNet er **NHWC** i `[0,1]` uten
@@ -79,10 +84,13 @@ node tools/test_artsmapping.js
 node tools/dekning.js
 python tools/test_ende_til_ende.py --modell inat21 --last-ned --ut /tmp/pred.json
 node tools/mapping_av_predikasjoner.js /tmp/pred.json
+python tools/test_nettleser.py
 ```
 
 `test_parity.py` kjører PyTorch og ONNX på de samme bildene og krever samme
-topp-1. For int8 tillates 0,05 avvik i sannsynlighet, for fp16 1e-3.
+topp-1. Toleransen følger presisjonen: fp32 1e-4, fp16 1e-2, int8 5e-2. Feil
+topp-1 er alltid en feil. Målt for `inat21` fp16: **10/10**, største avvik
+0,0027 — ren fp16-avrunding.
 
 `test_artsmapping.js` dekker mappingen fra modellabel til art i biblioteket
 (30 tester). `dekning.js` er beskrevet over.
@@ -94,6 +102,26 @@ layout, mean/std og labelrekkefølge før de dukker opp på telefonen. Med
 `--last-ned` henter den ett bilde per art fra Wikipedias REST-API.
 `mapping_av_predikasjoner.js` tar topp-5-lista videre gjennom den ekte
 `artsmapping.js` og sier hvilken art spillet ville gitt deg.
+
+`test_nettleser.py` er den eneste testen som prøver det koden faktisk gjør på
+en telefon: laster onnxruntime-web fra CDN, kjører modellen i en worker med
+`numThreads = 1`, tegner bildet i en canvas og leser pikslene ut igjen. Den
+serverer repoet på `127.0.0.1` — en secure context, så Cache API oppfører seg
+som på GitHub Pages — og kaller den ekte `KLASSIFISER.klassifiser()`. Til slutt
+klikker den seg gjennom SKANN uten kamera og krever at spillet lander på
+funn-skjermen, altså at fallbacken står.
+
+Krever playwright, som ikke er med i `requirements.txt` fordi den drar med seg
+en Chromium på et par hundre MB:
+
+```bash
+pip install playwright && playwright install chromium
+python tools/test_nettleser.py
+```
+
+Målt i headless Chromium på en M-serie Mac, wasm på én tråd: **10/10 riktig**,
+første skann 2,8 s inkludert modellasting, deretter 526–725 ms. En telefon er
+langsommere, regn med noen sekunder per skann.
 
 Målt resultat for `inat21` fp16, 10 bilder fra Wikipedia:
 
