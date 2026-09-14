@@ -582,6 +582,214 @@ blaveis: {
   ],
 },
 
+royskatt: {
+  intro:'Røyskatten er et lite rovdyr med enormt temperament. Den jakter smågnagere i deres egne ganger under snøen, og blir kritthvit om vinteren.',
+  tall:[
+    ['KROPP','22–32 cm, hale 6–12 cm'],
+    ['VEKT','150–400 g'],
+    ['LEVETID','3–5 år'],
+    ['MAT','mus, lemen, fuglunger, egg, insekter'],
+    ['HVOR','hele landet, fra kyst til høyfjell'],
+    ['STATUS','livskraftig, men svinger med smågnagerne'],
+  ],
+  avsnitt:[
+    { t:'SLIK LEVER DEN',
+      b:'Røyskatten er smal nok til å følge etter mus og lemen inn i gangene deres. Den må spise ofte fordi den lange, tynne kroppen mister varme raskt, og den jakter derfor både dag og natt. Bestanden følger gnagerårene: i toppår yngler den kraftig, i bunnår forsvinner den nesten fra landskapet.'},
+    { t:'KJENN DEN IGJEN',
+      b:'Lang, smal kropp, korte bein og svart halespiss hele året. Sommerdrakta er brun med hvit underside, vinterdrakta helt hvit. Snømusa er mindre og har ikke svart halespiss.'},
+    { t:'MENNESKE OG ART',
+      b:'Hvit røyskattpels heter hermelin og var statussymbol i europeiske kongekåper, kjent nettopp på de svarte halespissene. I dag jaktes arten lite. Røyskatt går gjerne inn i uthus og hytter etter mus og gjør stort sett nytte for seg.'},
+  ],
+  funfacts:[
+    'Den svarte halespissen antas å lure rovfugler: de hogger etter den svarte flekken og bommer på kroppen.',
+    'Røyskatten kan drepe bytte som er flere ganger større enn den selv, som hare og rype.',
+    'Den har forsinket fosterutvikling og bærer på befruktede egg i nesten ti måneder.',
+    'En røyskatt må spise rundt en fjerdedel av sin egen kroppsvekt hver dag.',
+  ],
+},
+
+lemen: {
+  intro:'Lemenet er fjellets mest omtalte smådyr. Hvert tredje til fjerde år eksploderer bestanden, og hele fjellets dyreliv endrer seg med den.',
+  tall:[
+    ['KROPP','10–15 cm'],
+    ['VEKT','40–110 g'],
+    ['LEVETID','1–2 år'],
+    ['MAT','moser, gras, starr, lyngskudd'],
+    ['HVOR','fjellet i hele landet, ned i fjellbjørkeskogen'],
+    ['STATUS','livskraftig, men bestanden svinger ekstremt'],
+  ],
+  avsnitt:[
+    { t:'SLIK LEVER DEN',
+      b:'Lemenet lever av mose, som nesten ingen andre pattedyr klarer å bruke, og er aktivt hele vinteren i gangsystemer mellom snø og bakke. Der yngler det også, og i gode vintre med stabil, isolerende snø kan bestanden mangedobles før snøen går. Da er fjellet plutselig fullt av lemen, og de sprer seg i alle retninger.'},
+    { t:'KJENN DEN IGJEN',
+      b:'Liten, rund gnager med kort hale og et påfallende mønster i svart, gult og brunt. Lemenet gjemmer seg ikke: det reiser seg, piper og går til angrep på støvler og hundesnuter.'},
+    { t:'MENNESKE OG ART',
+      b:'Lemenår styrer hele fjelløkologien. Fjellrev, jerv, røyskatt, fjellvåk og snøugle yngler godt når det er lemen, og nesten ikke ellers. Historien om at lemen begår selvmord i sjøen er en myte: de drukner under vandringer fordi de forsøker å krysse vann.'},
+  ],
+  funfacts:[
+    'Lemenet er en av få arter som yngler under snøen midt på vinteren.',
+    'Fargene er sannsynligvis et varselsignal, på samme måte som hos vepser.',
+    'En lemenhunn kan få flere kull i året og være drektig igjen dagen etter fødsel.',
+    'I toppår kan det være over hundre lemen per hektar i gode områder.',
+  ],
+},
+
+fossekall: {
+  intro:'Fossekallen er Norges nasjonalfugl, og den eneste spurvefuglen i verden som dykker. Den går på bunnen av iskalde elver og leter etter larver.',
+  tall:[
+    ['KROPP','17–20 cm'],
+    ['VEKT','55–75 g'],
+    ['LEVETID','3–7 år'],
+    ['MAT','vårfluelarver, døgnfluelarver, småfisk'],
+    ['HVOR','strie elver og bekker i hele landet'],
+    ['STATUS','livskraftig'],
+  ],
+  avsnitt:[
+    { t:'SLIK LEVER DEN',
+      b:'Fossekallen svømmer under vann med vingene og bruker strømmen til å presse seg ned mot bunnen, der den snur stein etter larver. Den holder seg i åpent vann hele vinteren og trekker bare så langt som isen tvinger den. Reiret er en mosekule med sideinngang, ofte plassert bak en foss eller under en bru.'},
+    { t:'KJENN DEN IGJEN',
+      b:'Kompakt, mørk brun fugl med skarpt avgrenset hvitt bryst. Den sitter på en stein midt i strykene og neier med hele kroppen. Flukten er rett og rask, lavt over vannflaten.'},
+    { t:'MENNESKE OG ART',
+      b:'Fossekallen ble kåret til nasjonalfugl i 1963. Den er følsom for forsuring og for vassdragsregulering som tørrlegger elveleier, men har hatt framgang etter at sur nedbør gikk ned. Kunstige reirkasser under bruer brukes aktivt av arten.'},
+  ],
+  funfacts:[
+    'Fossekallen har tett, oljet fjærdrakt og uvanlig mye hemoglobin i blodet, slik at den takler kaldt vann og dykk.',
+    'Den har en hudklaff som stenger neseborene når den går under.',
+    'Fossekallen kan gå på elvebunnen i strøm som ville feid en voksen person over ende.',
+    'Ungen hopper i elva og svømmer før den kan fly.',
+  ],
+},
+
+roye: {
+  intro:'Røya lever nordligere enn noen annen ferskvannsfisk i verden. Den står i fjellvann som bare er isfrie noen få uker i året.',
+  tall:[
+    ['LENGDE','20–50 cm, sjelden over 70 cm'],
+    ['VEKT','0,2–2 kg, storrøye betydelig mer'],
+    ['LEVETID','10–20 år'],
+    ['MAT','krepsdyr, insektlarver, småfisk'],
+    ['HVOR','kalde innsjøer og fjellvann, sjørøye i nord'],
+    ['STATUS','livskraftig, men mange bestander er overtette'],
+  ],
+  avsnitt:[
+    { t:'SLIK LEVER DEN',
+      b:'Røya trives i kaldt, oksygenrikt vann og står dypt om sommeren. Den gyter på grus om høsten, og i mange fjellvann blir bestanden så tett at all fisken forblir småvokst. I nord går sjørøya ut i havet om sommeren og tilbake til ferskvann for å overvintre, i motsetning til laks og sjøørret som kan bli ute lenger.'},
+    { t:'KJENN DEN IGJEN',
+      b:'Slank laksefisk med små skjell, lyse flekker på mørk bunn og hvit forkant på bryst-, buk- og gattfinnene. I gytedrakt blir buken kraftig oransje til rød. Ørreten har mørke flekker på lys bunn, altså motsatt mønster.'},
+    { t:'MENNESKE OG ART',
+      b:'Røye er en viktig matfisk i innlandet og i nord, og er samtidig et forvaltningsproblem der bestandene er overtette. Da anbefales kraftig beskatning med garn for at fisken skal vokse seg større. Røya er også følsom for oppvarming: den trenger kaldt dypvann om sommeren.'},
+  ],
+  funfacts:[
+    'Røya finnes i innsjøer helt opp på Svalbard, lenger nord enn noen annen ferskvannsfisk.',
+    'I samme vann kan det finnes to former av røye, en småvokst i strandsonen og en storvokst på dypet.',
+    'Den kan gyte på flere meters dyp på grusbunn langt fra land.',
+    'Røya tåler vann på under fire grader året rundt, temperaturer der de fleste andre fisker knapt beveger seg.',
+  ],
+},
+
+rogn: {
+  intro:'Rogna vokser der andre trær gir opp, helt opp mot tregrensa. Om høsten henger den full av røde bær som fôrer trosteflokkene på trekk.',
+  tall:[
+    ['HØYDE','5–15 m'],
+    ['ALDER','60–100 år'],
+    ['BLOMSTRING','mai–juni, hvite skjermer'],
+    ['VOKSESTED','skogkanter, lier, fjellbjørkeskog'],
+    ['BRUK','rognebærgelé, prydtre, elgbeite'],
+    ['STATUS','livskraftig'],
+  ],
+  avsnitt:[
+    { t:'SLIK LEVER DEN',
+      b:'Rogna er et lystre som kommer inn i kanter og åpninger. Bærene spises av trost, silkehale og dompap, og frøene spres med fugleskitten, gjerne langt fra moretreet. Derfor dukker rognespirer opp i berghyller og takrenner. Rogna har store bærår med flere års mellomrom, akkurat som gran og furu har konglear.'},
+    { t:'KJENN DEN IGJEN',
+      b:'Blad som er delt i mange småblad langs en midtstilk, hvite blomsterskjermer i juni og klaser av oransjerøde bær i august. Barken er glatt og grå. Asal og rogn er i slekt, men asalen har hele, udelte blad.'},
+    { t:'MENNESKE OG ART',
+      b:'Rognebær er sure og bitre rå, men blir god gelé til vilt når de plukkes etter frost. Rogn er sammen med osp og selje de tre viktigste beitetrærne for elg, forkortet ROS, og de blir ofte helt nedbeitet i elgrike områder. I folketro var rogn et vernetre mot troll og uvær.'},
+  ],
+  funfacts:[
+    'Ordtaket sier at rognebærår gir snørik vinter. Sammenhengen finnes ikke, men mange år med mye bær følger etter en varm og tørr forsommer.',
+    'Rogn vokser høyere til fjells enn nesten alle andre løvtrær utenom bjørk.',
+    'Frøet trenger å passere gjennom en fugl eller å ligge ute en vinter før det spirer godt.',
+    'Bærene inneholder parasorbinsyre, som brytes ned av frost og koking.',
+  ],
+},
+
+einer: {
+  intro:'Eineren er bartreet som har spredd seg lengst av alle. Den vokser fra kysten til høyfjellet, fra Middelhavet til Arktis, og kan bli over tusen år.',
+  tall:[
+    ['HØYDE','1–5 m, krypende former i fjellet'],
+    ['ALDER','opptil over 1 000 år'],
+    ['NÅLER','stikkende, i kranser av tre'],
+    ['KONGLEBÆR','modner på 2–3 år'],
+    ['BRUK','krydder, gin, røyking av mat, einerlåg'],
+    ['STATUS','livskraftig'],
+  ],
+  avsnitt:[
+    { t:'SLIK LEVER DEN',
+      b:'Eineren er nøysom og vokser i beitemark, på berg, i lynghei og i fjellet. Den har hann- og hunnplanter hver for seg, og bare hunnplanten setter bær. Bærene er egentlig kongler med sammenvokste skjell, og de bruker to til tre år på å modne, så du finner grønne og blå bær på samme busk.'},
+    { t:'KJENN DEN IGJEN',
+      b:'Stive, stikkende nåler i kranser av tre, med en lys stripe på oversiden. Formen varierer fra søyle til flat matte, avhengig av vind og beite. Lukten av knuste bær er søtlig og harpiksaktig.'},
+    { t:'MENNESKE OG ART',
+      b:'Einerbær gir smaken i gin og i kraft til vilt og kål. Einerlåg, altså avkok av einer, ble brukt til å vaske treredskaper og ølkar fordi den både lukter godt og hemmer bakterier. Einerrøyk brukes fortsatt til å røyke kjøtt og fisk.'},
+  ],
+  funfacts:[
+    'Eineren har det videste naturlige utbredelsesområdet av alle bartrær i verden.',
+    'Krypende einer i fjellet kan være flere hundre år gammel og likevel bare være knehøy.',
+    'Bare hunnbuskene har bær, så halvparten av einerne du ser vil aldri gi krydder.',
+    'Veden er svært tett og lukter kraftig, og ble brukt til smørformer og kar.',
+  ],
+},
+
+reinrose: {
+  intro:'Reinrosa er fjellets pionér. Den kom inn rett etter istiden, vokser på kalkrik grunn, og har gitt navn til en hel klimaperiode.',
+  tall:[
+    ['HØYDE','5–15 cm, krypende matter'],
+    ['BLOMSTRING','juni–august'],
+    ['BLOMST','åtte hvite kronblad rundt gul midte'],
+    ['VOKSESTED','kalkrik rabbe og grus i fjellet'],
+    ['SPESIELT','blomsten følger sola'],
+    ['STATUS','livskraftig'],
+  ],
+  avsnitt:[
+    { t:'SLIK LEVER DEN',
+      b:'Reinrosa danner lave, tette matter på vindutsatte rabber der snøen blåser bort. Den krever kalk i grunnen og er derfor en tydelig indikator på rik fjellnatur med mange sjeldne arter. Blomsten er formet som en liten parabol og vender seg etter sola gjennom dagen, slik at midten varmes opp og frøene modner raskere i det korte fjellsommeren.'},
+    { t:'KJENN DEN IGJEN',
+      b:'Åtte hvite kronblad, gul midte og små, rynkete blad som er mørkegrønne over og hvitfiltede under. Etter blomstringen blir frøene til en snurret, sølvskimrende dusk som sitter lenge.'},
+    { t:'MENNESKE OG ART',
+      b:'Reinrosa er brukt som symbol på norsk fjellnatur og finnes i logoer og emblemer. Den vokser sakte, og en matte kan være flere tiår gammel; tråkk i kalkrabber gir skade som tar lang tid å gro. Den har også rotknoller med bakterier som binder nitrogen fra lufta.'},
+  ],
+  funfacts:[
+    'Den kalde perioden Yngre dryas er oppkalt etter reinrosa, Dryas octopetala, fordi pollen fra planten finnes i lag fra den tiden.',
+    'Blomsten varmer opp sin egen midte flere grader over lufttemperaturen ved å følge sola.',
+    'Frøduskene skrus opp og fungerer som små propeller i vinden.',
+    'Reinrose er blant de første plantene som koloniserer grus foran breer som trekker seg tilbake.',
+  ],
+},
+
+marisko: {
+  intro:'Marisko er Norges største orkidé og en av de mest oppsiktsvekkende plantene i landet. Den lurer biller ned i en gul sko de bare slipper ut forbi pollenet.',
+  tall:[
+    ['HØYDE','25–50 cm'],
+    ['BLOMSTRING','juni'],
+    ['BLOMST','gul sko med brunrøde flikeblad'],
+    ['VOKSESTED','kalkrik, lysåpen skog og kratt'],
+    ['ALDER','kan bli flere tiår gammel'],
+    ['STATUS','fredet i Norge'],
+  ],
+  avsnitt:[
+    { t:'SLIK LEVER DEN',
+      b:'Marisko vokser på kalkgrunn i lysåpen løv- og furuskog, oftest i spredte, små forekomster. Frøene er som støv og har ingen næring med seg, så de er helt avhengige av at en bestemt sopp i jorda mater spiren. Derfor kan det gå ti år eller mer fra frø til første blomst, og en plante som blir gravd opp dør.'},
+    { t:'KJENN DEN IGJEN',
+      b:'Ingen annen norsk plante ligner. En oppblåst, gul, skoformet leppe med fire brunrøde, vridde blomsterblad rundt, på en stengel med brede, tydelig ribbede blad. Blomstringen varer bare et par uker i juni.'},
+    { t:'MENNESKE OG ART',
+      b:'Marisko er fredet, og plukking eller oppgraving er forbudt. Trusselen er gjengroing, hogst og at folk tar med planter hjem. Flere av de kjente lokalitetene holdes hemmelige nettopp av den grunn.'},
+  ],
+  funfacts:[
+    'Billen som lander i skoen finner bare én vei ut, en smal passasje der den må stryke forbi først arret og så pollenet.',
+    'Blomsten gir ingen nektar. Den lokker med duft og farge og lurer insektet helt.',
+    'Frøene er blant de minste i planteriket, nesten som støv, og spres med vinden.',
+    'En marisko-plante kan stå på samme sted og blomstre i flere tiår.',
+  ],
+},
+
 /* ============================================================ MYRA */
 elg: {
   intro:'Elgen er skogens konge og Norges største landdyr. En voksen okse veier mer enn et lite piano og likevel går den nesten lydløst i tett skog.',
@@ -684,6 +892,214 @@ bjork: {
     'Bjørkemåler kan spise skogen nesten bladløs i utbruddår i Nord-Norge. Trærne setter ofte nye blad samme sommer.',
     'Kvae og olje i never gjør at den brenner selv når den er våt. Derfor er never klassisk opptenning.',
     'Ei voksen bjørk kan slippe flere millioner frø i ett år.',
+  ],
+},
+
+bever: {
+  intro:'Beveren er det eneste dyret utenom mennesket som bygger om hele landskapet. Dammene den lager skaper våtmark der hundrevis av andre arter flytter inn.',
+  tall:[
+    ['KROPP','75–100 cm, hale 25–35 cm'],
+    ['VEKT','15–30 kg'],
+    ['LEVETID','10–20 år'],
+    ['MAT','bark, kvist, vannplanter, urter'],
+    ['HVOR','vassdrag i store deler av Sør- og Midt-Norge'],
+    ['STATUS','livskraftig'],
+  ],
+  avsnitt:[
+    { t:'SLIK LEVER DEN',
+      b:'Beveren feller løvtrær med tennene og bruker dem både til mat og til byggverk. Den demmer opp bekken for å få dypt nok vann foran hytta, slik at inngangen ligger under vann og er utilgjengelig for rev og gaupe. Om høsten legger familien et matlager av kvist under vann, som de henter fra gjennom isen hele vinteren.'},
+    { t:'KJENN DEN IGJEN',
+      b:'Stor, brun gnager med flat, skjellkledd hale og svømmehud på bakbeina. Sportegn er tydeligere enn dyret: timeglassformede stubber, avgnagd bark, flytende kvistlagre og selve dammen. Beveren smeller halen i vannet som varsel før den dykker.'},
+    { t:'MENNESKE OG ART',
+      b:'Beveren var nesten utryddet i Europa på 1800-tallet, og en av de siste bestandene overlevde i Telemark. Norske bevere er senere brukt til å bygge opp bestanden i Sverige og flere andre land. I dag er konflikten motsatt: oversvømte jorder, veier og skog krever forvaltning og lokal jakt.'},
+  ],
+  funfacts:[
+    'Fortennene er oransje av jern i emaljen, som gjør dem hardere. De vokser hele livet og slipes skarpe mot hverandre.',
+    'Beveren kan holde pusten i rundt 15 minutter.',
+    'Bevergjel, et sekret fra kjertler, ble i århundrer brukt i medisin og parfyme.',
+    'En beverdam kan holde tilbake så mye vann at den demper flomtopper nedstrøms.',
+  ],
+},
+
+smalom: {
+  intro:'Smålommen hekker på små myrtjern der det ikke finnes fisk, og flyr derfor til havet hver gang ungen skal ha mat.',
+  tall:[
+    ['KROPP','55–70 cm'],
+    ['VINGESPENN','100–120 cm'],
+    ['VEKT','1–2 kg'],
+    ['MAT','fisk, hentet i sjøen eller i større vann'],
+    ['HVOR','myrtjern og småvann, mest i Nord-Norge og fjellet'],
+    ['STATUS','livskraftig, men sårbar for forstyrrelse i hekketida'],
+  ],
+  avsnitt:[
+    { t:'SLIK LEVER DEN',
+      b:'Smålommen er den minste av lommene og den eneste som kan lette fra et lite vann. Derfor hekker den på bittesmå tjern som ikke har fisk, og flyr opptil flere mil til sjøen eller til større innsjøer for å hente mat til ungen. Reiret ligger helt i vannkanten, for fuglen kan nesten ikke gå på land.'},
+    { t:'KJENN DEN IGJEN',
+      b:'Slank vannfugl med tynt, oppadbøyd nebb og rustrød strupeflekk i sommerdrakt. Den ligger dypt i vannet og dykker uten plask. Ropet er et klagende, jodlende skrik som bærer langt over myra.'},
+    { t:'MENNESKE OG ART',
+      b:'Beina sitter helt bakerst på kroppen, perfekt for svømming og elendig for gange. Fuglen forlater derfor reiret ved minste forstyrrelse, og eggene blir raskt tatt av måke eller kråke. Hold god avstand til lomtjern i juni og juli.'},
+  ],
+  funfacts:[
+    'Smålommen er den eneste lommen som klarer å lette rett opp fra et lite tjern. De andre trenger lang rullebane på vann.',
+    'Den kan fly flere mil hver vei for én fisk til ungen.',
+    'Ungene ligger på ryggen til foreldrene de første dagene.',
+    'Om vinteren står smålommen i sjøen langs kysten i grå og hvit vinterdrakt uten den røde strupen.',
+  ],
+},
+
+orret: {
+  intro:'Ørreten finnes i nesten alle vassdrag i Norge, fra små fjellbekker til fjorden. Bekkeørret, innsjøørret og sjøørret er én og samme art.',
+  tall:[
+    ['LENGDE','15–60 cm, storørret betydelig mer'],
+    ['VEKT','0,1–2 kg vanlig, over 10 kg i storørretvann'],
+    ['LEVETID','5–15 år'],
+    ['MAT','insekter, krepsdyr, småfisk'],
+    ['HVOR','elver, bekker, innsjøer og fjorder i hele landet'],
+    ['STATUS','livskraftig, enkelte bestander truet'],
+  ],
+  avsnitt:[
+    { t:'SLIK LEVER DEN',
+      b:'Ørreten gyter om høsten i rennende vann, der hunnen graver en grop i grusen og dekker eggene til. Ungfisken står på standplasser i strømmen og forsvarer dem. Noen individer blir stående i bekken hele livet, andre vandrer ut i innsjøen eller til sjøen og vokser mye raskere der maten er bedre.'},
+    { t:'KJENN DEN IGJEN',
+      b:'Kraftig laksefisk med mørke flekker på lysere bunn, ofte med røde prikker og lys ring rundt. Halen er rett avskåret eller svakt innbuktet. Laksen har V-formet hale, slankere halerot og flekker mest over sidelinja.'},
+    { t:'MENNESKE OG ART',
+      b:'Ørreten er den viktigste sportsfisken i norsk innland og en bærebjelke i fritidsfisket. Forsuring slo ut mange bestander på Sørlandet på 1900-tallet, men kalking har hentet flere tilbake. Vandringshindre som kulverter og terskler er i dag en større trussel enn fiske.'},
+  ],
+  funfacts:[
+    'Ørreten kjenner igjen hjemmebekken på lukt og finner tilbake dit for å gyte.',
+    'Sjøørret og bekkeørret kan være søsken. Hva de blir, avgjøres av vekst og forhold, ikke av arv alene.',
+    'Ørretyngel har tydelige mørke fingermerker langs siden, kalt parrmerker.',
+    'Storørret i vann som Mjøsa og Randsfjorden lever av krøkle og kan bli over ti kilo.',
+  ],
+},
+
+soldogg: {
+  intro:'Soldoggen er en kjøttetende plante i norsk myr. Den fanger insekter i klissete dråper fordi torva mangler nitrogen.',
+  tall:[
+    ['HØYDE','5–20 cm i blomst'],
+    ['BLOMSTRING','juli–august'],
+    ['BLAD','runde, med røde kjertelhår og klebrige dråper'],
+    ['VOKSESTED','torvmyr og fuktig sandbunn'],
+    ['BYTTE','mygg, knott og andre småinsekter'],
+    ['STATUS','livskraftig'],
+  ],
+  avsnitt:[
+    { t:'SLIK LEVER DEN',
+      b:'Myrvann er surt og nesten fritt for nitrogen. Soldoggen løser det ved å hente nitrogenet fra dyr i stedet for fra jorda. Bladene er dekket av røde hår med en klar, klissete dråpe i enden. Når et insekt setter seg fast, bøyer hårene og etter hvert hele bladet seg sakte rundt byttet, og planten skiller ut fordøyelsesvæske.'},
+    { t:'KJENN DEN IGJEN',
+      b:'Små rosetter tett nede i torvmosen, med runde blad på lange stilker og dråper som glitrer i sola. Blomsterstilken er høy og tynn, og de hvite blomstene åpner seg bare noen timer midt på dagen.'},
+    { t:'MENNESKE OG ART',
+      b:'Soldogg har vært brukt i folkemedisin mot hoste. Den er helt avhengig av intakt myr, så grøfting og torvuttak fjerner både planten og resten av myrsamfunnet. Myr er også et av Norges viktigste karbonlagre, og et argument for vern som er større enn én art.'},
+  ],
+  funfacts:[
+    'Dråpene på bladene er ikke dugg, men et seigt slim planten skiller ut selv. De tørker ikke i sol.',
+    'Et blad bruker timer på å bøye seg rundt byttet, og dager på å fordøye det.',
+    'Én plante kan fange flere hundre insekter i løpet av en sommer.',
+    'Charles Darwin skrev en hel bok om kjøttetende planter, og soldogg var hovedeksempelet.',
+  ],
+},
+
+myrull: {
+  intro:'Myrull er de hvite duskene som lyser over myra i juli. Dusken er ikke blomst, men frøull som vinden skal ta med seg.',
+  tall:[
+    ['HØYDE','20–60 cm'],
+    ['BLOMSTRING','mai–juni, dusker i juli'],
+    ['VOKSESTED','våt myr, sump og grøftekanter'],
+    ['FAMILIE','starrfamilien, ikke gras'],
+    ['BRUK','veke, dyner og puter i eldre tid'],
+    ['STATUS','livskraftig'],
+  ],
+  avsnitt:[
+    { t:'SLIK LEVER DEN',
+      b:'Myrull vokser i vannmettet torv og har luftkanaler i stengelen som fører oksygen ned til røttene. Den blomstrer tidlig og uanselig, og det er først når frøene modner at de lange, hvite hårene folder seg ut. Duskene gir frøene vindbæring, og en myr kan sende ull flere kilometer i en kuling.'},
+    { t:'KJENN DEN IGJEN',
+      b:'Duskmyrull har flere dusker per stengel som henger til sidene, mens torvmyrull har én rett opp. Bladene er smale og kantede, og stenglene står rett opp fra tuer eller flater i den våteste delen av myra.'},
+    { t:'MENNESKE OG ART',
+      b:'Ulla ble samlet og brukt til veker i oljelamper og som fyll i puter, men hårene er for korte og glatte til å spinnes til tråd. Myrull er en god indikator på myr som fortsatt er våt; på grøftet myr forsvinner den raskt.'},
+  ],
+  funfacts:[
+    'Dusken er frøull, ikke blomst. Selve blomstringen er grønn og lite synlig og skjer flere uker tidligere.',
+    'Myrull tilhører starrfamilien og er i slekt med starr og sivaks, ikke med gras.',
+    'Røttene henter oksygen gjennom luftkanaler i stengelen, som et snorkelsystem.',
+    'Under andre verdenskrig ble myrull prøvd brukt som erstatning for bomull.',
+  ],
+},
+
+rodskrubb: {
+  intro:'Rødskrubben er lett å kjenne igjen og god å spise. Den skifter farge til blåsvart i snittflaten i løpet av minutter.',
+  tall:[
+    ['HATT','5–20 cm, oransjerød'],
+    ['SESONG','juli–oktober'],
+    ['VOKSESTED','under osp og bjørk, ofte i fuktig skog'],
+    ['STILK','hvit med mørke skjell'],
+    ['BRUK','stekt, i gryte, tørket'],
+    ['STATUS','livskraftig'],
+  ],
+  avsnitt:[
+    { t:'SLIK LEVER DEN',
+      b:'Rødskrubben er en rørsopp som lever i symbiose med osp og bjørk. Den kommer i pulser etter regn og kan stå i store mengder i fuktige år. Kjøttet er fastere enn hos den nære slektningen brunskrubb, og soppen holder bedre formen i panna.'},
+    { t:'KJENN DEN IGJEN',
+      b:'Oransjerød, tørr hatt, rør i stedet for skiver, og hvit stilk dekket av mørke, ru skjell. Snittflaten går fra hvit til rosa, deretter grå og til slutt blåsvart. Ingen giftig sopp i Norge ligner nevneverdig.'},
+    { t:'MENNESKE OG ART',
+      b:'Rødskrubb er en god og vanlig matsopp som tåler transport dårlig; den bør tas hjem i kurv og stekes samme dag. Fargeskiftet er ufarlig og påvirker ikke smaken, bare utseendet. Soppen skal alltid varmebehandles godt.'},
+  ],
+  funfacts:[
+    'Fargeskiftet skyldes at stoffer i soppen reagerer med oksygen når kjøttet blir utsatt for luft.',
+    'Rødskrubb kan bli over 20 cm over hatten og veie flere hundre gram.',
+    'Skrubbene heter så fordi stilken er ru som en skrubb å ta på.',
+    'Soppen blir nesten svart i gryta, men smaken er mild og nøtteaktig.',
+  ],
+},
+
+graor: {
+  intro:'Gråora gjødsler sin egen mark. Bakterier i rotknollene binder nitrogen fra lufta, og derfor vokser den i ren sand og grus langs elver.',
+  tall:[
+    ['HØYDE','10–20 m'],
+    ['ALDER','50–80 år'],
+    ['VOKSESTED','flommark, elvekanter, fuktig raviner'],
+    ['BLOMSTRING','mars–april, før løvsprett'],
+    ['BRUK','ved til røyking, treskoblokker, kulisser'],
+    ['STATUS','livskraftig'],
+  ],
+  avsnitt:[
+    { t:'SLIK LEVER DEN',
+      b:'Gråora lever i samarbeid med bakterier i knoller på røttene. Bakteriene binder nitrogen fra lufta, treet får gjødsel, og jorda under en oreskog blir raskt næringsrik. Derfor er gråorskog blant de mest produktive naturtypene vi har, med tett feltsjikt av høge urter. Ora tåler også oversvømmelse og etablerer seg først på nye grusører.'},
+    { t:'KJENN DEN IGJEN',
+      b:'Grå, glatt bark, matte blad med spiss tupp og små, forvedede rakler som blir sittende på treet som bittesmå kongler gjennom vinteren. Svartor har blad med butt eller innskåret tupp og står enda våtere.'},
+    { t:'MENNESKE OG ART',
+      b:'Gråorheggeskog langs elver er en viktig og ofte truet naturtype, presset av kanalisering og jordbruk. Oreved er bløt og lite verdt som tømmer, men er tradisjonell ved til røyking av fisk og kjøtt. Trevirket er også svært motstandsdyktig mot råte under vann.'},
+  ],
+  funfacts:[
+    'Nitrogenet ora binder blir liggende i jorda og gjødsler nabotrærne også.',
+    'Venezia står på pæler av or, som har holdt i hundrevis av år fordi de står helt under vann.',
+    'Oreveden blir oransjerød i snittflaten kort tid etter at treet er felt.',
+    'Ora blomstrer før snøen er borte, og pollenet er en tidlig allergikilde.',
+  ],
+},
+
+selje: {
+  intro:'Selja blomstrer før alt annet. Gåsungene gir humledronningene den første maten om våren, og avgjør om humlebolet i det hele tatt kommer i gang.',
+  tall:[
+    ['HØYDE','5–12 m'],
+    ['BLOMSTRING','mars–mai, før løvsprett'],
+    ['VOKSESTED','skogkanter, bekkedaler, skrotemark'],
+    ['BLAD','brede, rynkete, gråfiltede under'],
+    ['BRUK','bikubeplante, elgbeite, seljefløyte'],
+    ['STATUS','livskraftig'],
+  ],
+  avsnitt:[
+    { t:'SLIK LEVER DEN',
+      b:'Selja har hann- og hunntrær hver for seg. Hanntrærne har de gule, pollenrike gåsungene, hunntrærne de grønnere. Blomstringen kommer før løvet, på et tidspunkt da nesten ingen andre planter har åpnet, og den er derfor avgjørende for humler, bier og tidlige sommerfugler. Frøene er små med hvit ull og spres med vinden i mai.'},
+    { t:'KJENN DEN IGJEN',
+      b:'Brede, rynkete blad med grå filt på undersiden, og store, sølvgrå gåsunger i mars og april. Selja er en av flere vierarter, men har bredest blad av dem alle.'},
+    { t:'MENNESKE OG ART',
+      b:'Selje er en av de tre viktigste beitetrærne for elg sammen med rogn og osp. Barken ble brukt til å lage seljefløyte om våren, når sevja stiger og barken løsner fra veden. I hage og kulturlandskap er selje en av de mest verdifulle plantene for pollinerende insekter.'},
+  ],
+  funfacts:[
+    'En humledronning som våkner for tidlig og ikke finner selje i blomst, klarer sjelden å starte bol.',
+    'Gåsungene er blomster, ikke knopper. De gule er pollenbærende hannblomster.',
+    'Selje slår lett rot fra en frisk kvist stukket i fuktig jord.',
+    'Seljefløyte lages bare i de få ukene barken lar seg vri løs fra veden.',
   ],
 },
 

@@ -77,12 +77,48 @@ node tools/test_artsmapping.js
 
 ```bash
 node tools/dekning.js
+python tools/test_ende_til_ende.py --modell inat21 --last-ned --ut /tmp/pred.json
+node tools/mapping_av_predikasjoner.js /tmp/pred.json
 ```
 
 `test_parity.py` kjører PyTorch og ONNX på de samme bildene og krever samme
 topp-1. For int8 tillates 0,05 avvik i sannsynlighet, for fp16 1e-3.
+
 `test_artsmapping.js` dekker mappingen fra modellabel til art i biblioteket
 (30 tester). `dekning.js` er beskrevet over.
+
+`test_ende_til_ende.py` kjører den eksporterte ONNX-fila på ekte bilder med
+nøyaktig samme forbehandling som `klassifiser.js` gjør i nettleseren —
+senterkvadrat, skalering, normalisering fra `meta.json`. Den fanger feil i
+layout, mean/std og labelrekkefølge før de dukker opp på telefonen. Med
+`--last-ned` henter den ett bilde per art fra Wikipedias REST-API.
+`mapping_av_predikasjoner.js` tar topp-5-lista videre gjennom den ekte
+`artsmapping.js` og sier hvilken art spillet ville gitt deg.
+
+Målt resultat for `inat21` fp16, 10 bilder fra Wikipedia:
+
+```
+ok   bjork       -> BJØRK       SIKKER      22.0 %   modellen sa: Betula pubescens
+ok   elg         -> ELG         SIKKER      45.5 %   modellen sa: Alces alces
+ok   fluesopp    -> FLUESOPP    SIKKER      98.7 %   modellen sa: Amanita muscaria
+ok   gran        -> GRAN        SIKKER      30.2 %   modellen sa: Picea obovata
+ok   havorn      -> HAVØRN      SIKKER      91.5 %   modellen sa: Haliaeetus albicilla
+ok   kantarell   -> KANTARELL   SIKKER      98.2 %   modellen sa: Cantharellus cibarius
+ok   rev         -> REV         SIKKER      94.3 %   modellen sa: Vulpes vulpes
+ok   rosslyng    -> RØSSLYNG    SIKKER      92.9 %   modellen sa: Calluna vulgaris
+FEIL tare        -> INGEN       UKJENT ART   8.2 %   modellen sa: Limulus polyphemus
+ok*  torsk       -> SEI         USIKKER     58.9 %   modellen sa: Mullus surmuletus
+```
+
+`gran` viser hvorfor mappingen ser på hele topp-5: modellens førstevalg er
+`Picea obovata`, men `Picea abies` ligger på plass to og vinner fordi et
+eksakt artstreff slår en slektsgjetning.
+
+`tare` er den ærlige svakheten. På et undervannsbilde av stortare svarte
+modellen `Limulus polyphemus` — dolkhale — med 8,2 %. Ingen algeklasse i
+topp-5, så gruppebroen fyrte ikke. Broen redder tangartene bare når modellen
+i det minste ser at det er en alge. I praksis er `tare`, `sukkertare` og
+`grisetang` fortsatt vanskelige å fange.
 
 ## Arter ingen modell kjenner
 
