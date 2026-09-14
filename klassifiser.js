@@ -1,6 +1,6 @@
 /* VILLMARK - ekte artsgjenkjenning i nettleseren
-   SpeciesNet 4.0.3b for dyr, birder resnet_v2_50_inat21 for planter og sopp.
-   Begge som int8 ONNX gjennom onnxruntime-web.
+   birder resnet_v2_50_inat21 forst, SpeciesNet 4.0.3b som spesialist paa
+   viltkamera-pattedyr. Begge som int8 ONNX gjennom onnxruntime-web.
 
    Kjorer paa GitHub Pages uten COOP/COEP, saa:
      - numThreads = 1 (SharedArrayBuffer er ikke tilgjengelig)
@@ -21,14 +21,17 @@ const CACHE_NAVN  = 'villmark-modeller-v1';
 /* Byttes ut med ditt eget HF-repo naar eksportskriptene har kjort. */
 let MODELL_BASE = 'https://huggingface.co/DITT-BRUKERNAVN/villmark-modeller/resolve/main/';
 
+/* inat21 lastes forst og dekker alt, saa den heter ARTSMODELL. SpeciesNet
+   er tillegget som bare hentes naar den forste ikke er sikker. mb er et
+   anslag som bare brukes hvis HEAD-kallet ikke svarer. */
 const MODELLER = {
-  speciesnet: { navn:'speciesnet', tittel:'DYREMODELL',  mb:55 },
-  inat21:     { navn:'inat21',     tittel:'PLANTEMODELL', mb:45 },
+  inat21:     { navn:'inat21',     tittel:'ARTSMODELL',   mb:45 },
+  speciesnet: { navn:'speciesnet', tittel:'DYREMODELL',   mb:112 },
 };
 
-/* Over denne sikkerheten stoler vi paa dyremodellen og hopper over plantemodellen.
-   Under den provers plantemodellen ogsaa, og beste treff vinner. */
-const TERSKEL_DYR = 0.45;
+/* Et eksakt artstreff over denne sikkerheten avslutter skannet. Under den
+   kjorer vi ogsaa den andre modellen, og beste treff vinner. */
+const TERSKEL_EKSAKT = 0.45;
 
 const sesjoner = new Map();   // navn -> {session, meta, labels}
 const laster   = new Map();   // navn -> Promise, hindrer dobbel nedlasting
@@ -297,27 +300,28 @@ async function klassifiser(kilde, opt){
 
   const mapopt = { funnet: opt.funnet };
 
-  /* 1. Dyremodellen forst. Den treffer 12 av de 16 viltkamera-artene eksakt. */
-  let dyreSvar = null;
-  const dyr = await hent('speciesnet');
-  if(dyr){
+  /* 1. iNat21 forst. Den er den billige modellen - 256x256 mot SpeciesNets
+     480x480 - og treffer 58 av de 72 artene eksakt, mot SpeciesNets 21.
+     I det vanlige tilfellet er skannet ferdig her, og den tunge modellen
+     lastes aldri ned. */
+  let planteSvar = null;
+  const plante = await hent('inat21');
+  if(plante){
     opt.onFase && opt.onFase('regner', 0);
-    dyreSvar = ARTSMAPPING.beste(await kjor(dyr, kilde, ort), 'speciesnet', mapopt);
+    planteSvar = ARTSMAPPING.beste(await kjor(plante, kilde, ort), 'inat21', mapopt);
     opt.onFase && opt.onFase('regner', 0.5);
 
-    /* Bare et eksakt artstreff avslutter her. Paa slekts- eller familieniva
-       kjorer vi plantemodellen ogsaa: den kjenner Haliaeetus albicilla og
-       Phoca vitulina eksakt, som SpeciesNet bare naar paa slekt og familie. */
-    if(dyreSvar.id && dyreSvar.niva === 0 && dyreSvar.p >= TERSKEL_DYR){
+    if(planteSvar.id && planteSvar.niva === 0 && planteSvar.p >= TERSKEL_EKSAKT){
       opt.onFase && opt.onFase('regner', 1);
-      return dyreSvar;
+      return planteSvar;
     }
   }
 
-  /* 2. Plantemodellen, som ogsaa dekker sopp og det meste av fisk. */
-  let planteSvar = null;
-  const plante = await hent('inat21');
-  if(plante) planteSvar = ARTSMAPPING.beste(await kjor(plante, kilde, ort), 'inat21', mapopt);
+  /* 2. SpeciesNet som spesialist. Den kjenner Lepus timidus, Lynx lynx,
+     Gulo gulo og Vulpes lagopus, som iNat21 bare naar paa slekt. */
+  let dyreSvar = null;
+  const dyr = await hent('speciesnet');
+  if(dyr) dyreSvar = ARTSMAPPING.beste(await kjor(dyr, kilde, ort), 'speciesnet', mapopt);
   opt.onFase && opt.onFase('regner', 1);
 
   /* Ingen modell kom gjennom. Da skal app.js falle til simulert skann. */
@@ -358,7 +362,7 @@ return {
   klassifiser, status, tomCache, konfigurert, lastModell,
   get base(){ return MODELL_BASE; },
   set base(v){ MODELL_BASE = v.endsWith('/') ? v : v + '/'; },
-  MODELLER, TERSKEL_DYR,
+  MODELLER, TERSKEL_EKSAKT,
 };
 })();
 

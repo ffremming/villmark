@@ -218,8 +218,16 @@
       <label class="lob-merke" for="lobNavn">DITT NAVN</label>
       <input class="lob-navn" id="lobNavn" maxlength="18" autocomplete="off" spellcheck="false">
 
-      <label class="lob-merke">DITT DEKK</label>
+      <label class="lob-merke">DIN LEDER</label>
       <div class="lob-ledere" id="lobLedere"></div>
+
+      <div class="lob-dekk-topp">
+        <label class="lob-merke">DITT DEKK</label>
+        <span class="lob-dekk-tall" id="lobDekkTall">0 KORT</span>
+        <button class="lob-dekk-bryter" id="lobDekkBryter">ENDRE</button>
+      </div>
+      <p class="lob-dekk-hint" id="lobDekkHint" hidden></p>
+      <div class="lob-dekk" id="lobDekk" hidden></div>
 
       <label class="lob-merke">PÅNETT</label>
       <div class="lob-liste" id="lobListe"></div>
@@ -411,7 +419,7 @@
    GitHub Pages. Kjor tools/export_*.py, last opp til et Hugging Face-repo
    og lim inn adressen her. Staar den urort, kjorer spillet simulert skann. */
 if(window.KLASSIFISER){
-  // KLASSIFISER.base = 'https://huggingface.co/DITT-BRUKERNAVN/villmark-modeller/resolve/main/';
+  KLASSIFISER.base = 'https://huggingface.co/ffremming/villmark-modeller/resolve/main/';
 }
 </script>
 <script>

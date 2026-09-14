@@ -587,11 +587,25 @@ function byggFlaggstang(){
   return v;
 }
 
+/** dam: vannspeil i steinkant - bare til ikonbruk, plenen bygger sin egen flate */
+function byggDam(){
+  const v=new Vox();
+  v.disc(0,0,0,5.4,PROP.stein2);
+  v.disc(0,1,0,5.4,PROP.stein);
+  for(let i=0;i<10;i++){
+    const a=i/10*6.28, r=5.0;
+    v.set(Math.round(Math.cos(a)*r), 2, Math.round(Math.sin(a)*r), PROP.stein2);
+  }
+  v.disc(0,1,0,4.2,0x2f86b4);
+  return v;
+}
+
 const PROP_BYGG = {
   _gjerde:byggGjerde, _helle:byggHelle, _benk:byggBenk, _lykt:byggLykt,
   _blomst:byggBlomsttust, _stein:byggStein, _stubbe:byggStubbe, _busk:byggBusk,
   _hekk:byggHekk, _fuglekasse:byggFuglekasse, _baal:byggBaal, _skilt:byggSkilt,
   _ved:byggVedstabel, _fuglebad:byggFuglebad, _telt:byggTelt, _flagg:byggFlaggstang,
+  _dam:byggDam,
 };
 
 /** spillerfigur - turgaer med sekk */

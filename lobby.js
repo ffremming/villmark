@@ -33,6 +33,53 @@ function tegnLedere(){
   $('#lobLedere').innerHTML = LEDERE.map(l => lederKnappHTML(l, l.id === L.minLeder)).join('');
 }
 
+/* ============================================================ dekket
+   Kortstokken er plenen: hvert dyr og hver plante som staar ute er ett kort.
+   Her velger du hvilke av dem som blir med. Lederen bestemmer hvor stort
+   dekket minst maa vaere, siden livskortene ogsaa tas av stokken. */
+function dekkTilstand(){
+  const leder = KORTBASE[L.minLeder];
+  const ute = dekkbareEksemplarer(VM().STATE.eksemplarer)
+    .sort((a,b) => kortKost(SPECIES_BY_ID[a.art], a.niva)
+                 - kortKost(SPECIES_BY_ID[b.art], b.niva)
+                || SPECIES_BY_ID[a.art].navn.localeCompare(SPECIES_BY_ID[b.art].navn)
+                || a.uid - b.uid);
+  return { leder, ute, antall: VM().dekkStokk().length, minst: dekkMinst(leder) };
+}
+const dekkOk = () => { const d = dekkTilstand(); return d.antall >= d.minst; };
+
+function dekkRuteHTML(e){
+  const kort = kortAv(kortIdFor(e.art, e.niva));
+  const med  = VM().dekkHar(e.uid);
+  return `<button class="lob-kort${med ? ' med' : ''}" data-uid="${e.uid}"
+    aria-pressed="${med}">
+    <span class="lob-kort-bilde"><img src="${VM().lagMini(e.art, e.variant)}" alt=""></span>
+    <span class="lob-kort-navn">${kort.navn}</span>
+    <span class="lob-kort-tall">${kort.kost} SOL &middot; ${kort.kraft}</span>
+    ${e.niva > 1 ? `<span class="lob-kort-niva">Nv ${e.niva}</span>` : ''}
+  </button>`;
+}
+
+function tegnDekk(){
+  const { ute, antall, minst } = dekkTilstand();
+  const nok = antall >= minst;
+
+  const tall = $('#lobDekkTall');
+  tall.textContent = antall + ' KORT';
+  tall.classList.toggle('lob-for-faa', !nok);
+
+  const hint = $('#lobDekkHint');
+  const tekst = !ute.length
+    ? 'SETT DYR OG PLANTER UT PÅ PLENEN FOR Å FÅ KORT.'
+    : !nok ? 'DEKKET MÅ HA MINST ' + minst + ' KORT MOT DENNE LEDEREN.' : '';
+  hint.textContent = tekst;
+  hint.hidden = !tekst;
+
+  $('#lobDekk').innerHTML = ute.map(dekkRuteHTML).join('');
+  $('#lobDekkBryter').disabled = !ute.length;
+  $('#lobMotAI').disabled = !nok;
+}
+
 function tegnListe(){
   const ut = $('#lobListe');
   if(!L.spillere.length){
@@ -80,6 +127,7 @@ function lukkVent(){ $('#lobVent').hidden = true; }
 async function utfordre(id){
   const s = L.spillere.find(x => x.id === id);
   if(!s) return;
+  if(!dekkOk()){ VM().toast('DEKKET DITT ER FOR LITE'); return; }
   L.venterPaa = id;
   vent('VENTER PÅ SVAR FRA ' + s.navn + ' …');
 
@@ -115,6 +163,15 @@ async function besok(id){
 function godta(id){
   const kampId = L.innkomne.get(id);
   if(!kampId) return;
+  /* Et for lite dekk taper paa tom kortstokk foer tredje tur, saa
+     utfordringen avslaas i stedet for aa starte en kamp som er avgjort. */
+  if(!dekkOk()){
+    L.innkomne.delete(id);
+    NETT.svarUtfordring(id, kampId, false);
+    VM().toast('DEKKET DITT ER FOR LITE');
+    tegnListe();
+    return;
+  }
   L.innkomne.delete(id);
   NETT.svarUtfordring(id, kampId, true);
   gaTilKamp(kampId, 'gjest', id);
@@ -154,6 +211,21 @@ function kable(){
     KORTSPILL.KS.minLeder = L.minLeder;
     NETT.settLeder(L.minLeder);
     tegnLedere();
+    tegnDekk();            // en leder med flere liv krever et storre dekk
+  });
+
+  $('#lobDekkBryter').addEventListener('click', () => {
+    const rut = $('#lobDekk');
+    rut.hidden = !rut.hidden;
+    $('#lobDekkBryter').textContent = rut.hidden ? 'ENDRE' : 'FERDIG';
+  });
+
+  $('#lobDekk').addEventListener('click', e => {
+    const b = e.target.closest('[data-uid]');
+    if(!b) return;
+    const uid = Number(b.dataset.uid);
+    VM().dekkVelg(uid, !VM().dekkHar(uid));
+    tegnDekk();
   });
 
   $('#lobListe').addEventListener('click', e => {
@@ -256,6 +328,7 @@ function sporGodta(id){
 async function aapne(){
   kable();
   tegnLedere();
+  tegnDekk();
   tegnListe();
   tegnStatus();
 

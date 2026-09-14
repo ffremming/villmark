@@ -63,6 +63,8 @@ const STATE = {
   nestePyntUid: 1,
   eksemplarer: [],       // hvert skann gir ett eksemplar: {uid, art, niva, variant, x, z}
   nesteUid: 1,
+  dekk: new Set(),       // uid-ene du har valgt inn i kortstokken
+  dekkValgt: false,      // usant = ingen har rort dekket, saa alt paa plenen er med
   sistLagt: null,        // art som skal vokse fram paa plenen
   kartMal: null,        // art valgt fra kartet - overstyrer tilfeldig skann
   malArt: null,
@@ -99,6 +101,7 @@ const NIVA_STEG = 0.15;          // +15 % paa alle stats per nivaa
 function nyttEksemplar(art, variant){
   const e = { uid: STATE.nesteUid++, art, niva:1, variant: variant || null, x:null, z:null };
   STATE.eksemplarer.push(e);
+  STATE.dekk.add(e.uid);          // nye funn blir med i dekket med en gang
   STATE.funnet.add(art);
   if(variant) STATE.varianter[art] = variant;
   return e;
@@ -120,6 +123,27 @@ function statPaaNiva(sp, niva){
 function visningsNavn(id){
   const v = variantAv(id);
   return v ? VARIANTER[v].navn + ' ' + SPECIES_BY_ID[id].navn : SPECIES_BY_ID[id].navn;
+}
+
+/* ---------- dekket ----------
+   Kortstokken din er plenen: hvert eksemplar som staar ute er ett kort, paa
+   sitt eget nivaa. Foer noen har rort dekkvelgeren er alt med, og da trengs
+   ingen liste - derfor staar dekkValgt usant til det forste valget. Etterpa
+   holder STATE.dekk uid-ene. Uid-er som forsvinner naar to eksemplarer dras
+   sammen blir staaende i settet, men filtreres bort av byggDekkStokk. */
+function dekkSett(){ return STATE.dekkValgt ? STATE.dekk : null; }
+function dekkStokk(){ return byggDekkStokk(STATE.eksemplarer, dekkSett()); }
+function dekkHar(uid){ return !STATE.dekkValgt || STATE.dekk.has(uid); }
+
+function dekkVelg(uid, med){
+  if(!STATE.dekkValgt){
+    /* forste valget fryser dagens plen til en liste, saa fravalget har noe
+       aa trekke fra */
+    STATE.dekkValgt = true;
+    STATE.dekk = new Set(dekkbareEksemplarer(STATE.eksemplarer).map(e => e.uid));
+  }
+  if(med) STATE.dekk.add(uid); else STATE.dekk.delete(uid);
+  saveLawn();
 }
 
 // ============================================================ lyd
@@ -1470,6 +1494,7 @@ const lagMini = (() => {
 window.VM = { STATE, LYD, dirr, toast, lagMini, oppdaterHud, gaTil, visningsNavn,
   fieldSnapshot: () => VISIT.snapshot(),
   visitField: (navn, felt) => VISIT.enter(navn, felt),
+  dekkStokk, dekkHar, dekkVelg,
 };
 
 
@@ -1540,6 +1565,15 @@ function visDetalj(id, ex){
 }
 
 // ============================================================ butikk
+/* Ikonet er tingen selv: samme voxelmodell som havner paa plenen, rendret en
+   gang og gjemt i MINI. Tegnet staar igjen om WebGL sier nei. */
+function vareIkon(b){
+  const id = b.vox || b.ikonVox;
+  if(!id) return b.ikon;
+  try { return `<img class="vare-bilde" src="${lagMini(id)}" alt="">`; }
+  catch { return b.ikon; }
+}
+
 function byggButikk(){
   $('#shopCoins').textContent = STATE.mynt;
   const venter = !!venterPlassering();
@@ -1551,7 +1585,7 @@ function byggButikk(){
     const antall = STATE.pynt.filter(p => p.id === b.id).length;
     const raad = STATE.mynt >= b.pris;
     return `<article class="vare${antall?' eid':''}">
-      <span class="vare-ikon">${b.ikon}</span>
+      <span class="vare-ikon">${vareIkon(b)}</span>
       <div class="vare-tekst">
         <span class="vare-navn">${b.navn}${antall ? ` <i class="vare-ant">&times;${antall}</i>` : ''}</span>
         <span class="vare-desc">${b.desc}</span>

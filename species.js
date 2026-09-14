@@ -655,6 +655,7 @@ const BUTIKK = [
   { id:'telt',       navn:'TELT',        pris:90,  ikon:'&#9650;',  vox:'_telt',       skala:1,    vri:'senter',
     desc:'Lavvo av seilduk.' },
   { id:'dam',        navn:'DAM',         pris:260, ikon:'&#9781;',  vox:null,          skala:1,    vri:'fri',
+    ikonVox:'_dam',   // plenen bygger dammen som en egen flate - modellen er bare til ikonet
     desc:'Vannspeil med steinkant. Sett vannartene i den.' },
 ];
 const BUTIKK_BY_ID = Object.fromEntries(BUTIKK.map(b => [b.id, b]));

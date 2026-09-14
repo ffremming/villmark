@@ -990,7 +990,10 @@ button,input{ font-family:inherit; }
   border-radius:0; padding:11px; box-shadow:0 var(--bw) 0 var(--ink);
 }
 .vare-ikon{ font-size:20px; text-align:center; color:var(--gull);
-  background:var(--ink); padding:6px 0; box-shadow:0 0 0 2px var(--ink); }
+  background:var(--ink); padding:6px 0; box-shadow:0 0 0 2px var(--ink);
+  display:flex; align-items:center; justify-content:center; height:46px; }
+.vare-bilde{ width:42px; height:42px; object-fit:contain; display:block;
+  image-rendering:pixelated; }
 .vare-tekst{ display:flex; flex-direction:column; gap:4px; min-width:0; }
 .vare-navn{ font:400 11px/1.4 var(--f-tittel); color:var(--krem); }
 .vare-desc{ font:400 15px/1.35 var(--f-tekst); color:var(--krem2); }
@@ -1132,7 +1135,7 @@ body.visiting .felt-vri{ display:none; }
 }
 .lob-navn:focus{ border-color:var(--gronn-lys); }
 
-/* ---------- dekkvelger ---------- */
+/* ---------- ledervelger ---------- */
 .lob-ledere{ display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:8px; }
 /* --a/--b settes i JS: lederfargene legges som to harde felt, ikke en gradient */
 .lob-leder{
@@ -1149,6 +1152,41 @@ body.visiting .felt-vri{ display:none; }
   text-shadow:2px 2px 0 var(--ink); }
 .lob-leder-farge{ font:700 10px/1 var(--f-ui); letter-spacing:.06em; color:var(--krem); }
 .lob-leder-liv{ font:700 10px/1 var(--f-ui); letter-spacing:.06em; color:var(--krem); }
+
+/* ---------- dekkvelger ----------
+   Rutene er eksemplarene som staar ute paa plenen. Et fravalgt kort blir
+   staaende, men matt, saa du ser hele plenen mens du plukker. */
+.lob-dekk-topp{ display:flex; align-items:baseline; gap:10px; }
+.lob-dekk-topp .lob-merke{ flex:1; }
+.lob-dekk-tall{ font:700 10px/1 var(--f-ui); letter-spacing:.06em; color:var(--krem2); }
+.lob-dekk-tall.lob-for-faa{ color:var(--gull); }
+.lob-dekk-bryter{
+  font:700 10px/1 var(--f-ui); letter-spacing:.06em; cursor:pointer;
+  color:var(--krem); background:var(--panel); padding:7px 10px;
+  border:2px solid var(--line2); border-radius:0; transition:none;
+}
+.lob-dekk-bryter:disabled{ opacity:.45; cursor:default; }
+.lob-dekk-hint{ font:400 11px/1.6 var(--f-tekst); color:var(--gull); margin-top:6px; }
+.lob-dekk{
+  display:grid; grid-template-columns:repeat(auto-fill,minmax(88px,1fr));
+  gap:6px; margin-top:8px;
+}
+.lob-kort{
+  position:relative; display:grid; gap:3px; cursor:pointer;
+  padding:6px 5px 7px; border-radius:0; color:var(--krem);
+  background:var(--panel); border:2px solid var(--line2);
+  opacity:.4; filter:saturate(.35); transition:none;
+}
+.lob-kort.med{ opacity:1; filter:none; border-color:var(--gull); }
+.lob-kort:active{ transform:translateY(var(--bw)); }
+.lob-kort-bilde{ display:block; aspect-ratio:1; background:var(--ink); }
+.lob-kort-bilde img{ width:100%; height:100%; object-fit:contain; display:block; }
+.lob-kort-navn{ font:400 9px/1.2 var(--f-tittel); text-transform:uppercase; }
+.lob-kort-tall{ font:700 8px/1 var(--f-ui); letter-spacing:.04em; color:var(--krem2); }
+.lob-kort-niva{
+  position:absolute; top:3px; right:3px; padding:2px 4px;
+  font:700 8px/1 var(--f-ui); color:var(--ink); background:var(--gull);
+}
 
 /* ---------- spillerliste ---------- */
 .lob-liste{ display:flex; flex-direction:column; gap:6px; }

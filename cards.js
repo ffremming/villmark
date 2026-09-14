@@ -56,9 +56,11 @@ const REGLER = {
 const KOSTKURVE  = [[0.19,1], [0.38,2], [0.55,3], [0.70,4], [0.83,5], [0.93,6], [1.00,7]];
 const KRAFTKURVE = { 1:2000, 2:3000, 3:4000, 4:5000, 5:6000, 6:7000, 7:9000 };
 
+const rastyrke = (angrep, hp) => angrep*100 + hp*20;
+
 const KOSTRANG = (() => {
   const sortert = SPECIES.slice()
-    .sort((a,b) => (a.angrep*100 + a.hp*20) - (b.angrep*100 + b.hp*20)
+    .sort((a,b) => rastyrke(a.angrep, a.hp) - rastyrke(b.angrep, b.hp)
                 || a.id.localeCompare(b.id));
   const m = {};
   sortert.forEach((sp, i) => {
@@ -68,8 +70,26 @@ const KOSTRANG = (() => {
   return m;
 })();
 
-function kortKost(sp){ return KOSTRANG[sp.id]; }
-function kortKraft(sp){ return KRAFTKURVE[kortKost(sp)]; }
+/* Et eksemplar paa nivaa 3 har ingen rad i KOSTRANG, saa den skalerte
+   rastyrken plasseres paa stigen av alle rastyrker i stedet. Stigen slutter
+   paa kost 7: over det gir et hoyere nivaa bare merket, ikke mer kraft. */
+const NIVA_KORTSTEG = 0.15;      // samme steg som NIVA_STEG i app.js
+const STYRKESTIGE = SPECIES.map(sp => rastyrke(sp.angrep, sp.hp))
+                           .sort((a,b) => a - b);
+
+function kostFraStyrke(styrke){
+  let under = 0;
+  while(under < STYRKESTIGE.length && STYRKESTIGE[under] <= styrke) under++;
+  const andel = Math.max(under, 1) / STYRKESTIGE.length;
+  return KOSTKURVE.find(([grense]) => andel <= grense)[1];
+}
+
+function kortKost(sp, niva){
+  if(!(niva > 1)) return KOSTRANG[sp.id];
+  const f = 1 + NIVA_KORTSTEG*(niva - 1);
+  return kostFraStyrke(rastyrke(sp.angrep*f, sp.hp*f));
+}
+function kortKraft(sp, niva){ return KRAFTKURVE[kortKost(sp, niva)]; }
 function kortMottrekk(sp){
   if(sp.forsvar >= 22) return 2000;
   if(sp.forsvar >= 11) return 1000;
@@ -222,7 +242,21 @@ const LEDERKORT = [
   { id:'ld_steinkobbe', art:'steinkobbe', liv:5, farger:['fjorden','granskogen'],eff:E('aktiver','kraft',{verdi:2000}) },
 ];
 
-/* ---------------------------------------------------------- kortbygging */
+/* ---------------------------------------------------------- kortbygging
+   Et ART-kort baerer nivaaet til eksemplaret det kom fra. Nivaaet ligger i
+   id-en - 'rev@3' - slik at motoren fortsatt kan sende rene id-lister over
+   nettet, og motparten slaar opp det samme kortet uten a faa noe tilsendt.
+   Nivaa 1 beholder den bare arts-id-en, saa gamle id-er virker som for. */
+function kortIdFor(artId, niva){
+  return niva > 1 ? artId + '@' + niva : artId;
+}
+function delKortId(id){
+  const i = id.indexOf('@');
+  if(i < 0) return { artId:id, niva:1 };
+  const niva = Number(id.slice(i + 1));
+  return { artId: id.slice(0, i), niva: niva >= 1 ? niva : 1 };
+}
+
 function typeLinje(sp){
   return (sp.kind === 'dyr' ? 'DYR' : 'PLANTE') + ' / ' + KORTFARGER[sp.omrade].navn;
 }
@@ -234,15 +268,16 @@ function typeLinje(sp){
    KYSTENs fjorten, og ELGen vant hvert femte parti. */
 const VERNKRAFT = 2000;
 
-function byggArtKort(sp){
+function byggArtKort(sp, niva){
   const d = ARTSKORT[sp.id] || { nokler: avledeNokler(sp), eff:null };
   const nokler = d.nokler || [];
+  const n = niva > 1 ? niva : 1;
   return {
-    id: sp.id, kat:'art', artId: sp.id,
+    id: kortIdFor(sp.id, n), kat:'art', artId: sp.id, niva: n,
     navn: sp.navn, sci: sp.sci,
     farger: [sp.omrade],
-    kost: kortKost(sp), mot: kortMottrekk(sp),
-    kraft: kortKraft(sp) + (nokler.includes('VERN') ? VERNKRAFT : 0),
+    kost: kortKost(sp, n), mot: kortMottrekk(sp),
+    kraft: kortKraft(sp, n) + (nokler.includes('VERN') ? VERNKRAFT : 0),
     attributt: kortAttributt(sp), typer: typeLinje(sp),
     nokler, eff: d.eff || null, utloser: d.utloser || null,
     sjelden: sp.sjelden, fakta: sp.fakta,
@@ -306,6 +341,21 @@ const KORTBASE = (() => {
   return b;
 })();
 const LEDERE = LEDERKORT.map(l => KORTBASE[l.id]);
+
+/* Oppslag som ogsaa kjenner nivaakortene. KORTBASE har bare nivaa 1, saa
+   'rev@3' bygges forste gang noen spor etter det og blir liggende. Motoren
+   bruker denne i stedet for KORTBASE[id]. */
+function kortAv(id){
+  const funnet = KORTBASE[id];
+  if(funnet) return funnet;
+  if(typeof id !== 'string' || id.indexOf('@') < 0) return undefined;
+  const { artId, niva } = delKortId(id);
+  const sp = SPECIES_BY_ID[artId];
+  if(!sp) return undefined;
+  const kort = byggArtKort(sp, niva);
+  KORTBASE[kort.id] = kort;
+  return kort;
+}
 
 /* ---------------------------------------------------------- stokkbygging
    50 kort, bare i LEDERens to farger, maks 4 kopier av hvert kort.
@@ -376,5 +426,47 @@ function byggStokk(leder){
     for(const k of rest) legg(k, 1);
     if(stokk.length === for_) break;              // alt er brukt opp
   }
+  return stokk;
+}
+
+/* ---------------------------------------------------------- spillerens dekk
+   Stokken over er maskinens: en plan fylt med kort fra hele kortbasen. Din
+   egen stokk er derimot plenen din. Hvert eksemplar som staar ute er ett
+   kort, paa sitt eget nivaa, og du velger selv hvilke av dem som blir med.
+
+   Derfor gjelder ingen av de to reglene fra planstokken her: fargen
+   begrenser ikke lenger, siden plenen ikke har omraader, og kopitaket gir
+   ikke mening naar seks rever paa plenen nettopp er seks rev-kort. BIOTOP
+   og HENDELSE hoerer til omraader og trekk, ikke til dyr som staar paa en
+   plen, saa de er ute av spillerdekket. */
+
+const DEKK_SLAKK = 4;     // kort igjen i stokken etter aapningshand og liv
+
+/** minste lovlige dekk mot denne lederen: hand + liv + noen trekk */
+function dekkMinst(lederKort){
+  return REGLER.apningshand + (lederKort ? lederKort.liv : 5) + DEKK_SLAKK;
+}
+
+/** eksemplarene som kan vaere med: de som faktisk staar ute paa plenen */
+function dekkbareEksemplarer(eksemplarer){
+  return (eksemplarer || []).filter(e =>
+    e && e.x !== null && e.z !== null && SPECIES_BY_ID[e.art]);
+}
+
+/** kort-id-ene i dekket. valgt = Set med uid, null betyr alt som staar ute */
+function byggDekkStokk(eksemplarer, valgt){
+  return dekkbareEksemplarer(eksemplarer)
+    .filter(e => !valgt || valgt.has(e.uid))
+    .map(e => kortIdFor(e.art, e.niva));
+}
+
+/* Maskinen har ingen plen. Den faar planstokken sin som for, men klippet
+   eller forlenget til like mange kort som du stiller med, slik at ingen av
+   dere gaar tom foer den andre. */
+function byggAiStokk(lederKort, antall){
+  const plan = byggStokk(lederKort);
+  if(!plan.length) return [];
+  const stokk = [];
+  while(stokk.length < antall) stokk.push(plan[stokk.length % plan.length]);
   return stokk;
 }

@@ -154,15 +154,33 @@ function nyEnhet(kort, side, sted){
 function enheter(p){ return [p.leder, ...p.arter]; }
 function alleEnheter(){ return [...enheter(KS.p[0]), ...enheter(KS.p[1])]; }
 
-function nySpiller(lederKort, styring){
+function nySpiller(lederKort, styring, stokk){
   const p = {
-    styring, stokk: stokkOm(byggStokk(lederKort).slice()),
+    styring, stokk: stokkOm((stokk || byggStokk(lederKort)).slice()),
     hand:[], kompost:[], liv:[], arter:[], biotop:null,
     sol:{ total:0, aktiv:0, stokk:REGLER.solStokk },
     lederBrukt:false,
   };
   p.leder = nyEnhet(lederKort, 0, 'leder');
   return p;
+}
+
+/* ============================================================ dekk
+   Stokken din kommer fra plenen, ikke fra kortbasen: se cards.js. Lobbyen
+   passer paa at den er stor nok foer kampen starter, men en kamp kan ogsaa
+   startes med tastatur eller fra en gammel fane, saa planstokken staar
+   igjen som reserve. */
+function minStokk(lederKort){
+  const vm = window.VM;
+  const egen = vm && vm.dekkStokk ? vm.dekkStokk() : [];
+  return egen.length >= dekkMinst(lederKort) ? egen : byggStokk(lederKort);
+}
+
+/** en lovlig stokk fra motparten, ellers ingenting */
+function rensStokk(liste){
+  if(!Array.isArray(liste)) return null;
+  const rein = liste.filter(id => typeof id === 'string' && kortAv(id));
+  return rein.length ? rein : null;
 }
 
 /* ============================================================ kortflyt */
@@ -254,12 +272,16 @@ function aiVelgMal(side, lovlige, tekst){
 }
 
 /* ============================================================ oppsett */
-function nyttSpill(minLederId, motLederId, motStyring){
+function nyttSpill(minLederId, motLederId, motStyring, motStokk){
   KS.minLeder = minLederId;
-  const minL = KORTBASE[minLederId];
-  const foeL = KORTBASE[motLederId] || pick(LEDERE.filter(l => l.id !== minLederId));
-  KS.p[0] = nySpiller(minL, 'lokal');
-  KS.p[1] = nySpiller(foeL, motStyring || 'ai');
+  const minL = kortAv(minLederId);
+  const foeL = kortAv(motLederId) || pick(LEDERE.filter(l => l.id !== minLederId));
+  const min = minStokk(minL);
+  /* Maskinen har ingen plen, saa den faar like mange kort som du stiller
+     med. Motparten i en nettkamp sender sin egen. */
+  const mot = rensStokk(motStokk) || byggAiStokk(foeL, min.length);
+  KS.p[0] = nySpiller(minL, 'lokal', min);
+  KS.p[1] = nySpiller(foeL, motStyring || 'ai', mot);
   KS.p[0].leder.side = 0;
   KS.p[1].leder.side = 1;
   for(let s=0;s<2;s++){
@@ -284,20 +306,20 @@ async function mulligan(){
   for(let s=0;s<2;s++){
     const p = KS.p[s];
     if(erAi(p)){
-      if(p.hand.filter(id => KORTBASE[id].kost <= 3).length < 2) nyHand(p);
+      if(p.hand.filter(id => kortAv(id).kost <= 3).length < 2) nyHand(p);
       continue;
     }
     const svar = await spor(s, 'BYTTE ÅPNINGSHÅND?',
-      p.hand.map(id => KORTBASE[id]), ['BEHOLD', 'BYTT']);
+      p.hand.map(id => kortAv(id)), ['BEHOLD', 'BYTT']);
     if(svar === 1){ nyHand(p); logg('Ny apningshand.'); tegn(); }
   }
 }
 
 /* ============================================================ turlokke */
-async function kjorSpill(minLederId, motLederId, motStyring){
+async function kjorSpill(minLederId, motLederId, motStyring, motStokk){
   const g = ++KS.gen;
   try {
-    nyttSpill(minLederId, motLederId, motStyring);
+    nyttSpill(minLederId, motLederId, motStyring, motStokk);
     tegn();
     await mulligan();
     if(KS.gen !== g) return;
@@ -362,7 +384,7 @@ function kanSpille(side, kort){
 async function spillKort(side, handIndeks){
   const p = KS.p[side];
   const id = p.hand[handIndeks];
-  const kort = KORTBASE[id];
+  const kort = kortAv(id);
   if(!kanSpille(side, kort)) return;
 
   /* artsomradet rommer fem. Skal en sjette inn, ma en av dine egne vekk. */
@@ -493,7 +515,7 @@ async function mottrekkSteg(){
   if(erAi(fp)){ aiMottrekk(); return; }
 
   while(true){
-    const kort = fp.hand.map((id,i) => ({ kort:KORTBASE[id], i }))
+    const kort = fp.hand.map((id,i) => ({ kort:kortAv(id), i }))
       .filter(o => o.kort.mot > 0 ||
         (erMottrekkshendelse(o.kort) && o.kort.kost <= fp.sol.aktiv));
     if(!kort.length) return;
@@ -570,7 +592,7 @@ async function treffLeder(side, antall, fortaer){
   for(let i=0;i<antall;i++){
     if(!p.liv.length) avsluttSpill(side === 1, 'LIVET ER UTE');
     const id = p.liv.pop();
-    const kort = KORTBASE[id];
+    const kort = kortAv(id);
     VM().LYD.skade(); VM().dirr(60);
     if(fortaer){
       p.kompost.push(id);
@@ -603,7 +625,7 @@ async function aiTur(side){
   while(spilte){
     spilte = false;
     const valg = p.hand
-      .map((id,i) => ({ k:KORTBASE[id], i }))
+      .map((id,i) => ({ k:kortAv(id), i }))
       .filter(o => kanSpille(side, o.k) && aiVilSpille(side, o.k))
       .sort((a,b) => b.k.kost - a.k.kost);
     if(valg.length){ await spillKort(side, valg[0].i); await vent(330); spilte = true; }
@@ -688,7 +710,7 @@ function aiMottrekk(){
   if(!viktig) return;
 
   while(kraft(k.mal) <= kraft(k.ang)){
-    const valg = fp.hand.map(id => KORTBASE[id])
+    const valg = fp.hand.map(id => kortAv(id))
       .map(kort => ({ kort, spilles: erMottrekkshendelse(kort) && kort.kost <= fp.sol.aktiv
                                      && kort.eff.verdi > kort.mot }))
       .map(o => ({ ...o, gir: o.spilles ? o.kort.eff.verdi : o.kort.mot }))
@@ -827,7 +849,7 @@ function tegn(){
     || '<div class="ks-plass bred">INGEN ARTER</div>';
 
   $('#myHand').innerHTML = me.hand.map((id,i) => {
-    const k = KORTBASE[id];
+    const k = kortAv(id);
     return kortMiniHTML(k, { hand:true, udyr:!kanSpille(0,k), data:`data-sti="h:${i}"` });
   }).join('');
 
@@ -920,7 +942,7 @@ const brettKlikk = trygg(async e => {
 
   if(s[0] === 'h'){
     const i = +s[1];
-    const kort = KORTBASE[KS.p[0].hand[i]];
+    const kort = kortAv(KS.p[0].hand[i]);
     apneArk(kort, [
       { t:'SPILL · ' + kort.kost + ' SOL', pri:true, av:!kanSpille(0,kort),
         gjor: async () => { lukkArk(); await handling({ h:'spill', i }); } },
@@ -1043,7 +1065,7 @@ function lagTilstand(forSide){
 
 function deEnhet(e){
   if(!e) return null;
-  return { kort:KORTBASE[e.k], side:e.side, sted:e.sted, hvilt:e.hvilt, ny:e.ny,
+  return { kort:kortAv(e.k), side:e.side, sted:e.sted, hvilt:e.hvilt, ny:e.ny,
            sol:e.sol, buff:e.buff, kbuff:e.kbuff, brukt:e.brukt };
 }
 /* Kortrygger vi bare teller. Da virker livRadHTML og stokketellingen uendret. */
@@ -1085,7 +1107,7 @@ function lesTilstand(d){
 
 /* -------- gjestens svar paa vertens spoersmal -------- */
 async function gjestSpor(m){
-  const kort = (m.kort || []).map(id => KORTBASE[id]).filter(Boolean);
+  const kort = (m.kort || []).map(id => kortAv(id)).filter(Boolean);
   let v;
   try { v = await sporsmal(m.tekst, kort, m.valg); }
   catch(e){ return; }
@@ -1112,7 +1134,7 @@ const taImot = trygg(async m => {
   if(m.t === 'farvel'){ avbrytNettkamp('MOTSTANDEREN FORLOT KAMPEN'); return; }
 
   if(erVert()){
-    if(m.t === 'klar'){ vertStart(m.leder); return; }
+    if(m.t === 'klar'){ vertStart(m.leder, m.stokk); return; }
     if(m.t === 'handling'){ await utforHandling(1, speilHandling(m.m)); return; }
     if(m.t === 'svar'){ losFjernLofte(m.id, m.verdi); return; }
     return;
@@ -1152,7 +1174,10 @@ function startGjest(kampId){
   KS.p[0] = KS.p[1] = null;
   nullstill();
   tomtBrett('VENTER PÅ MOTSTANDEREN');
-  const si = () => nettSend({ t:'klar', leder:KS.minLeder });
+  /* Verten regner ut hele kampen, saa den maa kjenne gjestens stokk. Den
+     sendes med klarmeldingen: kort-id-ene baerer nivaaet, saa verten kan
+     slaa opp de samme kortene uten aa faa noe mer tilsendt. */
+  const si = () => nettSend({ t:'klar', leder:KS.minLeder, stokk:minStokk(kortAv(KS.minLeder)) });
   si();
   clearInterval(klarPuls);
   klarPuls = setInterval(() => { if(erGjest()) si(); else clearInterval(klarPuls); }, 1000);
@@ -1160,11 +1185,11 @@ function startGjest(kampId){
 
 /* Verten venter til gjesten melder seg, saa den vet hvilken leder
    motparten stiller med. */
-function vertStart(motLeder){
+function vertStart(motLeder, motStokk){
   if(vertIGang || !erVert()) return;
   vertIGang = true;
   vistResultat = false;
-  kjorSpill(KS.minLeder, motLeder, 'fjern');
+  kjorSpill(KS.minLeder, motLeder, 'fjern', motStokk);
 }
 
 function avbrytNettkamp(grunn){

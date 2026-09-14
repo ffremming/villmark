@@ -18,8 +18,17 @@ Målt mot de 72 artene i `species.js`, mot modellenes faktiske labellister:
 | **beste av de to** | **58** | 6 | 3 | 5 |
 
 SpeciesNet kjenner ingen planter, ingen sopp og ingen fisk, men den er sterkest
-på viltkamera-pattedyrene. iNat21 dekker resten. Derfor begge: SpeciesNet først,
-iNat21 når den første ikke gir et eksakt artstreff.
+på viltkamera-pattedyrene. iNat21 dekker resten.
+
+**iNat21 kjøres først.** Den er både den billigste — 256×256 mot SpeciesNets
+480×480 — og den med bredest dekning. Et eksakt artstreff over 45 % avslutter
+skannet der, og den tunge modellen lastes aldri ned. SpeciesNet hentes først
+når iNat21 er usikker, og er spesialisten på `Lepus timidus`, `Lynx lynx`,
+`Gulo gulo` og `Vulpes lagopus`, som iNat21 bare når på slekt.
+
+Målt i headless Chromium, samme ti bilder: sikre treff tar **475–724 ms**.
+Med motsatt rekkefølge tok de samme bildene ~2400 ms, fordi hvert eneste skann
+betalte for 480×480-modellen først.
 
 Kjør `node tools/dekning.js` etter hver utvidelse av `species.js`. Den henter
 begge labellistene og rapporterer hvilke arter som er ufangbare. Skriptet
@@ -78,6 +87,23 @@ testbildene:
 
 Percentile gir altså fp16-kvalitet til halve størrelsen. `entropy` finnes
 også som valg, men er tregere og ga ingen gevinst her.
+
+### SpeciesNet skal ikke kvantiseres
+
+Det gjelder bare iNat21. SpeciesNet er EfficientNetV2 med SE-blokker og swish,
+og den tåler ikke per-tensor int8-aktiveringer: modellen svarte `blank` på alt,
+også et bilde av rødrev som fp16-versjonen tar med 99,5 %. Målt 8/10 → 5/10.
+
+Kjør derfor `export_speciesnet.py` **uten** `--kalibrering`. 112 MB fp16 er
+prisen, og den betales sjelden — modellen lastes bare ned når iNat21 er usikker.
+
+Et forsøk med 48 kalibreringsbilder ble drept av kjernen (`exit=137`, minne):
+percentile holder histogrammer for hver aktivering, og ved 480×480 blir de for
+store. `--maks-bilder` finnes for å styre det, men løser ikke kvalitetstapet.
+
+Merk: nettlesertesten fanger ikke dette. Den viste fortsatt 10/10 med en død
+SpeciesNet, fordi iNat21 kjøres først og bærer alle ti bildene alene. Test
+modellene hver for seg med `test_ende_til_ende.py` når du endrer eksporten.
 
 ## Kjøring
 

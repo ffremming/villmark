@@ -45,6 +45,14 @@ function cleanSpecimen(e){
   };
 }
 
+/* The deck is a list of specimen uids. Uids drop out of it when two
+   specimens are dragged together, so the list is pruned on the way out
+   rather than growing for the life of the lawn. */
+function liveUids(S){
+  const live = new Set(S.eksemplarer.map(e => e.uid));
+  return [...S.dekk].filter(uid => live.has(uid));
+}
+
 function snapshot(S){
   return {
     v:            VERSION,
@@ -56,6 +64,8 @@ function snapshot(S){
     nestePyntUid: S.nestePyntUid,
     eksemplarer:  S.eksemplarer,
     nesteUid:     S.nesteUid,
+    dekk:         liveUids(S),
+    dekkValgt:    !!S.dekkValgt,
   };
 }
 
@@ -99,6 +109,13 @@ function load(S){
   S.varianter = (d.varianter && typeof d.varianter === 'object') ? d.varianter : {};
   S.pynt = props;
   S.eksemplarer = specimens;
+
+  /* A lawn saved before the deck editor existed has no deck. It gets every
+     specimen it owns, which is what it played with. */
+  S.dekk = new Set(Array.isArray(d.dekk)
+    ? d.dekk.filter(uid => typeof uid === 'number' && isFinite(uid))
+    : specimens.map(e => e.uid));
+  S.dekkValgt = d.dekkValgt === true;
 
   /* The uid counters must clear everything already on the lawn. Otherwise a
      new find takes the uid of an old one, and the two are dragged as one. */
