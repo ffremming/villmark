@@ -414,14 +414,7 @@
 <script src="artsmapping.js"></script>
 <script src="artikler.js"></script>
 <script src="klassifiser.js"></script>
-<script>
-/* Artsmodellene ligger utenfor repoet fordi 100 MB binaerfiler odelegger
-   GitHub Pages. Kjor tools/export_*.py, last opp til et Hugging Face-repo
-   og lim inn adressen her. Staar den urort, kjorer spillet simulert skann. */
-if(window.KLASSIFISER){
-  KLASSIFISER.base = 'https://huggingface.co/ffremming/villmark-modeller/resolve/main/';
-}
-</script>
+<script src="modellkonfig.js"></script>
 <script>
 /* Fyll inn prosjektets adresse og anon-noekkel for aa spille over nett.
    Staar de tomme, faller spillet tilbake til lokal testmodus mellom to faner.

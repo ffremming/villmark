@@ -1397,8 +1397,13 @@ $('#scanGo').addEventListener('click', async () => {
     if(err.navn === 'ModellUtilgjengelig' || err.navn === 'NedlastingKreves'){
       toast('SKANNER UTEN MODELL');
     } else {
+      /* Meldingen maa fram paa skjermen. Paa telefon finnes ingen konsoll,
+         og "MODELLEN SVIKTET" alene sier ingenting om hvorfor. */
       console.warn('skann feilet:', err);
-      toast('MODELLEN SVIKTET – SIMULERT SKANN');
+      const grunn = String(err && (err.message || err.name) || err).slice(0, 80);
+      toast('MODELLEN SVIKTET: ' + grunn.toUpperCase());
+      $('#scanReadout').textContent = 'FEIL: ' + grunn;
+      $('#scanReadout').classList.add('bom');
     }
     ekteSkann = false;
     simulertSkann();
