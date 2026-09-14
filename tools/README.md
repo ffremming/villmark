@@ -205,6 +205,35 @@ topp-5, så gruppebroen fyrte ikke. Broen redder tangartene bare når modellen
 i det minste ser at det er en alge. I praksis er `tare`, `sukkertare` og
 `grisetang` fortsatt vanskelige å fange.
 
+## WebGPU og int8
+
+`onnxruntime-web` 1.29 sin WebGPU-backend klarer ikke per-kanal-kvantiserte
+`DequantizeLinear`-noder. Den krever at `scale` og `zero_point` har samme rang,
+mens per-kanal gir 1-D `scale` og skalar `zero_point`:
+
+```
+[WebGPU] Kernel "[DequantizeLinear] body.stage1.0.block1.0.bias_DequantizeLinear"
+failed. Error: scale and zero-point inputs must have the same rank.
+```
+
+Feilen kommer ved **kjøring**, ikke ved oppretting av sesjonen, så en try/catch
+rundt `InferenceSession.create` fanger ingenting.
+
+`klassifiser.js` håndterer det i to lag: int8-modeller går rett på wasm, og
+`kjorRobust()` fanger kjernefeil under kjøring, bygger sesjonen på nytt med wasm
+og prøver én gang til. Modellen huskes som wasm-bare resten av økta.
+
+**Testen må kjøres med GPU påskrudd.** Headless Chromium får normalt ingen
+GPU-adapter og faller stille til wasm — derfor slapp denne feilen gjennom alle
+tidligere kjøringer, og traff først på en ekte Chrome:
+
+```bash
+VILLMARK_WEBGPU=1 python tools/test_nettleser.py
+```
+
+Måling med GPU på: 18/18 riktig, og bildene som trenger begge modellene falt fra
+~2500 ms til ~500 ms, fordi SpeciesNet er fp16 og kjører fint på WebGPU.
+
 ## Når modellen ikke skal svare
 
 Ingen av modellene har en «dette er ikke en organisme»-utgang. iNat21 fordeler

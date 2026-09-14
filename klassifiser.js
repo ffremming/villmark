@@ -40,6 +40,7 @@ const BLANK_VETO = 0.60;
 const sesjoner = new Map();   // navn -> {session, meta, labels}
 const laster   = new Map();   // navn -> Promise, hindrer dobbel nedlasting
 const mangler  = new Set();   // modeller som ikke finnes, huskes ut okten
+const kunWasm  = new Set();   // modeller der WebGPU ikke duger, huskes ut okten
 let ortLastet = null;
 
 /* Telefoner med lite minne holder bare en modell i live om gangen. */
@@ -151,15 +152,22 @@ async function lastModell(navn, opt){
 
     if(SMALT_MINNE) frigjorAndre(navn);
 
-    const ep = (navigator.gpu ? ['webgpu', 'wasm'] : ['wasm']);
+    /* WebGPU-backenden i onnxruntime-web 1.29 klarer ikke per-kanal-kvantiserte
+       DequantizeLinear-noder: den krever at scale og zero_point har samme rang,
+       mens per-kanal gir 1-D scale og skalar zero_point. Da faller den med
+       "scale and zero-point inputs must have the same rank" - men forst ved
+       kjoring, ikke ved oppretting, saa en try/catch her fanger ingenting.
+       int8-modellene gaar derfor rett paa wasm. */
+    const webgpuDuger = navigator.gpu && meta.presisjon !== 'int8' && !kunWasm.has(navn);
+    const ep = webgpuDuger ? ['webgpu', 'wasm'] : ['wasm'];
     let session;
     try {
       session = await ort.InferenceSession.create(buf, { executionProviders: ep, graphOptimizationLevel:'all' });
     } catch(e){
-      /* WebGPU feiler stille paa en del Android-GPUer. Fall tilbake til wasm. */
+      /* WebGPU feiler ogsaa stille paa en del Android-GPUer. */
       session = await ort.InferenceSession.create(buf, { executionProviders:['wasm'], graphOptimizationLevel:'all' });
     }
-    const oppf = { session, meta, labels, navn };
+    const oppf = { session, meta, labels, navn, ep };
     sesjoner.set(navn, oppf);
     laster.delete(navn);
     return oppf;
@@ -188,6 +196,13 @@ async function erCachet(navn){
     const cache = await caches.open(CACHE_NAVN);
     return !!(await cache.match(MODELL_BASE + navn + '.onnx'));
   } catch(_){ return false; }
+}
+
+function frigjor(navn){
+  const oppf = sesjoner.get(navn);
+  if(!oppf) return;
+  try { oppf.session.release(); } catch(_){}
+  sesjoner.delete(navn);
 }
 
 function frigjorAndre(behold){
@@ -266,6 +281,24 @@ function toppK(sannsyn, labels, k){
   return idx.slice(0, k).map(i => ({ label: labels[i], p: sannsyn[i] }));
 }
 
+/* Sikkerhetsnett for kjernefeil vi ikke har forutsett. Ryker kjoringen paa en
+   sesjon som bruker WebGPU, bygger vi den paa nytt paa wasm og prover en gang
+   til. Modellen huskes som wasm-bare resten av okten, saa det skjer en gang og
+   ikke ved hvert skann. */
+async function kjorRobust(navn, oppf, kilde, ort){
+  try {
+    return await kjor(oppf, kilde, ort);
+  } catch(feil){
+    const brukteGpu = oppf.ep && oppf.ep.indexOf('webgpu') !== -1;
+    if(!brukteGpu || kunWasm.has(navn)) throw feil;
+    console.warn('KLASSIFISER: WebGPU feilet for', navn, '- bytter til wasm:', feil.message);
+    kunWasm.add(navn);
+    frigjor(navn);
+    const paaNytt = await lastModell(navn, { godkjent:true });
+    return kjor(paaNytt, kilde, ort);
+  }
+}
+
 async function kjor(oppf, kilde, ort){
   const tensor = tilTensor(kilde, oppf.meta, ort);
   const inn = {};
@@ -322,7 +355,7 @@ async function klassifiser(kilde, opt){
   const plante = await hent('inat21');
   if(plante){
     opt.onFase && opt.onFase('regner', 0);
-    planteSvar = ARTSMAPPING.beste(await kjor(plante, kilde, ort), 'inat21', mapopt);
+    planteSvar = ARTSMAPPING.beste(await kjorRobust('inat21', plante, kilde, ort), 'inat21', mapopt);
     opt.onFase && opt.onFase('regner', 0.5);
 
     if(planteSvar.id && planteSvar.niva === 0 && planteSvar.p >= TERSKEL_EKSAKT){
@@ -336,7 +369,7 @@ async function klassifiser(kilde, opt){
   let dyreSvar = null, blankP = 0;
   const dyr = await hent('speciesnet');
   if(dyr){
-    const dyrePred = await kjor(dyr, kilde, ort);
+    const dyrePred = await kjorRobust('speciesnet', dyr, kilde, ort);
     dyreSvar = ARTSMAPPING.beste(dyrePred, 'speciesnet', mapopt);
     blankP = blankSikkerhet(dyrePred);
   }
@@ -378,6 +411,7 @@ async function status(){
     speciesnet: await erCachet('speciesnet'),
     inat21: await erCachet('inat21'),
     mangler: [...mangler],
+    kunWasm: [...kunWasm],
   };
 }
 
@@ -385,6 +419,7 @@ async function tomCache(){
   try { await caches.delete(CACHE_NAVN); } catch(_){}
   frigjorAndre(null);
   mangler.clear();
+  kunWasm.clear();
 }
 
 return {

@@ -22,6 +22,7 @@ import functools
 import http.server
 import json
 import pathlib
+import os
 import socket
 import threading
 
@@ -86,6 +87,19 @@ async (arg) => {
 """
 
 
+# Headless Chromium far normalt ingen GPU-adapter og faller stille til wasm.
+# Da testes ikke WebGPU-stien i det hele tatt - og det var nettopp der feilen
+# laa: onnxruntime-web 1.29 sin WebGPU-backend klarer ikke per-kanal-kvantiserte
+# DequantizeLinear-noder. Med VILLMARK_WEBGPU=1 tvinges GPU paa, slik at testen
+# ser det samme som en ekte Chrome paa skrivebordet.
+GPU_ARGS = [
+    "--enable-unsafe-webgpu",
+    "--enable-features=Vulkan,UseSkiaRenderer",
+    "--use-angle=metal",
+    "--ignore-gpu-blocklist",
+]
+
+
 def main() -> None:
     from playwright.sync_api import sync_playwright
 
@@ -102,7 +116,8 @@ def main() -> None:
 
     with server(ROT) as adresse:
         with sync_playwright() as pw:
-            nettleser = pw.chromium.launch()
+            med_gpu = os.environ.get("VILLMARK_WEBGPU") == "1"
+            nettleser = pw.chromium.launch(args=GPU_ARGS if med_gpu else [])
             side = nettleser.new_page()
             konsoll = []
             side.on("console", lambda m: konsoll.append(f"{m.type}: {m.text}"))
@@ -110,6 +125,9 @@ def main() -> None:
 
             side.goto(f"{adresse}/index.html", wait_until="load")
             side.wait_for_function("() => !!window.KLASSIFISER", timeout=15000)
+            gpu = side.evaluate("() => !!navigator.gpu")
+            print(f"WebGPU i nettleseren: {gpu}"
+                  f"{'  (VILLMARK_WEBGPU=1)' if med_gpu else '  (sett VILLMARK_WEBGPU=1 for aa tvinge paa)'}")
 
             feil = 0
             for sti in filer:
