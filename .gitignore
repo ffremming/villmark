@@ -1,0 +1,3 @@
+# Unity source assets, not used by the web build
+VoxBox/
+.DS_Store

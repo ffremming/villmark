@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="no">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0e1a12">
+<link rel="manifest" href="manifest.json">
+<title>VILLMARK</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="camLayer" hidden>
+  <video id="camFeed" playsinline muted autoplay></video>
+  <div class="cam-fallback" id="camFallback"></div>
+</div>
+
+<canvas id="gl"></canvas>
+
+<div id="app">
+
+  <!-- ============ SPLASH ============ -->
+  <section class="screen active" id="screen-splash">
+    <div class="splash-inner">
+      <div class="logo-block">
+        <h1 class="logo-text">VILLMARK</h1>
+        <div class="logo-rule"></div>
+        <p class="logo-sub">SKANN &middot; SAMLE &middot; DYST</p>
+      </div>
+      <div class="splash-bottom">
+        <button class="btn btn-primary btn-pulse" data-go="field">START</button>
+        <p class="splash-foot">NORGES ARTER I LOMMA</p>
+      </div>
+    </div>
+    <div class="boot" id="boot"><i></i></div>
+  </section>
+
+  <!-- ============ PLENEN ============ -->
+  <section class="screen active" id="screen-field">
+    <header class="topbar">
+      <div class="tb-title">PLENEN</div>
+      <div class="tb-stats">
+        <button class="chip chip-knapp" id="lydBtn">&#9835;</button>
+        <button class="chip chip-knapp" id="fieldSesong">H&Oslash;ST</button>
+        <span class="chip">&#9679; <b class="hud-mynt">120</b></span>
+        <span class="chip">&#9673; <b id="feltCount">0</b>/<b id="feltTotal">26</b></span>
+      </div>
+    </header>
+    <p class="slette-tom" id="feltTom">PLENEN ER TOM<br><span>SKANN EN ART FOR &Aring; SETTE DEN UT HER</span></p>
+    <p class="slette-hint">DRA FOR &Aring; FLYTTE DEG &middot; KNIP FOR &Aring; ZOOME &middot; TRYKK EN ART</p>
+    <button class="scan-fab" id="scanFab">
+      <span class="scan-fab-ico">&#9678;</span>
+      <span class="scan-fab-txt">SKANN</span>
+    </button>
+    <nav class="tabbar">
+      <button class="tab active" data-go="field"><span>&#10047;</span>PLENEN</button>
+      <button class="tab" data-go="collection"><span>&#9636;</span>SAMLING</button>
+      <button class="tab" data-go="battle"><span>&#9876;</span>DYST</button>
+      <button class="tab" data-go="shop"><span>&#9733;</span>BUTIKK</button>
+    </nav>
+  </section>
+
+  <!-- ============ SKANN ============ -->
+  <section class="screen screen-cam" id="screen-scan">
+    <div class="scan-grain"></div>
+    <div class="scan-overlay">
+      <button class="icon-btn scan-close" data-go="field">&#10005;</button>
+      <div class="scan-hud-top">
+        <span class="rec"><i></i>ARTSKANNER</span>
+        <span id="scanCoords">N 63.42&deg; &middot; Ø 10.39&deg;</span>
+      </div>
+      <div class="scan-target" id="scanTarget">
+        <span class="c tl"></span><span class="c tr"></span><span class="c bl"></span><span class="c br"></span>
+        <div class="scan-beam" id="scanBeam"></div>
+      </div>
+      <div class="scan-readout" id="scanReadout">RETT KAMERAET MOT ARTEN</div>
+      <div class="scan-meter"><i id="scanMeterFill"></i></div>
+      <button class="btn btn-primary scan-go" id="scanGo">SKANN ART</button>
+    </div>
+  </section>
+
+  <!-- ============ FUNN ============ -->
+  <section class="screen screen-dark" id="screen-reveal">
+    <div class="reveal-rays"></div>
+    <div class="reveal-inner">
+      <p class="reveal-kicker" id="revealKicker">NY ART REGISTRERT</p>
+      <div id="revealCard"></div>
+      <div class="reward-row">
+        <span>+<b id="revealXp">60</b> XP</span>
+        <span>+<b id="revealCoin">25</b> &#9679;</span>
+      </div>
+      <button class="btn btn-primary" id="revealOk">LEGG I SAMLING</button>
+    </div>
+  </section>
+
+  <!-- ============ SAMLING ============ -->
+  <section class="screen screen-solid" id="screen-collection">
+    <header class="topbar">
+      <div class="tb-title">SAMLING</div>
+      <div class="tb-stats"><span class="chip">&#9673; <b id="colCount">0</b>/<b id="colTotal">10</b></span></div>
+    </header>
+    <div class="col-filters">
+      <button class="pill active" data-filter="alle">ALLE</button>
+      <button class="pill" data-filter="dyr">DYR</button>
+      <button class="pill" data-filter="plante">PLANTER</button>
+    </div>
+    <div class="card-grid" id="cardGrid"></div>
+    <nav class="tabbar">
+      <button class="tab" data-go="field"><span>&#10047;</span>PLENEN</button>
+      <button class="tab active" data-go="collection"><span>&#9636;</span>SAMLING</button>
+      <button class="tab" data-go="battle"><span>&#9876;</span>DYST</button>
+      <button class="tab" data-go="shop"><span>&#9733;</span>BUTIKK</button>
+    </nav>
+  </section>
+
+  <!-- ============ BUTIKK ============ -->
+  <section class="screen screen-solid" id="screen-shop">
+    <header class="topbar">
+      <div class="tb-title">BUTIKK</div>
+      <div class="tb-stats"><span class="chip">&#9679; <b class="hud-mynt" id="shopCoins">120</b></span></div>
+    </header>
+    <p class="shop-intro">PYNT PLENEN. MYNT F&Aring;R DU AV &Aring; SKANNE NYE ARTER OG VINNE DYSTER.</p>
+    <div class="shop-grid" id="shopGrid"></div>
+    <nav class="tabbar">
+      <button class="tab" data-go="field"><span>&#10047;</span>PLENEN</button>
+      <button class="tab" data-go="collection"><span>&#9636;</span>SAMLING</button>
+      <button class="tab" data-go="battle"><span>&#9876;</span>DYST</button>
+      <button class="tab active" data-go="shop"><span>&#9733;</span>BUTIKK</button>
+    </nav>
+  </section>
+
+  <!-- ============ KORTDETALJ ============ -->
+  <section class="screen screen-dark" id="screen-detail">
+    <button class="icon-btn detail-close" data-go="collection">&#10005;</button>
+    <div class="detail-inner">
+      <div class="detail-stage"></div>
+      <h2 class="detail-name" id="detailName">REV</h2>
+      <p class="detail-sci" id="detailSci">Vulpes vulpes</p>
+      <div class="detail-stats" id="detailStats"></div>
+      <p class="detail-fact" id="detailFact"></p>
+    </div>
+  </section>
+
+  <!-- ============ DYST - KORTSPILL ============ -->
+  <section class="screen screen-solid" id="screen-battle">
+
+    <div class="ks-topp">
+      <span class="ks-tur" id="ksTur">DIN TUR 1</span>
+      <button class="icon-btn" id="ksBytt" title="Bytt leder">&#8646;</button>
+      <button class="icon-btn" data-go="field" title="Avslutt">&#10005;</button>
+    </div>
+
+    <div class="ks-brett" id="ksBrett">
+
+      <!-- ---------- motstanderen ---------- -->
+      <div class="ks-linje">
+        <div class="ks-liv" id="foeLiv"></div>
+        <span class="ks-tall" id="foeTall"></span>
+      </div>
+      <div class="ks-sol" id="foeSol"></div>
+      <div class="ks-rad">
+        <div class="ks-felt" id="foeLeder"></div>
+        <div class="ks-felt" id="foeBiotop"></div>
+      </div>
+      <div class="ks-rad ks-arter" id="foeArter"></div>
+
+      <div class="ks-logg" id="ksLogg">&nbsp;</div>
+
+      <!-- ---------- deg ---------- -->
+      <div class="ks-rad ks-arter" id="myArter"></div>
+      <div class="ks-rad">
+        <div class="ks-felt" id="myLeder"></div>
+        <div class="ks-felt" id="myBiotop"></div>
+      </div>
+      <div class="ks-sol" id="mySol"></div>
+      <div class="ks-linje">
+        <div class="ks-liv" id="myLiv"></div>
+        <span class="ks-tall" id="myTall"></span>
+      </div>
+
+      <div class="ks-hand" id="myHand"></div>
+    </div>
+
+    <div class="ks-bunn">
+      <button class="btn btn-primary" id="ksAvslutt">AVSLUTT TUR</button>
+    </div>
+
+    <!-- ---------- malvelger ---------- -->
+    <div class="ks-banner" id="ksBanner" hidden>
+      <span id="ksBannerTxt">VELG MÅL</span>
+      <button class="btn" id="ksAvbryt">AVBRYT</button>
+    </div>
+
+    <!-- ---------- kortark ---------- -->
+    <div class="ks-ark" id="ksArk" hidden>
+      <div class="ks-ark-bak" id="ksArkBak"></div>
+      <div class="ks-ark-inn">
+        <div id="ksArkKort"></div>
+        <div class="ks-ark-knapper" id="ksArkKnapper"></div>
+      </div>
+    </div>
+
+    <!-- ---------- sporsmal ---------- -->
+    <div class="ks-dialog" id="ksDialog" hidden>
+      <div class="ks-dialog-inn">
+        <p class="ks-dialog-txt" id="ksDialogTxt"></p>
+        <div class="ks-dialog-kort" id="ksDialogKort"></div>
+        <div class="ks-dialog-knapper" id="ksDialogKnapper"></div>
+      </div>
+    </div>
+
+    <!-- ---------- resultat ---------- -->
+    <div class="bt-result" id="ksResult" hidden>
+      <p class="bt-result-txt" id="ksResultTxt">SEIER!</p>
+      <p class="ks-result-grunn" id="ksResultGrunn"></p>
+      <div class="reward-row"><span>+<b>140</b> XP</span><span>+<b>80</b> &#9679;</span></div>
+      <div class="ks-dialog-knapper">
+        <button class="btn" id="ksIgjen">EN GANG TIL</button>
+        <button class="btn btn-primary" data-go="field">FORTSETT</button>
+      </div>
+    </div>
+  </section>
+
+  <div id="toast"></div>
+  <div id="flash"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="species.js"></script>
+<script src="cards.js"></script>
+<script src="voxel.js"></script>
+<script src="app.js"></script>
+<script src="battle.js"></script>
+</body>
+</html>
