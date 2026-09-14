@@ -18,7 +18,8 @@ const ctx = vm.createContext({ console, Math, JSON, Set, Map, Array, Object, Num
 const K = vm.runInContext(les('species.js') + '\n' + les('cards.js') + `
 ;({ SPECIES, SPECIES_BY_ID, KORTBASE, LEDERE, REGLER, KOSTKURVE,
     kortAv, kortIdFor, delKortId, kortKost, kortKraft,
-    byggDekkStokk, dekkbareEksemplarer, dekkMinst, byggAiStokk, byggStokk });`, ctx);
+    byggDekkStokk, dekkbareEksemplarer, dekkMinst, byggAiStokk, byggStokk,
+    fyllStokk });`, ctx);
 
 const ex = (uid, art, niva, x) =>
   ({ uid, art, niva, variant:null, x: x === undefined ? 0 : x, z: x === undefined ? 0 : x });
@@ -126,6 +127,19 @@ const ex = (uid, art, niva, x) =>
   }
   sjekk(K.byggAiStokk(leder, 137).length > K.byggStokk(leder).length,
     'planstokken forlenges naar plenen din er stoerre enn den');
+}
+
+/* ---------------------------------------------------------- padding */
+{
+  sjekk(K.fyllStokk(['rev'], 14).length === 14 &&
+        K.fyllStokk(['rev'], 14).every(id => id === 'rev'),
+    'ett kort gaar rundt om igjen til stokken er stor nok');
+  sjekk(K.fyllStokk(['rev','hare'], 5).join(',') === 'rev,hare,rev,hare,rev',
+    'flere kort gaar rundt i samme rekkefolge');
+  sjekk(K.fyllStokk(['rev','hare','gran'], 2).join(',') === 'rev,hare',
+    'en for stor kilde klippes ned');
+  sjekk(K.fyllStokk([], 14).length === 0, 'tom kilde gir tom stokk');
+  sjekk(K.fyllStokk(['rev'], 0).length === 0, 'null kort gir tom stokk');
 }
 
 console.log(feil ? '\n' + feil + ' dekksjekker feilet' : '\nAlle dekksjekker gikk gjennom');

@@ -460,13 +460,18 @@ function byggDekkStokk(eksemplarer, valgt){
     .map(e => kortIdFor(e.art, e.niva));
 }
 
+/* Klipper eller forlenger en stokk til noyaktig saa mange kort ved aa gaa
+   rundt og rundt i den. Tomt inn gir tomt ut. */
+function fyllStokk(kilde, antall){
+  if(!kilde || !kilde.length || antall <= 0) return [];
+  const stokk = [];
+  while(stokk.length < antall) stokk.push(kilde[stokk.length % kilde.length]);
+  return stokk;
+}
+
 /* Maskinen har ingen plen. Den faar planstokken sin som for, men klippet
    eller forlenget til like mange kort som du stiller med, slik at ingen av
    dere gaar tom foer den andre. */
 function byggAiStokk(lederKort, antall){
-  const plan = byggStokk(lederKort);
-  if(!plan.length) return [];
-  const stokk = [];
-  while(stokk.length < antall) stokk.push(plan[stokk.length % plan.length]);
-  return stokk;
+  return fyllStokk(byggStokk(lederKort), antall);
 }

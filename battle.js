@@ -166,14 +166,16 @@ function nySpiller(lederKort, styring, stokk){
 }
 
 /* ============================================================ dekk
-   Stokken din kommer fra plenen, ikke fra kortbasen: se cards.js. Lobbyen
-   passer paa at den er stor nok foer kampen starter, men en kamp kan ogsaa
-   startes med tastatur eller fra en gammel fane, saa planstokken staar
-   igjen som reserve. */
+   Stokken din kommer fra plenen, ikke fra kortbasen: se cards.js. Har du
+   faerre kort ute enn minstedekket, gaar de samme kortene rundt om igjen
+   til stokken er stor nok, slik at ett kort paa plenen holder til en kamp
+   mot maskinen. Er plenen helt tom, staar planstokken igjen som reserve. */
 function minStokk(lederKort){
   const vm = window.VM;
   const egen = vm && vm.dekkStokk ? vm.dekkStokk() : [];
-  return egen.length >= dekkMinst(lederKort) ? egen : byggStokk(lederKort);
+  if(!egen.length) return byggStokk(lederKort);
+  const minst = dekkMinst(lederKort);
+  return egen.length >= minst ? egen : fyllStokk(egen, minst);
 }
 
 /** en lovlig stokk fra motparten, ellers ingenting */

@@ -328,6 +328,26 @@ function trykkArk(S, i){
     .some(m => typeof m.d.p[1].hand !== 'number');
   sjekk(!lekk2, 'vertens hand ble sendt som kort et sted i lopet av kampen');
 
+  /* ---- ett kort paa plenen holder mot maskinen ---- */
+  {
+    const solo = lagSide('solo');
+    solo.KS.minLeder = 'ld_bjorn';
+    solo.stokk = ['rev'];
+    solo.spill.start();
+    await ro();
+    for(let i=0;i<4;i++){ svarDialog(solo, 0); await ro(10); }
+
+    const p = solo.KS.p[0];
+    const minst = vm.runInContext('dekkMinst(kortAv("ld_bjorn"))', ctxAv(solo));
+    const alle = p ? [...p.stokk, ...p.hand, ...p.liv] : [];
+    sjekk(!!p, 'enspillerkampen startet ikke med ett kort paa plenen');
+    sjekk(alle.length === minst,
+      'stokken ble ikke fylt opp til minstedekket: ' + alle.length + ' mot ' + minst);
+    sjekk(alle.every(id => id === 'rev'),
+      'det ene kortet paa plenen ble byttet ut med planstokken');
+    sjekk(!solo.KS.slutt, 'enspillerkampen var avgjort med en gang');
+  }
+
   console.log(feil ? '\n' + feil + ' feil' : '\nAlle sjekker gikk gjennom');
   process.exit(feil ? 1 : 0);
 })().catch(e => { console.error('KRASJ:', e); process.exit(2); });

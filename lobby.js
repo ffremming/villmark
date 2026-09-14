@@ -68,16 +68,20 @@ function tegnDekk(){
   tall.textContent = antall + ' KORT';
   tall.classList.toggle('lob-for-faa', !nok);
 
+  /* Mot maskinen holder ett kort: stokken fylles opp med de samme kortene
+     om igjen. Mot andre spillere gjelder minstedekket som for. */
   const hint = $('#lobDekkHint');
   const tekst = !ute.length
     ? 'SETT DYR OG PLANTER UT PÅ PLENEN FOR Å FÅ KORT.'
-    : !nok ? 'DEKKET MÅ HA MINST ' + minst + ' KORT MOT DENNE LEDEREN.' : '';
+    : !antall ? 'VELG MINST ETT KORT TIL DEKKET.'
+    : !nok ? 'DEKKET MÅ HA MINST ' + minst + ' KORT MOT ANDRE SPILLERE. '
+           + 'MOT MASKINEN GÅR DE SAMME KORTENE RUNDT OM IGJEN.' : '';
   hint.textContent = tekst;
   hint.hidden = !tekst;
 
   $('#lobDekk').innerHTML = ute.map(dekkRuteHTML).join('');
   $('#lobDekkBryter').disabled = !ute.length;
-  $('#lobMotAI').disabled = !nok;
+  $('#lobMotAI').disabled = antall < 1;
 }
 
 function tegnListe(){
