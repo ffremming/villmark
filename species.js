@@ -43,7 +43,7 @@ const SPECIES = [
 
   /* ------------------------------------------------------- SPRUCE FOREST */
   { id:'fox', name:'FOX', sci:'Vulpes vulpes', kind:'animal', area:'spruceforest',
-    rarity:2, hp:64, attack:22, defense:14, speed:26, height:1.6,
+    rarity:2, hp:64, attack:22, defense:14, speed:26, height:1.04,
     fact:'The fox hears mice under 60 cm of snow and dives straight down through the crust.',
     moves:[{n:'MOUSE POUNCE',s:24},{n:'AMBUSH',s:18},{n:'BARK',s:12}],
     vox:{ type:'quadruped', len:9, height:5, width:5, legs:3,
@@ -52,7 +52,7 @@ const SPECIES = [
       ears:{h:2, color:0x2e2119}, snout:0xf4e7d4, eyes:0x171114 } },
 
   { id:'squirrel', name:'SQUIRREL', sci:'Sciurus vulgaris', kind:'animal', area:'spruceforest',
-    rarity:1, hp:38, attack:14, defense:9, speed:34, height:1.0,
+    rarity:1, hp:38, attack:14, defense:9, speed:34, height:0.88,
     fact:'The squirrel hides nuts in hundreds of places and forgets many of them.',
     moves:[{n:'NUT TOSS',s:16},{n:'CLAW LEAP',s:12},{n:'CHATTER',s:8}],
     vox:{ type:'quadruped', len:6, height:4, width:4, legs:2,
@@ -61,7 +61,7 @@ const SPECIES = [
       ears:{h:2, color:0xa84a24, tuft:true}, snout:0xf0e0cc, eyes:0x120d0a } },
 
   { id:'bear', name:'BROWN BEAR', sci:'Ursus arctos', kind:'animal', area:'spruceforest',
-    rarity:5, hp:124, attack:36, defense:30, speed:16, height:2.6,
+    rarity:5, hp:124, attack:36, defense:30, speed:16, height:1.97,
     fact:'The sow gives birth in the den in midwinter and sleeps on while the cubs suckle.',
     moves:[{n:'BODY SLAM',s:38},{n:'CLAW STRIKE',s:29},{n:'REAR UP',s:17}],
     vox:{ type:'quadruped', len:11, height:7, width:7, legs:4,
@@ -70,7 +70,7 @@ const SPECIES = [
       ears:{h:2, color:0x3b2a1e}, snout:0x8a7150, eyes:0x120d0a } },
 
   { id:'wolf', name:'WOLF', sci:'Canis lupus', kind:'animal', area:'spruceforest',
-    rarity:5, hp:88, attack:33, defense:21, speed:30, height:1.9,
+    rarity:5, hp:88, attack:33, defense:21, speed:30, height:1.63,
     fact:'A wolf howl carries over 10 km in still winter air and keeps the pack together.',
     moves:[{n:'PACK BITE',s:35},{n:'THROAT GRIP',s:28},{n:'HOWL',s:15}],
     vox:{ type:'quadruped', len:10, height:6, width:5, legs:5,
@@ -79,19 +79,19 @@ const SPECIES = [
       ears:{h:3, color:0x565349}, snout:0x33302b, eyes:0xc9a92e } },
 
   { id:'spruce', name:'SPRUCE', sci:'Picea abies', kind:'plant', area:'spruceforest',
-    rarity:1, hp:90, attack:8, defense:34, speed:2, height:4.2,
+    rarity:1, hp:90, attack:8, defense:34, speed:2, height:9.87,
     fact:'Old Tjikko in Sweden is a spruce with a root system dated to 9,550 years.',
     moves:[{n:'NEEDLE RAIN',s:14},{n:'ROOT GRIP',s:10},{n:'RESIN',s:12}],
     vox:{ type:'conifer', height:13, radius:5, foliage:0x2c5c33, foliage2:0x3a7340, trunk:0x4a3524 } },
 
   { id:'flyagaric', name:'FLY AGARIC', sci:'Amanita muscaria', kind:'plant', area:'spruceforest',
-    rarity:3, hp:42, attack:19, defense:10, speed:3, height:1.3,
+    rarity:3, hp:42, attack:19, defense:10, speed:3, height:0.65,
     fact:'The red fly agaric is poisonous, yet lives in symbiosis with birch and spruce.',
     moves:[{n:'SPORE CLOUD',s:22},{n:'TOXIC CAP',s:17},{n:'RING STRIKE',s:9}],
     vox:{ type:'mushroom', height:7, cap:0xc22a25, dots:0xf4efe4, stem:0xf0e8d8, gills:0xd8cdb6 } },
 
   { id:'chanterelle', name:'CHANTERELLE', sci:'Cantharellus cibarius', kind:'plant', area:'spruceforest',
-    rarity:3, hp:36, attack:11, defense:13, speed:4, height:1.1,
+    rarity:3, hp:36, attack:11, defense:13, speed:4, height:0.55,
     fact:'The chanterelle smells of apricot. It cannot be farmed, only picked.',
     moves:[{n:'SPORE DUST',s:15},{n:'MYCELIUM NET',s:12},{n:'APRICOT SCENT',s:8}],
     vox:{ type:'mushroom', funnel:true, height:6, cap:0xe0a01e, dots:null,
@@ -99,7 +99,7 @@ const SPECIES = [
 
 
   { id:'badger', name:'BADGER', sci:'Meles meles', kind:'animal', area:'spruceforest',
-    rarity:3, hp:72, attack:24, defense:22, speed:18, height:1.4,
+    rarity:3, hp:72, attack:24, defense:22, speed:18, height:0.93,
     fact:'The badger digs setts used by generation after generation, some for over a hundred years.',
     moves:[{n:'CLAW DIG',s:26},{n:'JAW BITE',s:22},{n:'STENCH CLOUD',s:12}],
     vox:{ type:'quadruped', len:9, height:5, width:5, legs:2,
@@ -108,7 +108,7 @@ const SPECIES = [
       ears:{h:1, color:0x2a2723}, snout:0x2a2723, eyes:0x120d0a, spots:0x2a2723 } },
 
   { id:'pinemarten', name:'PINE MARTEN', sci:'Martes martes', kind:'animal', area:'spruceforest',
-    rarity:4, hp:54, attack:23, defense:14, speed:33, height:1.1,
+    rarity:4, hp:54, attack:23, defense:14, speed:33, height:0.69,
     fact:'The marten hunts in the canopy and leaps four metres between branches.',
     moves:[{n:'BRANCH LEAP',s:25},{n:'NECK BITE',s:21},{n:'CLIMB',s:12}],
     vox:{ type:'quadruped', len:9, height:4, width:4, legs:2,
@@ -117,7 +117,7 @@ const SPECIES = [
       ears:{h:2, color:0x66442b}, snout:0x2a1c12, eyes:0x120d0a } },
 
   { id:'roedeer', name:'ROE DEER', sci:'Capreolus capreolus', kind:'animal', area:'spruceforest',
-    rarity:2, hp:68, attack:18, defense:16, speed:34, height:1.7,
+    rarity:2, hp:68, attack:18, defense:16, speed:34, height:1.55,
     fact:'The roe deer has delayed implantation. The egg rests in the womb until winter is over.',
     moves:[{n:'BOUNDING FLIGHT',s:20},{n:'ANTLER THRUST',s:22},{n:'BARK',s:10}],
     vox:{ type:'quadruped', len:8, height:6, width:4, legs:6,
@@ -127,7 +127,7 @@ const SPECIES = [
       antlers:{span:3, color:0x6b5a3a} } },
 
   { id:'capercaillie', name:'CAPERCAILLIE', sci:'Tetrao urogallus', kind:'animal', area:'spruceforest',
-    rarity:4, hp:62, attack:22, defense:17, speed:20, height:1.3,
+    rarity:4, hp:62, attack:22, defense:17, speed:20, height:1.31,
     fact:'The cock displays at first light and hears almost nothing in the final phase of the song.',
     moves:[{n:'LEK STRIKE',s:24},{n:'WING CRASH',s:19},{n:'CLICKING',s:11}],
     vox:{ type:'bird', width:6, height:8, depth:5,
@@ -135,7 +135,7 @@ const SPECIES = [
       beak:0xe8e2d0, eyes:0x171310, streak:0xc22a25 } },
 
   { id:'raven', name:'RAVEN', sci:'Corvus corax', kind:'animal', area:'spruceforest',
-    rarity:3, hp:58, attack:21, defense:15, speed:28, height:1.2,
+    rarity:3, hp:58, attack:21, defense:15, speed:28, height:1.09,
     fact:'The raven makes tools, remembers faces and pairs for decades.',
     moves:[{n:'BEAK JAB',s:23},{n:'TRICKERY',s:17},{n:'CROAK',s:12}],
     vox:{ type:'bird', width:5, height:8, depth:5,
@@ -143,39 +143,39 @@ const SPECIES = [
       beak:0x121316, eyes:0x2a2a2e, streak:0x3a3f4a } },
 
   { id:'aspen', name:'ASPEN', sci:'Populus tremula', kind:'plant', area:'spruceforest',
-    rarity:2, hp:70, attack:9, defense:26, speed:3, height:3.8,
+    rarity:2, hp:70, attack:9, defense:26, speed:3, height:8.49,
     fact:'The aspen leaf sits on a flat stalk and trembles in the faintest breeze.',
     moves:[{n:'LEAF TREMBLE',s:13},{n:'ROOT SUCKER',s:11},{n:'BARK SHIELD',s:10}],
     vox:{ type:'broadleaf', height:11, crownR:4, foliage:0x7aa84e, foliage2:0x94bd62,
       trunk:0xbfc4b2, fleck:0x4a4e42 } },
 
   { id:'bilberry', name:'BILBERRY', sci:'Vaccinium myrtillus', kind:'plant', area:'spruceforest',
-    rarity:1, hp:36, attack:10, defense:12, speed:5, height:1.2,
+    rarity:1, hp:36, attack:10, defense:12, speed:5, height:0.88,
     fact:'Bilberry covers a quarter of the Norwegian forest floor and lives in symbiosis with fungi on its roots.',
     moves:[{n:'BERRY RAIN',s:13},{n:'HEATH WEAVE',s:10},{n:'JUICE SPURT',s:11}],
     vox:{ type:'berry', height:5, leaf:0x3a6b32, leaf2:0x4d8440, berry:0x3f4a8c, stem:0x5a6b3a } },
 
   { id:'porcini', name:'PORCINI', sci:'Boletus edulis', kind:'plant', area:'spruceforest',
-    rarity:3, hp:48, attack:12, defense:20, speed:3, height:1.4,
+    rarity:3, hp:48, attack:12, defense:20, speed:3, height:0.67,
     fact:'The porcini has tubes instead of gills under the cap. It is the most sought-after edible mushroom in Norway.',
     moves:[{n:'TUBE SPORES',s:16},{n:'THICK STEM',s:13},{n:'FOREST SCENT',s:9}],
     vox:{ type:'mushroom', height:6, cap:0x8a5a2e, dots:null, stem:0xe0d4bc, gills:0xd8cfae } },
 
   { id:'deadlywebcap', name:'DEADLY WEBCAP', sci:'Cortinarius rubellus', kind:'plant', area:'spruceforest',
-    rarity:4, hp:40, attack:24, defense:11, speed:3, height:1.2,
+    rarity:4, hp:40, attack:24, defense:11, speed:3, height:0.58,
     fact:'The deadly webcap destroys the kidneys, and the first symptoms come after two to three weeks.',
     moves:[{n:'KIDNEY TOXIN',s:26},{n:'VEIL SPORES',s:18},{n:'DELAYED ONSET',s:14}],
     vox:{ type:'mushroom', height:7, cap:0xa85a2e, dots:null, stem:0xb87a3c, gills:0x8a5a2a } },
 
   { id:'blacktrumpet', name:'BLACK TRUMPET', sci:'Craterellus cornucopioides', kind:'plant', area:'spruceforest',
-    rarity:4, hp:34, attack:12, defense:12, speed:4, height:1.0,
+    rarity:4, hp:34, attack:12, defense:12, speed:4, height:0.55,
     fact:'The black trumpet is nearly invisible against the forest floor, but stands in dense troops once you spot one.',
     moves:[{n:'SHADOW FORM',s:16},{n:'SPORE DUST',s:13},{n:'FUNNEL GRIP',s:10}],
     vox:{ type:'mushroom', funnel:true, height:6, cap:0x2e2822, dots:null,
       stem:0x3a332c, gills:0x4a4238 } },
 
   { id:'woodanemone', name:'WOOD ANEMONE', sci:'Anemone nemorosa', kind:'plant', area:'spruceforest',
-    rarity:1, hp:28, attack:6, defense:9, speed:4, height:1.0,
+    rarity:1, hp:28, attack:6, defense:9, speed:4, height:0.62,
     fact:'The wood anemone covers the forest floor before the leaves shade it out. The whole plant is mildly toxic.',
     moves:[{n:'SPRING CARPET',s:11},{n:'RHIZOME',s:9},{n:'POLLEN CLOUD',s:8}],
     vox:{ type:'flower', height:5, petal:0xf6f4ee, petal2:0xffffff, center:0xe8dc8a,
@@ -183,7 +183,7 @@ const SPECIES = [
 
   /* ---------------------------------------------------------- MOUNTAINS */
   { id:'hare', name:'MOUNTAIN HARE', sci:'Lepus timidus', kind:'animal', area:'mountains',
-    rarity:2, hp:46, attack:12, defense:11, speed:38, height:1.3,
+    rarity:2, hp:46, attack:12, defense:11, speed:38, height:1.05,
     fact:'The hare turns chalk white in winter, triggered by day length, not by the snow.',
     moves:[{n:'ZIGZAG',s:15},{n:'HIND KICK',s:18},{n:'DUCK',s:7}],
     vox:{ type:'quadruped', len:7, height:5, width:4, legs:3,
@@ -192,7 +192,7 @@ const SPECIES = [
       ears:{h:5, color:0xe8e6e0, tip:0x2b2b2b}, snout:0xd8a0a8, eyes:0x1a1418 } },
 
   { id:'lynx', name:'LYNX', sci:'Lynx lynx', kind:'animal', area:'mountains',
-    rarity:5, hp:82, attack:34, defense:20, speed:28, height:1.9,
+    rarity:5, hp:82, attack:34, defense:20, speed:28, height:1.49,
     fact:'The lynx is the only wild cat in Norway. Its paws work like snowshoes.',
     moves:[{n:'THROAT GRIP',s:38},{n:'PAW SWIPE',s:27},{n:'STALKING',s:14}],
     vox:{ type:'quadruped', len:9, height:6, width:5, legs:4,
@@ -202,7 +202,7 @@ const SPECIES = [
       snout:0xefe4d0, eyes:0xcfa61f, spots:0x8a6a41 } },
 
   { id:'wolverine', name:'WOLVERINE', sci:'Gulo gulo', kind:'animal', area:'mountains',
-    rarity:5, hp:78, attack:31, defense:27, speed:19, height:1.5,
+    rarity:5, hp:78, attack:31, defense:27, speed:19, height:0.96,
     fact:'The wolverine caches meat in scree where the cold keeps it fresh until spring.',
     moves:[{n:'JAW BITE',s:33},{n:'ROCKSLIDE',s:24},{n:'MUSK SCENT',s:13}],
     vox:{ type:'quadruped', len:8, height:5, width:5, legs:2,
@@ -211,7 +211,7 @@ const SPECIES = [
       ears:{h:1, color:0x2e221a}, snout:0x1f1712, eyes:0x120d0a, spots:0xa88a5c } },
 
   { id:'hepatica', name:'HEPATICA', sci:'Hepatica nobilis', kind:'plant', area:'mountains',
-    rarity:3, hp:30, attack:6, defense:8, speed:4, height:1.1,
+    rarity:3, hp:30, attack:6, defense:8, speed:4, height:0.62,
     fact:'The hepatica flowers before the leaves come, catching the spring sun on the forest floor.',
     moves:[{n:'POLLEN CLOUD',s:11},{n:'TENDRIL',s:8},{n:'SCENT',s:6}],
     vox:{ type:'flower', height:6, petal:0x4a6fd4, petal2:0x7b96e8, center:0xf0e08a,
@@ -219,7 +219,7 @@ const SPECIES = [
 
 
   { id:'stoat', name:'STOAT', sci:'Mustela erminea', kind:'animal', area:'mountains',
-    rarity:3, hp:40, attack:19, defense:10, speed:36, height:0.9,
+    rarity:3, hp:40, attack:19, defense:10, speed:36, height:0.49,
     fact:'The stoat turns chalk white in winter, but the tail tip stays black all year.',
     moves:[{n:'NECK BITE',s:22},{n:'ZIGZAG',s:15},{n:'SQUEAK',s:9}],
     vox:{ type:'quadruped', len:8, height:3, width:3, legs:1,
@@ -228,7 +228,7 @@ const SPECIES = [
       ears:{h:1, color:0xe0dcd4}, snout:0xd8a0a8, eyes:0x120d0a } },
 
   { id:'lemming', name:'LEMMING', sci:'Lemmus lemmus', kind:'animal', area:'mountains',
-    rarity:3, hp:30, attack:15, defense:8, speed:24, height:0.7,
+    rarity:3, hp:30, attack:15, defense:8, speed:24, height:0.46,
     fact:'The lemming attacks anything that comes too close. The population peaks every three to four years.',
     moves:[{n:'RAGE BITE',s:18},{n:'SNOW TUNNEL',s:11},{n:'HISSING',s:8}],
     vox:{ type:'quadruped', len:5, height:3, width:3, legs:1,
@@ -237,7 +237,7 @@ const SPECIES = [
       ears:{h:1, color:0x2a2420}, snout:0x2a2420, eyes:0x120d0a, spots:0x2a2420 } },
 
   { id:'dipper', name:'DIPPER', sci:'Cinclus cinclus', kind:'animal', area:'mountains',
-    rarity:3, hp:42, attack:16, defense:13, speed:29, height:0.9,
+    rarity:3, hp:42, attack:16, defense:13, speed:29, height:0.67,
     fact:'The dipper is the national bird of Norway and walks the bed of ice-cold rivers hunting larvae.',
     moves:[{n:'RAPIDS DIVE',s:19},{n:'RIVER CURRENT',s:14},{n:'BOB',s:9}],
     vox:{ type:'bird', width:4, height:6, depth:4,
@@ -245,7 +245,7 @@ const SPECIES = [
       beak:0x1e1a17, eyes:0x171310, streak:0x5c4a3a } },
 
   { id:'arcticchar', name:'ARCTIC CHAR', sci:'Salvelinus alpinus', kind:'animal', area:'mountains',
-    rarity:3, hp:50, attack:17, defense:13, speed:26, height:1.2,
+    rarity:3, hp:50, attack:17, defense:13, speed:26, height:0.62,
     fact:'The char lives further north than any other freshwater fish and holds in mountain lakes that are ice-free for only a few weeks.',
     moves:[{n:'ICEWATER THRUST',s:20},{n:'SPOTTED SHEEN',s:15},{n:'SPAWNING RUN',s:11}],
     vox:{ type:'fish', len:10, height:5, width:4,
@@ -253,27 +253,27 @@ const SPECIES = [
       streak:0x8ab0c0, eyes:0x171310 } },
 
   { id:'rowan', name:'ROWAN', sci:'Sorbus aucuparia', kind:'plant', area:'mountains',
-    rarity:2, hp:66, attack:12, defense:24, speed:3, height:3.2,
+    rarity:2, hp:66, attack:12, defense:24, speed:3, height:6.04,
     fact:'The rowan fruits right up to the treeline, and the berries hang until the thrushes pass through.',
     moves:[{n:'BERRY CLUSTER',s:16},{n:'BRANCH SWEEP',s:12},{n:'BARK SHIELD',s:10}],
     vox:{ type:'broadleaf', height:10, crownR:4, foliage:0x5c8a3a, foliage2:0x6e9e48,
       trunk:0x6b5c4a } },
 
   { id:'juniper', name:'JUNIPER', sci:'Juniperus communis', kind:'plant', area:'mountains',
-    rarity:2, hp:56, attack:11, defense:24, speed:2, height:2.2,
+    rarity:2, hp:56, attack:11, defense:24, speed:2, height:2.99,
     fact:'The juniper has the widest range of any conifer and can live over a thousand years.',
     moves:[{n:'NEEDLE PRICK',s:15},{n:'BERRY RESIN',s:12},{n:'WIND SHIELD',s:10}],
     vox:{ type:'conifer', height:8, radius:3, foliage:0x3a5c40, foliage2:0x4a6e4c, trunk:0x6b5138 } },
 
   { id:'mountainavens', name:'MOUNTAIN AVENS', sci:'Dryas octopetala', kind:'plant', area:'mountains',
-    rarity:3, hp:30, attack:7, defense:14, speed:3, height:0.8,
+    rarity:3, hp:30, attack:7, defense:14, speed:3, height:0.62,
     fact:'Mountain avens grows on lime-rich ground and turns its flower towards the sun to warm the seeds.',
     moves:[{n:'SUN BOWL',s:12},{n:'LIMESTONE GRIP',s:10},{n:'SEED DOWN',s:8}],
     vox:{ type:'flower', height:4, petal:0xf4f1e6, petal2:0xffffff, center:0xe8c23c,
       stem:0x4a6b3a, leaf:0x3a5c2e, petals:8 } },
 
   { id:'ladysslipper', name:"LADY'S SLIPPER", sci:'Cypripedium calceolus', kind:'plant', area:'mountains',
-    rarity:5, hp:34, attack:9, defense:12, speed:3, height:1.2,
+    rarity:5, hp:34, attack:9, defense:12, speed:3, height:0.92,
     fact:"The lady's slipper is the largest orchid in Norway. It lures beetles down into the slipper and lets them out past the pollen.",
     moves:[{n:'SLIPPER TRAP',s:17},{n:'ORCHID SCENT',s:13},{n:'ROOT FUNGUS',s:9}],
     vox:{ type:'flower', height:6, petal:0x6b3a4a, petal2:0x8a4a5c, center:0xf0d23c,
@@ -281,7 +281,7 @@ const SPECIES = [
 
   /* ---------------------------------------------------------- THE BOG */
   { id:'moose', name:'MOOSE', sci:'Alces alces', kind:'animal', area:'bog',
-    rarity:4, hp:110, attack:30, defense:26, speed:12, height:2.8,
+    rarity:4, hp:110, attack:30, defense:26, speed:12, height:2.46,
     fact:'The bull moose sheds its antlers every winter and rebuilds them in a single summer.',
     moves:[{n:'ANTLER THRUST',s:34},{n:'STOMP',s:26},{n:'BELLOW',s:15}],
     vox:{ type:'quadruped', len:11, height:8, width:6, legs:6,
@@ -291,19 +291,19 @@ const SPECIES = [
       antlers:{span:7, color:0xcbb78d}, dewlap:0x3a2a1f } },
 
   { id:'lingonberry', name:'LINGONBERRY', sci:'Vaccinium vitis-idaea', kind:'plant', area:'bog',
-    rarity:2, hp:34, attack:9, defense:12, speed:5, height:1.3,
+    rarity:2, hp:34, attack:9, defense:12, speed:5, height:0.73,
     fact:'Lingonberries keep fresh in water for years. Their own benzoic acid preserves them.',
     moves:[{n:'BERRY SALVE',s:12},{n:'THICKET WEAVE',s:10},{n:'ACID BITE',s:14}],
     vox:{ type:'berry', height:5, leaf:0x2f6b34, leaf2:0x3f8440, berry:0xc2202c, stem:0x4a5a32 } },
 
   { id:'cloudberry', name:'CLOUDBERRY', sci:'Rubus chamaemorus', kind:'plant', area:'bog',
-    rarity:4, hp:32, attack:13, defense:9, speed:6, height:1.2,
+    rarity:4, hp:32, attack:13, defense:9, speed:6, height:0.73,
     fact:'The cloudberry is called the gold of the bog. Male and female plants grow apart, so the crop often fails.',
     moves:[{n:'BOG GOLD',s:18},{n:'PEAT GRIP',s:11},{n:'SOUR JUICE',s:9}],
     vox:{ type:'berry', height:5, leaf:0x4a7a3a, leaf2:0x5c8f45, berry:0xe8a33c, stem:0x6b7a3a } },
 
   { id:'birch', name:'BIRCH', sci:'Betula pubescens', kind:'plant', area:'bog',
-    rarity:1, hp:74, attack:9, defense:28, speed:3, height:4.0,
+    rarity:1, hp:74, attack:9, defense:28, speed:3, height:8.49,
     fact:'The birch grows higher than any other tree in Norway and sets the treeline in the mountains.',
     moves:[{n:'BIRCH SWITCH',s:13},{n:'SAP FLOOD',s:10},{n:'BIRCHBARK SHIELD',s:11}],
     vox:{ type:'broadleaf', height:12, crownR:4, foliage:0x5c9440, foliage2:0x71a84e,
@@ -311,7 +311,7 @@ const SPECIES = [
 
 
   { id:'beaver', name:'BEAVER', sci:'Castor fiber', kind:'animal', area:'bog',
-    rarity:4, hp:84, attack:23, defense:26, speed:14, height:1.5,
+    rarity:4, hp:84, attack:23, defense:26, speed:14, height:0.89,
     fact:'The beaver fells trees with its teeth and builds dams that create wetland for hundreds of species.',
     moves:[{n:'TREE FELLING',s:27},{n:'TAIL SLAP',s:21},{n:'DAM',s:13}],
     vox:{ type:'quadruped', len:10, height:5, width:5, legs:2,
@@ -320,7 +320,7 @@ const SPECIES = [
       ears:{h:1, color:0x4a3320}, snout:0x2a1c12, eyes:0x120d0a } },
 
   { id:'redthroatedloon', name:'RED-THROATED LOON', sci:'Gavia stellata', kind:'animal', area:'bog',
-    rarity:4, hp:54, attack:19, defense:15, speed:25, height:1.3,
+    rarity:4, hp:54, attack:19, defense:15, speed:25, height:1.09,
     fact:'The red-throated loon nests on small bog pools and flies all the way out to sea to fetch fish for the chick.',
     moves:[{n:'DEEP DIVE',s:22},{n:'BEAK SPEAR',s:17},{n:'WAILING CALL',s:11}],
     vox:{ type:'bird', width:5, height:7, depth:6,
@@ -328,7 +328,7 @@ const SPECIES = [
       beak:0x22262a, eyes:0xa8302a, streak:0x8a2a26 } },
 
   { id:'trout', name:'BROWN TROUT', sci:'Salmo trutta', kind:'animal', area:'bog',
-    rarity:2, hp:52, attack:19, defense:13, speed:28, height:1.2,
+    rarity:2, hp:52, attack:19, defense:13, speed:28, height:0.57,
     fact:'The trout recognises its home stream by smell and finds its way back there to spawn.',
     moves:[{n:'CURRENT THRUST',s:21},{n:'SPOTTED SHEEN',s:15},{n:'STREAM RUN',s:11}],
     vox:{ type:'fish', len:11, height:5, width:4,
@@ -336,34 +336,34 @@ const SPECIES = [
       streak:0xc85a3c, eyes:0x171310 } },
 
   { id:'sundew', name:'SUNDEW', sci:'Drosera rotundifolia', kind:'plant', area:'bog',
-    rarity:4, hp:32, attack:18, defense:9, speed:4, height:0.6,
+    rarity:4, hp:32, attack:18, defense:9, speed:4, height:0.55,
     fact:'The sundew catches insects in sticky droplets because bog soil lacks nitrogen.',
     moves:[{n:'GLUE DROP',s:20},{n:'GLAND GRIP',s:15},{n:'DIGESTION',s:12}],
     vox:{ type:'flower', height:3, petal:0xc22a3c, petal2:0xe04a56, center:0xf4f1e6,
       stem:0x8a3a2e, leaf:0xa8342e, petals:6 } },
 
   { id:'cottongrass', name:'COTTONGRASS', sci:'Eriophorum angustifolium', kind:'plant', area:'bog',
-    rarity:1, hp:28, attack:6, defense:11, speed:4, height:1.0,
+    rarity:1, hp:28, attack:6, defense:11, speed:4, height:0.97,
     fact:'The cottongrass tuft is seed down, not flower. The wind carries it out across the bog.',
     moves:[{n:'COTTON TUFT',s:11},{n:'PEAT ROOT',s:9},{n:'WIND SCATTER',s:7}],
     vox:{ type:'flower', height:6, petal:0xf4f2ec, petal2:0xffffff, center:0xe8e4d8,
       stem:0x6b7a3a, leaf:0x5a6b30, petals:7 } },
 
   { id:'orangebolete', name:'ORANGE BOLETE', sci:'Leccinum aurantiacum', kind:'plant', area:'bog',
-    rarity:3, hp:44, attack:13, defense:17, speed:3, height:1.5,
+    rarity:3, hp:44, attack:13, defense:17, speed:3, height:0.73,
     fact:'The orange bolete turns blue-black on the cut surface within a few minutes.',
     moves:[{n:'CUT BLACKENING',s:15},{n:'TUBE SPORES',s:13},{n:'SCALY STEM',s:10}],
     vox:{ type:'mushroom', height:7, cap:0xc45a22, dots:null, stem:0xe4dcc8, gills:0xd0c6a8 } },
 
   { id:'greyalder', name:'GREY ALDER', sci:'Alnus incana', kind:'plant', area:'bog',
-    rarity:1, hp:64, attack:9, defense:25, speed:3, height:3.4,
+    rarity:1, hp:64, attack:9, defense:25, speed:3, height:7.01,
     fact:'The grey alder fixes nitrogen from the air with bacteria in its root nodules and fertilises its own ground.',
     moves:[{n:'ROOT NODULE',s:13},{n:'LEAF SHADE',s:11},{n:'SAP FLOOD',s:9}],
     vox:{ type:'broadleaf', height:10, crownR:4, foliage:0x4a7a3e, foliage2:0x5c8f4a,
       trunk:0x8a8a82 } },
 
   { id:'goatwillow', name:'GOAT WILLOW', sci:'Salix caprea', kind:'plant', area:'bog',
-    rarity:2, hp:58, attack:10, defense:22, speed:4, height:2.8,
+    rarity:2, hp:58, attack:10, defense:22, speed:4, height:4.64,
     fact:'The goat willow flowers before leaf burst and gives the bumblebees their first pollen of spring.',
     moves:[{n:'CATKIN',s:14},{n:'WILLOW WEAVE',s:11},{n:'EARLY POLLEN',s:10}],
     vox:{ type:'broadleaf', height:9, crownR:4, foliage:0x8a9e5a, foliage2:0x9eb06a,
@@ -371,7 +371,7 @@ const SPECIES = [
 
   /* ---------------------------------------------------------- THE COAST */
   { id:'eagleowl', name:'EAGLE OWL', sci:'Bubo bubo', kind:'animal', area:'coast',
-    rarity:5, hp:70, attack:29, defense:18, speed:24, height:1.5,
+    rarity:5, hp:70, attack:29, defense:18, speed:24, height:1.13,
     fact:'The eagle owl is the largest owl in Europe. The wingspan reaches 180 cm.',
     moves:[{n:'DIVE ATTACK',s:33},{n:'TALON GRIP',s:25},{n:'HOOT',s:13}],
     vox:{ type:'bird', width:6, height:8, depth:5,
@@ -379,7 +379,7 @@ const SPECIES = [
       ears:{h:2, color:0x6d5436}, beak:0x2a2320, eyes:0xe8a41c, streak:0x4e3b26 } },
 
   { id:'seaeagle', name:'SEA EAGLE', sci:'Haliaeetus albicilla', kind:'animal', area:'coast',
-    rarity:4, hp:76, attack:32, defense:19, speed:27, height:1.8,
+    rarity:4, hp:76, attack:32, defense:19, speed:27, height:1.31,
     fact:'The sea eagle has the largest wingspan in northern Europe and can live over 30 years.',
     moves:[{n:'FISH GRIP',s:34},{n:'WING BEAT',s:23},{n:'SCREECH',s:14}],
     vox:{ type:'bird', width:7, height:9, depth:5,
@@ -387,7 +387,7 @@ const SPECIES = [
       beak:0xe8c23c, eyes:0xd8c03a, streak:0xe8e4da, tail:0xf0ece2 } },
 
   { id:'pine', name:'SCOTS PINE', sci:'Pinus sylvestris', kind:'plant', area:'coast',
-    rarity:1, hp:86, attack:10, defense:32, speed:2, height:4.6,
+    rarity:1, hp:86, attack:10, defense:32, speed:2, height:10.65,
     fact:'Pine on barren coast can reach 700 years. The heartwood is nearly rot-proof.',
     moves:[{n:'CONE TOSS',s:15},{n:'BARK SHIELD',s:9},{n:'TAR DRIP',s:12}],
     vox:{ type:'conifer', form:'pine', height:14, radius:5,
@@ -395,7 +395,7 @@ const SPECIES = [
 
 
   { id:'reddeer', name:'RED DEER', sci:'Cervus elaphus', kind:'animal', area:'coast',
-    rarity:3, hp:98, attack:27, defense:23, speed:31, height:2.3,
+    rarity:3, hp:98, attack:27, defense:23, speed:31, height:2.09,
     fact:'The red deer rut in September fills the western hillsides with roars that carry across the whole valley.',
     moves:[{n:'RUT CHARGE',s:30},{n:'ANTLER CLASH',s:25},{n:'BELLOW',s:14}],
     vox:{ type:'quadruped', len:10, height:7, width:5, legs:6,
@@ -405,7 +405,7 @@ const SPECIES = [
       antlers:{span:7, color:0x8a7a52} } },
 
   { id:'hedgehog', name:'HEDGEHOG', sci:'Erinaceus europaeus', kind:'animal', area:'coast',
-    rarity:3, hp:48, attack:14, defense:28, speed:10, height:0.8,
+    rarity:3, hp:48, attack:14, defense:28, speed:10, height:0.59,
     fact:'The hedgehog has around 6000 spines and rolls into a ball with a single muscle along its back.',
     moves:[{n:'SPINE BALL',s:20},{n:'ROLL GUARD',s:16},{n:'SNUFFLING',s:8}],
     vox:{ type:'quadruped', len:7, height:4, width:5, legs:1,
@@ -414,7 +414,7 @@ const SPECIES = [
       ears:{h:1, color:0xb8a082}, snout:0x2a2420, eyes:0x120d0a, spots:0xe8e0cc } },
 
   { id:'puffin', name:'PUFFIN', sci:'Fratercula arctica', kind:'animal', area:'coast',
-    rarity:4, hp:46, attack:15, defense:14, speed:30, height:0.9,
+    rarity:4, hp:46, attack:15, defense:14, speed:30, height:0.78,
     fact:'The puffin carries a dozen sand eels crosswise in its beak at once, held by spines in the palate.',
     moves:[{n:'PLUNGE DIVE',s:20},{n:'BEAK LOAD',s:18},{n:'WING WHIRR',s:12}],
     vox:{ type:'bird', width:5, height:6, depth:4,
@@ -422,7 +422,7 @@ const SPECIES = [
       beak:0xe84a22, eyes:0x171310, streak:0xc8c4ba } },
 
   { id:'kittiwake', name:'KITTIWAKE', sci:'Rissa tridactyla', kind:'animal', area:'coast',
-    rarity:4, hp:44, attack:16, defense:12, speed:32, height:1.0,
+    rarity:4, hp:44, attack:16, defense:12, speed:32, height:0.88,
     fact:'The kittiwake nests on sheer cliff ledges. The population has fallen over 80 percent since 1980.',
     moves:[{n:'LEDGE DIVE',s:19},{n:'WING FLICK',s:15},{n:'KITTIWAKE CALL',s:10}],
     vox:{ type:'bird', width:5, height:6, depth:4,
@@ -430,7 +430,7 @@ const SPECIES = [
       beak:0xd8c23c, eyes:0x171310, streak:0x2a2c2e } },
 
   { id:'herring', name:'HERRING', sci:'Clupea harengus', kind:'animal', area:'coast',
-    rarity:2, hp:40, attack:14, defense:11, speed:30, height:1.0,
+    rarity:2, hp:40, attack:14, defense:11, speed:30, height:0.46,
     fact:'A herring shoal can number in the billions and turns as one body when a predator comes.',
     moves:[{n:'SHOAL VORTEX',s:18},{n:'SILVER FLASH',s:14},{n:'SPLASH',s:9}],
     vox:{ type:'fish', len:9, height:4, width:3,
@@ -438,21 +438,21 @@ const SPECIES = [
       streak:0xc8d2da, eyes:0x171310 } },
 
   { id:'oak', name:'OAK', sci:'Quercus robur', kind:'plant', area:'coast',
-    rarity:3, hp:96, attack:12, defense:36, speed:2, height:4.4,
+    rarity:3, hp:96, attack:12, defense:36, speed:2, height:9.87,
     fact:'An old oak can host over a thousand species of insect, lichen and fungus.',
     moves:[{n:'ACORN FALL',s:16},{n:'BRANCH WEIGHT',s:14},{n:'BARK SHIELD',s:13}],
     vox:{ type:'broadleaf', height:12, crownR:6, foliage:0x4a7a32, foliage2:0x5c8f3e,
       trunk:0x5c4a36 } },
 
   { id:'yew', name:'YEW', sci:'Taxus baccata', kind:'plant', area:'coast',
-    rarity:4, hp:72, attack:16, defense:30, speed:2, height:2.6,
+    rarity:4, hp:72, attack:16, defense:30, speed:2, height:6.04,
     fact:'The whole yew is poisonous except the red berry flesh. The wood was used for longbows.',
     moves:[{n:'TAXINE TOXIN',s:22},{n:'BOW WOOD',s:15},{n:'SHADE GROWTH',s:11}],
     vox:{ type:'conifer', height:9, radius:4, foliage:0x2a4a32, foliage2:0x35593c, trunk:0x7a4a38 } },
 
   /* ---------------------------------------------------------- THE PLATEAU */
   { id:'reindeer', name:'REINDEER', sci:'Rangifer tarandus', kind:'animal', area:'plateau',
-    rarity:3, hp:96, attack:24, defense:24, speed:29, height:2.4,
+    rarity:3, hp:96, attack:24, defense:24, speed:29, height:1.97,
     fact:'The reindeer sees ultraviolet light and can pick out lichen and wolf fur against the snow.',
     moves:[{n:'HERD STAMPEDE',s:29},{n:'ANTLER SWEEP',s:25},{n:'SNOW DIG',s:14}],
     vox:{ type:'quadruped', len:10, height:6, width:5, legs:6,
@@ -462,7 +462,7 @@ const SPECIES = [
       antlers:{span:9, color:0xd8c9a8} } },
 
   { id:'ptarmigan', name:'WILLOW PTARMIGAN', sci:'Lagopus lagopus', kind:'animal', area:'plateau',
-    rarity:2, hp:44, attack:13, defense:12, speed:31, height:1.1,
+    rarity:2, hp:44, attack:13, defense:12, speed:31, height:0.86,
     fact:'The willow ptarmigan has feathers right down to its toes. The feet work like snowshoes on the crust.',
     moves:[{n:'FLUSH',s:17},{n:'CRUST RUN',s:13},{n:'LAUGHING CALL',s:9}],
     vox:{ type:'bird', width:5, height:6, depth:4,
@@ -470,7 +470,7 @@ const SPECIES = [
       beak:0x2e2a26, eyes:0x171310, streak:0xb8a888 } },
 
   { id:'arcticfox', name:'ARCTIC FOX', sci:'Vulpes lagopus', kind:'animal', area:'plateau',
-    rarity:5, hp:58, attack:21, defense:16, speed:30, height:1.4,
+    rarity:5, hp:58, attack:21, defense:16, speed:30, height:0.89,
     fact:'The arctic fox tolerates 50 degrees of frost. It is among the most endangered mammals in Norway.',
     moves:[{n:'SNOW POUNCE',s:26},{n:'ICE BITE',s:19},{n:'SQUEAK',s:11}],
     vox:{ type:'quadruped', len:8, height:5, width:5, legs:2,
@@ -479,14 +479,14 @@ const SPECIES = [
       ears:{h:2, color:0xd6dade}, snout:0x2a2a2e, eyes:0x171114 } },
 
   { id:'heather', name:'HEATHER', sci:'Calluna vulgaris', kind:'plant', area:'plateau',
-    rarity:1, hp:40, attack:7, defense:17, speed:3, height:1.1,
+    rarity:1, hp:40, attack:7, defense:17, speed:3, height:0.97,
     fact:'Heather can live 40 years. The coastal heathlands have been kept open by burning for 5000 years.',
     moves:[{n:'HEATHER CARPET',s:12},{n:'ROOT WEAVE',s:10},{n:'HONEY SCENT',s:8}],
     vox:{ type:'berry', height:5, leaf:0x4e5f36, leaf2:0x63763f, berry:0xb464a8, stem:0x6b5a3a } },
 
 
   { id:'muskox', name:'MUSK OX', sci:'Ovibos moschatus', kind:'animal', area:'plateau',
-    rarity:5, hp:130, attack:34, defense:34, speed:14, height:2.2,
+    rarity:5, hp:130, attack:34, defense:34, speed:14, height:2.14,
     fact:'The musk ox herd forms a ring with horns out towards the predator. The Dovre herd descends from Greenland stock.',
     moves:[{n:'HORN CHARGE',s:36},{n:'RING DEFENCE',s:26},{n:'STOMP',s:18}],
     vox:{ type:'quadruped', len:11, height:7, width:7, legs:3,
@@ -496,7 +496,7 @@ const SPECIES = [
       antlers:{span:5, color:0xd8cba8}, dewlap:0x241d18 } },
 
   { id:'goldenplover', name:'GOLDEN PLOVER', sci:'Pluvialis apricaria', kind:'animal', area:'plateau',
-    rarity:2, hp:40, attack:13, defense:11, speed:33, height:0.9,
+    rarity:2, hp:40, attack:13, defense:11, speed:33, height:0.76,
     fact:'The golden plover lures predators away from the nest by limping as if its wing were broken.',
     moves:[{n:'BROKEN-WING LURE',s:16},{n:'MOOR SPRINT',s:14},{n:'WHISTLE CALL',s:9}],
     vox:{ type:'bird', width:5, height:6, depth:4,
@@ -504,19 +504,19 @@ const SPECIES = [
       beak:0x22201c, eyes:0x171310, streak:0xe8d86a } },
 
   { id:'crowberry', name:'CROWBERRY', sci:'Empetrum nigrum', kind:'plant', area:'plateau',
-    rarity:1, hp:34, attack:8, defense:15, speed:3, height:0.8,
+    rarity:1, hp:34, attack:8, defense:15, speed:3, height:0.67,
     fact:'Crowberry releases compounds that suppress other plants and can cover the plateau in dense mats.',
     moves:[{n:'BLACK BERRY',s:12},{n:'MAT GRIP',s:11},{n:'INHIBITOR',s:10}],
     vox:{ type:'berry', height:4, leaf:0x2e4a32, leaf2:0x3a5c3c, berry:0x1a1a22, stem:0x4a3a28 } },
 
   { id:'dwarfcornel', name:'DWARF CORNEL', sci:'Cornus suecica', kind:'plant', area:'plateau',
-    rarity:2, hp:32, attack:9, defense:11, speed:4, height:0.9,
+    rarity:2, hp:32, attack:9, defense:11, speed:4, height:0.67,
     fact:'The black flower of the dwarf cornel sits inside four white bracts that look like petals.',
     moves:[{n:'BERRY CLUSTER',s:13},{n:'BRACT',s:10},{n:'ROOT SUCKER',s:8}],
     vox:{ type:'berry', height:5, leaf:0x4a7a3e, leaf2:0x5c8f4a, berry:0xc43a2a, stem:0x5a6b3a } },
 
   { id:'dwarfbirch', name:'DWARF BIRCH', sci:'Betula nana', kind:'plant', area:'plateau',
-    rarity:1, hp:44, attack:8, defense:19, speed:3, height:1.2,
+    rarity:1, hp:44, attack:8, defense:19, speed:3, height:1.35,
     fact:'The dwarf birch stays under the snow cover through winter and escapes frost burn.',
     moves:[{n:'SNOW SHELTER',s:12},{n:'BIRCH SWITCH',s:10},{n:'ROOT WEAVE',s:9}],
     vox:{ type:'broadleaf', height:5, crownR:3, foliage:0x6b8a3a, foliage2:0x7d9e48,
@@ -524,7 +524,7 @@ const SPECIES = [
 
   /* ---------------------------------------------------------- THE FJORD */
   { id:'otter', name:'OTTER', sci:'Lutra lutra', kind:'animal', area:'fjord',
-    rarity:4, hp:66, attack:25, defense:17, speed:32, height:1.3,
+    rarity:4, hp:66, attack:25, defense:17, speed:32, height:0.87,
     fact:'The otter has 50,000 hairs per square centimetre. The fur traps air and holds the heat in.',
     moves:[{n:'DIVE BITE',s:28},{n:'TAIL SLAP',s:20},{n:'SPLASH',s:12}],
     vox:{ type:'quadruped', len:11, height:4, width:4, legs:1,
@@ -533,7 +533,7 @@ const SPECIES = [
       ears:{h:1, color:0x4a3628}, snout:0xc0ac92, eyes:0x120d0a } },
 
   { id:'cod', name:'COD', sci:'Gadus morhua', kind:'animal', area:'fjord',
-    rarity:2, hp:52, attack:18, defense:14, speed:22, height:1.4,
+    rarity:2, hp:52, attack:18, defense:14, speed:22, height:0.79,
     fact:'The skrei swims 1000 km from the Barents Sea to Lofoten to spawn every winter.',
     moves:[{n:'SHOAL THRUST',s:21},{n:'SUCTION GAPE',s:16},{n:'SKREI RUN',s:11}],
     vox:{ type:'fish', len:12, height:6, width:4,
@@ -541,7 +541,7 @@ const SPECIES = [
       streak:0xd8d0b4, eyes:0x171310, barbel:0xc0b894 } },
 
   { id:'harbourseal', name:'HARBOUR SEAL', sci:'Phoca vitulina', kind:'animal', area:'fjord',
-    rarity:3, hp:86, attack:20, defense:25, speed:18, height:1.5,
+    rarity:3, hp:86, attack:20, defense:25, speed:18, height:1.06,
     fact:'The harbour seal can hold its breath for nearly half an hour and sleep underwater.',
     moves:[{n:'WAVE SURGE',s:24},{n:'FLIPPER SLAP',s:18},{n:'BARK',s:10}],
     vox:{ type:'seal', len:11, height:5, width:5,
@@ -549,14 +549,14 @@ const SPECIES = [
       snout:0x4a4d50, eyes:0x120d0a, spots:0x5a5e62 } },
 
   { id:'kelp', name:'KELP', sci:'Laminaria hyperborea', kind:'plant', area:'fjord',
-    rarity:2, hp:58, attack:8, defense:22, speed:7, height:2.6,
+    rarity:2, hp:58, attack:8, defense:22, speed:7, height:2.51,
     fact:'The kelp forest along the Norwegian coast is among the most species-rich forests in the sea.',
     moves:[{n:'WEED GRIP',s:14},{n:'WAVE BEAT',s:12},{n:'SLIME COAT',s:9}],
     vox:{ type:'kelp', height:11, blades:5, bladeLen:5,
       stem:0x6b4a22, holdfast:0x4a3318, leaf:0x5c6b28, leaf2:0x74853a } },
 
   { id:'greyseal', name:'GREY SEAL', sci:'Halichoerus grypus', kind:'animal', area:'fjord',
-    rarity:4, hp:104, attack:26, defense:28, speed:17, height:1.9,
+    rarity:4, hp:104, attack:26, defense:28, speed:17, height:1.26,
     fact:'The grey seal bears white pups on land in autumn. The bull can reach three metres.',
     moves:[{n:'JAW GAPE',s:28},{n:'WEIGHT THROW',s:22},{n:'BELLOW',s:12}],
     vox:{ type:'seal', len:13, height:6, width:6,
@@ -564,7 +564,7 @@ const SPECIES = [
       snout:0x2e2c28, eyes:0x120d0a, spots:0x3a3832 } },
 
   { id:'porpoise', name:'PORPOISE', sci:'Phocoena phocoena', kind:'animal', area:'fjord',
-    rarity:4, hp:88, attack:24, defense:22, speed:34, height:1.6,
+    rarity:4, hp:88, attack:24, defense:22, speed:34, height:1.06,
     fact:'The porpoise is the smallest toothed whale in the world and finds fish with clicks above 100 kHz.',
     moves:[{n:'ECHOLOCATION',s:26},{n:'SHOAL HUNT',s:22},{n:'BLOWHOLE SPRAY',s:12}],
     vox:{ type:'seal', len:13, height:5, width:5,
@@ -572,7 +572,7 @@ const SPECIES = [
       snout:0x1a1e22, eyes:0x120d0a } },
 
   { id:'salmon', name:'SALMON', sci:'Salmo salar', kind:'animal', area:'fjord',
-    rarity:3, hp:62, attack:22, defense:15, speed:33, height:1.5,
+    rarity:3, hp:62, attack:22, defense:15, speed:33, height:0.79,
     fact:'The salmon grows at sea and finds its way back to its own river by smell to spawn.',
     moves:[{n:'WATERFALL LEAP',s:25},{n:'SILVER THRUST',s:20},{n:'RIVER RUN',s:18}],
     vox:{ type:'fish', len:13, height:6, width:4,
@@ -580,7 +580,7 @@ const SPECIES = [
       streak:0xc8d0d8, eyes:0x171310 } },
 
   { id:'saithe', name:'SAITHE', sci:'Pollachius virens', kind:'animal', area:'fjord',
-    rarity:1, hp:48, attack:17, defense:13, speed:27, height:1.3,
+    rarity:1, hp:48, attack:17, defense:13, speed:27, height:0.75,
     fact:'Saithe run in large shoals under the quay edge and chase herring at the surface.',
     moves:[{n:'SHOAL THRUST',s:19},{n:'QUAY HUNT',s:15},{n:'SPLASH',s:10}],
     vox:{ type:'fish', len:11, height:5, width:4,
@@ -588,21 +588,21 @@ const SPECIES = [
       streak:0xd8dcd8, eyes:0x171310 } },
 
   { id:'sugarkelp', name:'SUGAR KELP', sci:'Saccharina latissima', kind:'plant', area:'fjord',
-    rarity:1, hp:50, attack:7, defense:20, speed:7, height:2.2,
+    rarity:1, hp:50, attack:7, defense:20, speed:7, height:2.51,
     fact:'Sugar kelp gets a white sugar coating when it dries. It has vanished from large parts of southern Norway.',
     moves:[{n:'WAVE SWEEP',s:12},{n:'SUGAR FILM',s:10},{n:'HOLDFAST GRIP',s:9}],
     vox:{ type:'kelp', height:10, blades:3, bladeLen:6,
       stem:0x7a5a2a, holdfast:0x4a3318, leaf:0x6b6b2a, leaf2:0x86863c } },
 
   { id:'knottedwrack', name:'KNOTTED WRACK', sci:'Ascophyllum nodosum', kind:'plant', area:'fjord',
-    rarity:1, hp:54, attack:9, defense:23, speed:6, height:1.8,
+    rarity:1, hp:54, attack:9, defense:23, speed:6, height:1.68,
     fact:'Knotted wrack adds one air bladder per year. Plants with over fifty bladders are common.',
     moves:[{n:'BLADDER FLOAT',s:13},{n:'WEED WHIP',s:11},{n:'SHORE GRIP',s:10}],
     vox:{ type:'kelp', height:8, blades:6, bladeLen:4,
       stem:0x6b5a22, holdfast:0x4a3a18, leaf:0x8a7a2a, leaf2:0xa08c3a } },
 
   { id:'eelgrass', name:'EELGRASS', sci:'Zostera marina', kind:'plant', area:'fjord',
-    rarity:2, hp:42, attack:6, defense:18, speed:8, height:1.4,
+    rarity:2, hp:42, attack:6, defense:18, speed:8, height:1.23,
     fact:'Eelgrass is a flowering plant, not a seaweed. The meadows are a nursery for cod fry.',
     moves:[{n:'MEADOW SWEEP',s:11},{n:'RHIZOME GRIP',s:10},{n:'WAVE DAMPEN',s:9}],
     vox:{ type:'kelp', height:9, blades:7, bladeLen:5,

@@ -1,15 +1,15 @@
-"""Henter kalibreringsbilder automatisk, ett per art i species.js.
+"""Fetches calibration images automatically, one per species in species.js.
 
-    python tools/hent_kalibrering.py
+    python tools/fetch_calibration.py
 
-Kalibrering er ikke trening. Modellens vekter rores ikke. Skriptet maaler
-bare hvilke tallomraader aktiveringene faktisk bruker, slik at int8-skalaene
-settes riktig. Uten dette maa eksporten gjette, og da blir fila dobbelt saa
-stor (fp16) fordi vi ikke toer aa kvantisere.
+Calibration is not training. The model's weights are never touched. The script
+only measures which number ranges the activations actually use, so the int8
+scales are set correctly. Without this the export has to guess, and the file
+comes out twice the size (fp16) because we dare not quantize.
 
-Bildene kommer fra Wikipedias REST-API - artikkelens hovedbilde for hvert
-latinske navn i species.js, pluss noen scener uten art i seg (bakke, himmel,
-skogbunn), fordi spilleren kommer til aa peke kameraet dit ogsaa.
+The images come from Wikipedia's REST API - the article's lead image for every
+latin name in species.js, plus a few scenes with no species in them (ground,
+sky, forest floor), because the player is going to point the camera there too.
 """
 
 from __future__ import annotations
@@ -20,66 +20,66 @@ import re
 import time
 import urllib.request
 
-ROT = pathlib.Path(__file__).resolve().parent.parent
-UT = ROT / "tools" / "kalibrering"
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+OUT = ROOT / "tools" / "calibration"
 
 WIKI = "https://en.wikipedia.org/api/rest_v1/page/summary/"
-HODER = {"User-Agent": "villmark-kalibrering/1.0 (artsmodell-eksport)"}
+HEADERS = {"User-Agent": "villmark-calibration/1.0 (species model export)"}
 
-# Uten motiv: skanneren peker ofte paa ingenting saerlig, og int8-skalaene
-# maa taale de bildene ogsaa.
-SCENER = [
+# No subject: the scanner often points at nothing in particular, and the int8
+# scales have to cope with those images too.
+SCENES = [
     "Forest_floor", "Moss", "Tundra", "Bog", "Scree", "Seaweed",
     "Overcast", "Gravel", "Snow", "Tree_bark",
 ]
 
 
-def arter_fra_species_js() -> list[str]:
-    """Plukker sci-feltene ut av species.js uten aa kjore JavaScript."""
-    tekst = (ROT / "species.js").read_text(encoding="utf-8")
-    return re.findall(r"sci:\s*'([^']+)'", tekst)
+def species_from_species_js() -> list[str]:
+    """Picks the sci fields out of species.js without running any JavaScript."""
+    text = (ROOT / "species.js").read_text(encoding="utf-8")
+    return re.findall(r"sci:\s*'([^']+)'", text)
 
 
-def hent(url: str, timeout: int = 60) -> bytes:
-    req = urllib.request.Request(url, headers=HODER)
-    with urllib.request.urlopen(req, timeout=timeout) as svar:
-        return svar.read()
+def fetch(url: str, timeout: int = 60) -> bytes:
+    req = urllib.request.Request(url, headers=HEADERS)
+    with urllib.request.urlopen(req, timeout=timeout) as answer:
+        return answer.read()
 
 
-def hent_ett(navn: str, artikkel: str) -> bool:
-    sti = UT / f"{navn}.jpg"
-    if sti.exists():
+def fetch_one(name: str, article: str) -> bool:
+    path = OUT / f"{name}.jpg"
+    if path.exists():
         return True
     try:
-        data = json.loads(hent(WIKI + artikkel.replace(" ", "_")))
-        # thumbnail forst: Wikimedia svarer 429 paa fullstore originaler
-        kilde = (data.get("thumbnail") or data.get("originalimage") or {}).get("source")
-        if not kilde:
-            print(f"  {navn}: ingen bilde i artikkelen")
+        data = json.loads(fetch(WIKI + article.replace(" ", "_")))
+        # thumbnail first: Wikimedia answers 429 on full-size originals
+        source = (data.get("thumbnail") or data.get("originalimage") or {}).get("source")
+        if not source:
+            print(f"  {name}: no image in the article")
             return False
-        sti.write_bytes(hent(kilde))
+        path.write_bytes(fetch(source))
         return True
-    except Exception as feil:
-        print(f"  {navn}: {feil}")
+    except Exception as err:
+        print(f"  {name}: {err}")
         return False
 
 
 def main() -> None:
-    UT.mkdir(parents=True, exist_ok=True)
-    oppgaver = [(sci.replace(" ", "_"), sci) for sci in arter_fra_species_js()]
-    oppgaver += [(s.lower(), s) for s in SCENER]
+    OUT.mkdir(parents=True, exist_ok=True)
+    jobs = [(sci.replace(" ", "_"), sci) for sci in species_from_species_js()]
+    jobs += [(s.lower(), s) for s in SCENES]
 
-    print(f"henter opptil {len(oppgaver)} bilder til {UT}")
+    print(f"fetching up to {len(jobs)} images into {OUT}")
     ok = 0
-    for navn, artikkel in oppgaver:
-        if hent_ett(navn, artikkel):
+    for name, article in jobs:
+        if fetch_one(name, article):
             ok += 1
-        time.sleep(1.0)   # Wikipedia svarer 429 om vi henter for fort
+        time.sleep(1.0)   # Wikipedia answers 429 if we fetch too fast
 
-    antall = len(list(UT.glob("*.jpg")))
-    print(f"\n{ok} hentet, {antall} bilder ligger i {UT}")
-    if antall < 20:
-        print("ADVARSEL: under 20 bilder gir daarlige int8-skalaer. Kjor paa nytt.")
+    count = len(list(OUT.glob("*.jpg")))
+    print(f"\n{ok} fetched, {count} images sit in {OUT}")
+    if count < 20:
+        print("WARNING: fewer than 20 images gives poor int8 scales. Run it again.")
 
 
 if __name__ == "__main__":

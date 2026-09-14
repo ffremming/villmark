@@ -1,18 +1,18 @@
-# Byggesteg for artsmodellene. Kjores en gang lokalt, ikke av spillet.
+# Build step for the species models. Run once locally, never by the game.
 # Python 3.10-3.12.
 torch>=2.4
 torchvision>=0.19
 onnx>=1.16
 onnxruntime>=1.19
-onnxconverter-common>=1.14     # fp16-konvertering
+onnxconverter-common>=1.14     # fp16 conversion
 pillow>=10.0
 numpy>=1.26
 
-# dyremodellen
+# the animal model
 speciesnet>=5.0
 
-# plantemodellen
+# the plant model
 birder>=0.7
 
-# nettlesertesten, valgfri - drar med seg en Chromium
+# the browser test, optional - it pulls in a Chromium
 # playwright>=1.40

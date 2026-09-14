@@ -1,6 +1,7 @@
-/* VILLMARK - DYSTLOBBY
-   Skjermen foran kortspillet: velg navn, velg dekk, se hvem som er paanett
-   og utfordre dem. Lobbyen kjenner bare NETT og KORTSPILL sine ytterdorer. */
+/* VILLMARK - DUEL LOBBY
+   The screen in front of the card game: pick a name, pick a deck, see who is
+   online and challenge them. The lobby knows only the front doors of NET and
+   CARDGAME. */
 
 const LOBBY = (() => {
 'use strict';
@@ -9,349 +10,352 @@ const VM = () => window.VM;
 const $  = s => document.querySelector(s);
 
 const L = {
-  kablet:false,
-  startet:false,
-  spillere:[],
-  innkomne:new Map(),   // id -> kampId for dem som har utfordret oss
-  venterPaa:null,       // id vi selv har utfordret
-  venterFelt:false,     // we asked someone for their lawn and wait for it
-  minLeder:'ld_bjorn',
+  wired:false,
+  started:false,
+  players:[],
+  incoming:new Map(),   // id -> battleId for those who have challenged us
+  waitingFor:null,      // id we have challenged ourselves
+  waitingField:false,   // we asked someone for their lawn and wait for it
+  myLeader:'ld_bear',
 };
 
-/* ============================================================ tegning */
-function lederKnappHTML(l, valgt){
-  const f = KORTFARGER[l.farger[0]], g = KORTFARGER[l.farger[1]];
-  return `<button class="lob-leder${valgt ? ' valgt' : ''}" data-leder="${l.id}"
+/* ============================================================ drawing */
+function leaderButtonHTML(l, selected){
+  const f = CARD_COLORS[l.colors[0]], g = CARD_COLORS[l.colors[1]];
+  return `<button class="lobby-leader${selected ? ' selected' : ''}" data-leader="${l.id}"
     style="--a:${f.hex};--b:${g.hex}">
-    <span class="lob-leder-navn">${l.navn}</span>
-    <span class="lob-leder-farge">${f.navn} / ${g.navn}</span>
-    <span class="lob-leder-liv">${l.liv} LIV</span>
+    <span class="lobby-leader-name">${l.name}</span>
+    <span class="lobby-leader-color">${f.name} / ${g.name}</span>
+    <span class="lobby-leader-life">${l.life} LIFE</span>
   </button>`;
 }
 
-function tegnLedere(){
-  $('#lobLedere').innerHTML = LEDERE.map(l => lederKnappHTML(l, l.id === L.minLeder)).join('');
+function drawLeaders(){
+  $('#lobbyLeaders').innerHTML = LEADERS.map(l => leaderButtonHTML(l, l.id === L.myLeader)).join('');
 }
 
-/* ============================================================ dekket
-   Kortstokken er plenen: hvert dyr og hver plante som staar ute er ett kort.
-   Her velger du hvilke av dem som blir med. Lederen bestemmer hvor stort
-   dekket minst maa vaere, siden livskortene ogsaa tas av stokken. */
-function dekkTilstand(){
-  const leder = KORTBASE[L.minLeder];
-  const ute = dekkbareEksemplarer(VM().STATE.eksemplarer)
-    .sort((a,b) => kortKost(SPECIES_BY_ID[a.art], a.niva)
-                 - kortKost(SPECIES_BY_ID[b.art], b.niva)
-                || SPECIES_BY_ID[a.art].navn.localeCompare(SPECIES_BY_ID[b.art].navn)
+/* ============================================================ the deck
+   The deck is the lawn: every animal and every plant standing out there is
+   one card. Here you choose which of them come along. The leader decides how
+   big the deck has to be at the least, since the life cards are taken off the
+   deck too. */
+function deckState(){
+  const leader = CARD_BASE[L.myLeader];
+  const out = deckableSpecimens(VM().STATE.specimens)
+    .sort((a,b) => cardCost(SPECIES_BY_ID[a.species], a.level)
+                 - cardCost(SPECIES_BY_ID[b.species], b.level)
+                || SPECIES_BY_ID[a.species].name.localeCompare(SPECIES_BY_ID[b.species].name)
                 || a.uid - b.uid);
-  return { leder, ute, antall: VM().dekkStokk().length, minst: dekkMinst(leder) };
+  return { leader, out, count: VM().deckCards().length, least: minDeckSize(leader) };
 }
-const dekkOk = () => { const d = dekkTilstand(); return d.antall >= d.minst; };
+const deckOk = () => { const d = deckState(); return d.count >= d.least; };
 
-function dekkRuteHTML(e){
-  const kort = kortAv(kortIdFor(e.art, e.niva));
-  const med  = VM().dekkHar(e.uid);
-  return `<button class="lob-kort${med ? ' med' : ''}" data-uid="${e.uid}"
-    aria-pressed="${med}">
-    <span class="lob-kort-bilde"><img src="${VM().lagMini(e.art, e.variant)}" alt=""></span>
-    <span class="lob-kort-navn">${kort.navn}</span>
-    <span class="lob-kort-tall">${kort.kost} SOL &middot; ${kort.kraft}</span>
-    ${e.niva > 1 ? `<span class="lob-kort-niva">Nv ${e.niva}</span>` : ''}
+function deckTileHTML(e){
+  const card = cardById(cardIdFor(e.species, e.level));
+  const inDeck = VM().deckHas(e.uid);
+  return `<button class="lobby-card${inDeck ? ' in' : ''}" data-uid="${e.uid}"
+    aria-pressed="${inDeck}">
+    <span class="lobby-card-img"><img src="${VM().makeThumb(e.species, e.variant)}" alt=""></span>
+    <span class="lobby-card-name">${card.name}</span>
+    <span class="lobby-card-num">${card.cost} SUN &middot; ${card.power}</span>
+    ${e.level > 1 ? `<span class="lobby-card-level">Lv ${e.level}</span>` : ''}
   </button>`;
 }
 
-function tegnDekk(){
-  const { ute, antall, minst } = dekkTilstand();
-  const nok = antall >= minst;
+function drawDeck(){
+  const { out, count, least } = deckState();
+  const enough = count >= least;
 
-  const tall = $('#lobDekkTall');
-  tall.textContent = antall + ' KORT';
-  tall.classList.toggle('lob-for-faa', !nok);
+  const num = $('#lobbyDeckCount');
+  num.textContent = count + ' CARDS';
+  num.classList.toggle('lobby-too-few', !enough);
 
-  /* Mot maskinen holder ett kort: stokken fylles opp med de samme kortene
-     om igjen. Mot andre spillere gjelder minstedekket som for. */
-  const hint = $('#lobDekkHint');
-  const tekst = !ute.length
-    ? 'SETT DYR OG PLANTER UT PÅ PLENEN FOR Å FÅ KORT.'
-    : !antall ? 'VELG MINST ETT KORT TIL DEKKET.'
-    : !nok ? 'DEKKET MÅ HA MINST ' + minst + ' KORT MOT ANDRE SPILLERE. '
-           + 'MOT MASKINEN GÅR DE SAMME KORTENE RUNDT OM IGJEN.' : '';
-  hint.textContent = tekst;
-  hint.hidden = !tekst;
+  /* Against the machine one card is enough: the deck is padded out with the
+     same cards over again. Against other players the minimum deck applies as
+     before. */
+  const hint = $('#lobbyDeckHint');
+  const text = !out.length
+    ? 'PLACE ANIMALS AND PLANTS ON THE LAWN TO GET CARDS.'
+    : !count ? 'CHOOSE AT LEAST ONE CARD FOR THE DECK.'
+    : !enough ? 'THE DECK MUST HAVE AT LEAST ' + least + ' CARDS AGAINST OTHER PLAYERS. '
+           + 'AGAINST THE MACHINE THE SAME CARDS GO ROUND AND ROUND AGAIN.' : '';
+  hint.textContent = text;
+  hint.hidden = !text;
 
-  $('#lobDekk').innerHTML = ute.map(dekkRuteHTML).join('');
-  $('#lobDekkBryter').disabled = !ute.length;
-  $('#lobMotAI').disabled = antall < 1;
+  $('#lobbyDeck').innerHTML = out.map(deckTileHTML).join('');
+  $('#lobbyDeckToggle').disabled = !out.length;
+  $('#lobbyVsAi').disabled = count < 1;
 }
 
-function tegnListe(){
-  const ut = $('#lobListe');
-  if(!L.spillere.length){
-    ut.innerHTML = `<p class="lob-tomt">INGEN ANDRE ER PÅNETT NÅ.${
-      NETT.LOKAL_MODUS ? '<br><small>LOKAL TESTMODUS — ÅPNE SPILLET I EN FANE TIL.</small>' : ''}</p>`;
+function drawList(){
+  const out = $('#lobbyList');
+  if(!L.players.length){
+    out.innerHTML = `<p class="lobby-empty">NOBODY ELSE IS ONLINE RIGHT NOW.${
+      NET.LOCAL_MODE ? '<br><small>LOCAL TEST MODE — OPEN THE GAME IN ONE MORE TAB.</small>' : ''}</p>`;
     return;
   }
-  ut.innerHTML = L.spillere.map(s => {
-    const leder = KORTBASE[s.leder];
-    const utfordrer = L.innkomne.has(s.id);
-    const opptatt = s.status === 'i_kamp';
-    return `<button class="lob-rad${utfordrer ? ' utfordrer' : ''}"
-      data-spiller="${s.id}"${opptatt && !utfordrer ? ' disabled' : ''}>
-      <span class="lob-rad-navn">${s.navn}</span>
-      <span class="lob-rad-leder">${leder ? leder.navn : '—'}</span>
-      ${utfordrer ? '<span class="lob-merkelapp">UTFORDRER DEG</span>'
-                  : `<span class="lob-rad-status">${opptatt ? 'I KAMP' : 'LEDIG'}</span>`}
+  out.innerHTML = L.players.map(s => {
+    const leader = CARD_BASE[s.leader];
+    const challenging = L.incoming.has(s.id);
+    const busy = s.status === 'in_battle';
+    return `<button class="lobby-row${challenging ? ' challenging' : ''}"
+      data-player="${s.id}"${busy && !challenging ? ' disabled' : ''}>
+      <span class="lobby-row-name">${s.name}</span>
+      <span class="lobby-row-leader">${leader ? leader.name : '—'}</span>
+      ${challenging ? '<span class="lobby-tag">CHALLENGES YOU</span>'
+                    : `<span class="lobby-row-status">${busy ? 'IN BATTLE' : 'FREE'}</span>`}
     </button>`;
   }).join('');
 }
 
-/* Statuslinja skiller mellom aa vaere tilkoblet og aa vaere synlig.
-   Er du 'usynlig' ser du alle andre, mens ingen ser deg. */
-const STATUSTEKST = {
-  lokal:    'LOKAL TESTMODUS',
-  av:       'KOBLER TIL …',
-  kobler:   'KOBLER TIL …',
-  usynlig:  'IKKE SYNLIG — PRØVER IGJEN',
-  paanett:  'PÅNETT',
+/* The status line tells being connected apart from being visible.
+   When you are 'invisible' you see everyone else, while nobody sees you. */
+const STATUS_TEXT = {
+  local:      'LOCAL TEST MODE',
+  off:        'CONNECTING …',
+  connecting: 'CONNECTING …',
+  invisible:  'NOT VISIBLE — TRYING AGAIN',
+  online:     'ONLINE',
 };
-function tegnStatus(){
-  const el = $('#lobStatus');
-  const t = NETT.tilstand();
-  el.textContent = STATUSTEKST[t] || t;
-  el.classList.toggle('lob-status-varsel', t === 'usynlig' || t === 'kobler');
+function drawStatus(){
+  const el = $('#lobbyStatus');
+  const t = NET.state();
+  el.textContent = STATUS_TEXT[t] || t;
+  el.classList.toggle('lobby-status-warn', t === 'invisible' || t === 'connecting');
 }
 
-function vent(tekst){
-  $('#lobVentTxt').textContent = tekst;
-  $('#lobVent').hidden = false;
+function wait(text){
+  $('#lobbyWaitTxt').textContent = text;
+  $('#lobbyWait').hidden = false;
 }
-function lukkVent(){ $('#lobVent').hidden = true; }
+function closeWait(){ $('#lobbyWait').hidden = true; }
 
-/* ============================================================ utfordringer */
-async function utfordre(id){
-  const s = L.spillere.find(x => x.id === id);
+/* ============================================================ challenges */
+async function challenge(id){
+  const s = L.players.find(x => x.id === id);
   if(!s) return;
-  if(!dekkOk()){ VM().toast('DEKKET DITT ER FOR LITE'); return; }
-  L.venterPaa = id;
-  vent('VENTER PÅ SVAR FRA ' + s.navn + ' …');
+  if(!deckOk()){ VM().toast('YOUR DECK IS TOO SMALL'); return; }
+  L.waitingFor = id;
+  wait('WAITING FOR AN ANSWER FROM ' + s.name + ' …');
 
-  const svar = await NETT.utfordre(id);
-  L.venterPaa = null;
-  lukkVent();
+  const answer = await NET.challenge(id);
+  L.waitingFor = null;
+  closeWait();
 
-  if(!svar.godtatt){
-    VM().toast(svar.tidsavbrudd ? 'INGEN SVAR' : 'UTFORDRINGEN BLE AVSLÅTT');
+  if(!answer.accepted){
+    VM().toast(answer.timeout ? 'NO ANSWER' : 'THE CHALLENGE WAS DECLINED');
     return;
   }
-  gaTilKamp(svar.kampId, 'vert', id);
+  goToBattle(answer.battleId, 'host', id);
 }
 
 /* ------------------------------------------------ visiting a lawn */
 /* A visit is a question to a player who is online right now: they answer
    with a snapshot of their lawn, and it is drawn read-only. Nobody's lawn
    is stored on the network, so an offline player cannot be visited. */
-async function besok(id){
-  const s = L.spillere.find(x => x.id === id);
+async function visit(id){
+  const s = L.players.find(x => x.id === id);
   if(!s) return;
-  L.venterFelt = true;
-  vent('HENTER PLENEN TIL ' + s.navn + ' \u2026');
+  L.waitingField = true;
+  wait('FETCHING THE LAWN OF ' + s.name + ' …');
 
-  const svar = await NETT.askField(id);
-  L.venterFelt = false;
-  lukkVent();
-  if(!svar || !svar.felt){ VM().toast('FIKK IKKE TAK I PLENEN'); return; }
+  const answer = await NET.askField(id);
+  L.waitingField = false;
+  closeWait();
+  if(!answer || !answer.field){ VM().toast('COULD NOT GET HOLD OF THE LAWN'); return; }
 
-  VM().visitField(svar.navn || s.navn, svar.felt);
+  VM().visitField(answer.name || s.name, answer.field);
 }
 
-function godta(id){
-  const kampId = L.innkomne.get(id);
-  if(!kampId) return;
-  /* Et for lite dekk taper paa tom kortstokk foer tredje tur, saa
-     utfordringen avslaas i stedet for aa starte en kamp som er avgjort. */
-  if(!dekkOk()){
-    L.innkomne.delete(id);
-    NETT.svarUtfordring(id, kampId, false);
-    VM().toast('DEKKET DITT ER FOR LITE');
-    tegnListe();
+function accept(id){
+  const battleId = L.incoming.get(id);
+  if(!battleId) return;
+  /* Too small a deck loses on an empty deck before the third turn, so the
+     challenge is declined instead of starting a battle that is already
+     decided. */
+  if(!deckOk()){
+    L.incoming.delete(id);
+    NET.answerChallenge(id, battleId, false);
+    VM().toast('YOUR DECK IS TOO SMALL');
+    drawList();
     return;
   }
-  L.innkomne.delete(id);
-  NETT.svarUtfordring(id, kampId, true);
-  gaTilKamp(kampId, 'gjest', id);
+  L.incoming.delete(id);
+  NET.answerChallenge(id, battleId, true);
+  goToBattle(battleId, 'guest', id);
 }
 
-function avsla(id){
-  const kampId = L.innkomne.get(id);
-  if(!kampId) return;
-  L.innkomne.delete(id);
-  NETT.svarUtfordring(id, kampId, false);
-  tegnListe();
+function decline(id){
+  const battleId = L.incoming.get(id);
+  if(!battleId) return;
+  L.incoming.delete(id);
+  NET.answerChallenge(id, battleId, false);
+  drawList();
 }
 
-/* Kanalen maa staa foer kampen starter, ellers gaar den forste meldingen tapt. */
-function gaTilKamp(kampId, rolle, motpart){
-  NETT.kampInn(kampId, rolle, motpart);
-  KORTSPILL.KS.minLeder = L.minLeder;
-  if(rolle === 'vert') KORTSPILL.startVert(kampId);
-  else                 KORTSPILL.startGjest(kampId);
-  VM().gaTil('battle');
+/* The channel must be up before the battle starts, or the first message is lost. */
+function goToBattle(battleId, role, opponent){
+  NET.battleIn(battleId, role, opponent);
+  CARDGAME.CG.myLeader = L.myLeader;
+  if(role === 'host') CARDGAME.startHost(battleId);
+  else                CARDGAME.startGuest(battleId);
+  VM().goTo('battle');
 }
 
-/* ============================================================ kabling */
-function kable(){
-  if(L.kablet) return;
-  L.kablet = true;
+/* ============================================================ wiring */
+function wire(){
+  if(L.wired) return;
+  L.wired = true;
 
-  $('#lobNavn').addEventListener('change', e => {
-    const n = NETT.settNavn(e.target.value);
+  $('#lobbyName').addEventListener('change', e => {
+    const n = NET.setName(e.target.value);
     e.target.value = n;
   });
 
-  $('#lobLedere').addEventListener('click', e => {
-    const b = e.target.closest('[data-leder]');
+  $('#lobbyLeaders').addEventListener('click', e => {
+    const b = e.target.closest('[data-leader]');
     if(!b) return;
-    L.minLeder = b.dataset.leder;
-    KORTSPILL.KS.minLeder = L.minLeder;
-    NETT.settLeder(L.minLeder);
-    tegnLedere();
-    tegnDekk();            // en leder med flere liv krever et storre dekk
+    L.myLeader = b.dataset.leader;
+    CARDGAME.CG.myLeader = L.myLeader;
+    NET.setLeader(L.myLeader);
+    drawLeaders();
+    drawDeck();            // a leader with more life needs a bigger deck
   });
 
-  $('#lobDekkBryter').addEventListener('click', () => {
-    const rut = $('#lobDekk');
-    rut.hidden = !rut.hidden;
-    $('#lobDekkBryter').textContent = rut.hidden ? 'ENDRE' : 'FERDIG';
+  $('#lobbyDeckToggle').addEventListener('click', () => {
+    const grid = $('#lobbyDeck');
+    grid.hidden = !grid.hidden;
+    $('#lobbyDeckToggle').textContent = grid.hidden ? 'EDIT' : 'DONE';
   });
 
-  $('#lobDekk').addEventListener('click', e => {
+  $('#lobbyDeck').addEventListener('click', e => {
     const b = e.target.closest('[data-uid]');
     if(!b) return;
     const uid = Number(b.dataset.uid);
-    VM().dekkVelg(uid, !VM().dekkHar(uid));
-    tegnDekk();
+    VM().deckChoose(uid, !VM().deckHas(uid));
+    drawDeck();
   });
 
-  $('#lobListe').addEventListener('click', e => {
-    const b = e.target.closest('[data-spiller]');
+  $('#lobbyList').addEventListener('click', e => {
+    const b = e.target.closest('[data-player]');
     if(!b || b.disabled) return;
-    const id = b.dataset.spiller;
-    if(L.innkomne.has(id)) sporGodta(id);
-    else sporValg(id);
+    const id = b.dataset.player;
+    if(L.incoming.has(id)) askAccept(id);
+    else askChoice(id);
   });
 
-  $('#lobVentAvbryt').addEventListener('click', () => {
-    if(L.venterFelt){ NETT.cancelField(); L.venterFelt = false; }
-    else NETT.avbrytUtfordring();
-    L.venterPaa = null;
-    lukkVent();
+  $('#lobbyWaitCancel').addEventListener('click', () => {
+    if(L.waitingField){ NET.cancelField(); L.waitingField = false; }
+    else NET.cancelChallenge();
+    L.waitingFor = null;
+    closeWait();
   });
 
-  $('#lobVelgBesok').addEventListener('click', () => {
-    const id = $('#lobVelg').dataset.spiller;
-    $('#lobVelg').hidden = true;
-    besok(id);
+  $('#lobbyPickVisit').addEventListener('click', () => {
+    const id = $('#lobbyPick').dataset.player;
+    $('#lobbyPick').hidden = true;
+    visit(id);
   });
-  $('#lobVelgDyst').addEventListener('click', () => {
-    const id = $('#lobVelg').dataset.spiller;
-    $('#lobVelg').hidden = true;
-    utfordre(id);
+  $('#lobbyPickDuel').addEventListener('click', () => {
+    const id = $('#lobbyPick').dataset.player;
+    $('#lobbyPick').hidden = true;
+    challenge(id);
   });
-  $('#lobVelgAvbryt').addEventListener('click', () => { $('#lobVelg').hidden = true; });
+  $('#lobbyPickCancel').addEventListener('click', () => { $('#lobbyPick').hidden = true; });
 
-  $('#lobMotAI').addEventListener('click', () => {
-    KORTSPILL.KS.minLeder = L.minLeder;
-    VM().gaTil('battle');
+  $('#lobbyVsAi').addEventListener('click', () => {
+    CARDGAME.CG.myLeader = L.myLeader;
+    VM().goTo('battle');
   });
 
-  $('#lobGodta').addEventListener('click', () => {
-    const id = $('#lobSpor').dataset.fra;
-    $('#lobSpor').hidden = true;
-    godta(id);
+  $('#lobbyAccept').addEventListener('click', () => {
+    const id = $('#lobbyAsk').dataset.from;
+    $('#lobbyAsk').hidden = true;
+    accept(id);
   });
-  $('#lobAvsla').addEventListener('click', () => {
-    const id = $('#lobSpor').dataset.fra;
-    $('#lobSpor').hidden = true;
-    avsla(id);
+  $('#lobbyDecline').addEventListener('click', () => {
+    const id = $('#lobbyAsk').dataset.from;
+    $('#lobbyAsk').hidden = true;
+    decline(id);
   });
 
   /* Someone wants to see our lawn. It costs nothing to show it, so the
      answer goes out without asking - the lawn holds nothing private. */
-  NETT.paa('fieldRequest', fra => NETT.sendField(fra, VM().fieldSnapshot()));
+  NET.on('fieldRequest', from => NET.sendField(from, VM().fieldSnapshot()));
 
-  NETT.paa('spillere', liste => {
-    L.spillere = liste;
-    for(const id of [...L.innkomne.keys()]){
-      if(!liste.some(s => s.id === id)) L.innkomne.delete(id);
+  NET.on('players', players => {
+    L.players = players;
+    for(const id of [...L.incoming.keys()]){
+      if(!players.some(s => s.id === id)) L.incoming.delete(id);
     }
-    const valgt = $('#lobVelg');
-    if(!valgt.hidden && !liste.some(s => s.id === valgt.dataset.spiller)) valgt.hidden = true;
-    tegnListe();
+    const chosen = $('#lobbyPick');
+    if(!chosen.hidden && !players.some(s => s.id === chosen.dataset.player)) chosen.hidden = true;
+    drawList();
   });
 
-  NETT.paa('utfordring', u => {
-    if(u.avbrutt){
-      L.innkomne.delete(u.fra);
-      if($('#lobSpor').dataset.fra === u.fra) $('#lobSpor').hidden = true;
-      tegnListe();
+  NET.on('challenge', c => {
+    if(c.cancelled){
+      L.incoming.delete(c.from);
+      if($('#lobbyAsk').dataset.from === c.from) $('#lobbyAsk').hidden = true;
+      drawList();
       return;
     }
-    L.innkomne.set(u.fra, u.kampId);
-    tegnListe();
-    VM().LYD.naer();
-    VM().toast(u.fraNavn + ' VIL DYSTE');
+    L.incoming.set(c.from, c.battleId);
+    drawList();
+    VM().SOUND.near();
+    VM().toast(c.fromName + ' WANTS TO DUEL');
   });
 
-  NETT.paa('melding', m => KORTSPILL.taImot(m));
+  NET.on('message', m => CARDGAME.receive(m));
 
-  NETT.paa('status', tegnStatus);
+  NET.on('status', drawStatus);
 
-  NETT.paa('borte', () => {
-    if(NETT.rolle) KORTSPILL.motpartBorte();
+  NET.on('gone', () => {
+    if(NET.role) CARDGAME.opponentGone();
   });
 }
 
 /** the two things you can do with another player */
-function sporValg(id){
-  const s = L.spillere.find(x => x.id === id);
-  const d = $('#lobVelg');
-  d.dataset.spiller = id;
-  $('#lobVelgNavn').textContent = s ? s.navn : 'SPILLER';
+function askChoice(id){
+  const s = L.players.find(x => x.id === id);
+  const d = $('#lobbyPick');
+  d.dataset.player = id;
+  $('#lobbyPickName').textContent = s ? s.name : 'PLAYER';
   d.hidden = false;
 }
 
-function sporGodta(id){
-  const s = L.spillere.find(x => x.id === id);
-  const d = $('#lobSpor');
-  d.dataset.fra = id;
-  $('#lobSporTxt').textContent = (s ? s.navn : 'NOEN') + ' VIL DYSTE MOT DEG';
+function askAccept(id){
+  const s = L.players.find(x => x.id === id);
+  const d = $('#lobbyAsk');
+  d.dataset.from = id;
+  $('#lobbyAskTxt').textContent = (s ? s.name : 'SOMEONE') + ' WANTS TO DUEL YOU';
   d.hidden = false;
 }
 
-/* ============================================================ inn og ut */
-async function aapne(){
-  kable();
-  tegnLedere();
-  tegnDekk();
-  tegnListe();
-  tegnStatus();
+/* ============================================================ in and out */
+async function open(){
+  wire();
+  drawLeaders();
+  drawDeck();
+  drawList();
+  drawStatus();
 
-  if(!L.startet){
+  if(!L.started){
     try {
-      await NETT.klar();
-      L.startet = true;
+      await NET.ready();
+      L.started = true;
     } catch(e){
-      $('#lobStatus').textContent = 'FIKK IKKE KONTAKT';
-      VM().toast('NETTET SVARER IKKE');
+      $('#lobbyStatus').textContent = 'COULD NOT CONNECT';
+      VM().toast('THE NETWORK IS NOT ANSWERING');
       return;
     }
-    NETT.settLeder(L.minLeder);
+    NET.setLeader(L.myLeader);
   }
-  $('#lobNavn').value = NETT.meg.navn;
-  NETT.lobbyInn();
-  tegnStatus();
-  tegnListe();
+  $('#lobbyName').value = NET.me.name;
+  NET.lobbyIn();
+  drawStatus();
+  drawList();
 }
 
-return { aapne, get minLeder(){ return L.minLeder; } };
+return { open, get myLeader(){ return L.myLeader; } };
 })();

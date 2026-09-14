@@ -1,1294 +1,1298 @@
-/* VILLMARK - KORTSPILLMOTOR
-   Turstruktur, kamp og brukerflate. Reglene folger One Piece Card Game:
-   oppfriskning -> trekk -> SOL -> hovedfase (spill kort, gi SOL, angrip)
-   -> sluttfase. Angrep gar gjennom blokksteg, mottrekksteg og skadesteg.
-   Ordlista ligger overst i cards.js. */
+/* VILLMARK - CARD GAME ENGINE
+   Turn structure, battle and user surface. The rules follow the One Piece Card
+   Game: refresh -> draw -> SUN -> main phase (play cards, give SUN, attack)
+   -> end phase. An attack goes through the block step, the counter step and the
+   damage step. The glossary sits at the top of cards.js. */
 
-const KORTSPILL = (() => {
+const CARDGAME = (() => {
 'use strict';
 
-const VM = () => window.VM;                       // bro til app.js
+const VM = () => window.VM;                       // bridge to app.js
 const $  = s => document.querySelector(s);
-const SLUTT_SIGNAL = Symbol('slutt');
+const END_SIGNAL = Symbol('end');
 
-/* ============================================================ tilstand */
-const KS = {
-  p:[null,null],        // 0 = spilleren, 1 = motstanderen
-  tur:0, forste:0, turNr:1,
-  kamp:null,            // pagaende angrep
-  slutt:false, seier:false, grunn:'',
-  gen:0,                // okes ved omstart, saa gamle lokker gir seg
-  ventende:[],          // uinnfridde lofter, brytes nar spillet tar slutt
-  turFerdig:null,       // loses av AVSLUTT TUR
-  minLeder:'ld_bjorn',
-  valgt:null,           // enhet eller handkort som er apnet i arket
-  malvalg:null,         // {filter, tekst, res}
-  logg:[],
-  nett:null,            // {rolle:'vert'|'gjest', kampId, navn} - null i enspillerkamp
+/* ============================================================ state */
+const CG = {
+  p:[null,null],        // 0 = the player, 1 = the opponent
+  turn:0, first:0, turnNo:1,
+  battle:null,          // attack in progress
+  over:false, won:false, reason:'',
+  gen:0,                // bumped on restart, so old loops give up
+  pending:[],           // unkept promises, broken when the game ends
+  turnDone:null,        // resolved by END TURN
+  myLeader:'ld_bear',
+  selected:null,        // unit or hand card opened in the sheet
+  targetPick:null,      // {legal, text}
+  log:[],
+  net:null,             // {role:'host'|'guest', battleId, name} - null in a solo battle
 };
 
-/* Hver spiller styres av en av tre ting. Enspillerkampen bruker
-   'lokal' mot 'ai'; nettkampen bruker 'lokal' mot 'fjern'. */
-const erAi    = p => p.styring === 'ai';
-const erFjern = p => p.styring === 'fjern';
-const erVert  = () => !!KS.nett && KS.nett.rolle === 'vert';
-const erGjest = () => !!KS.nett && KS.nett.rolle === 'gjest';
+/* Every player is driven by one of three things. The solo battle uses
+   'local' against 'ai'; the net battle uses 'local' against 'remote'. */
+const isAi     = p => p.control === 'ai';
+const isRemote = p => p.control === 'remote';
+const isHost   = () => !!CG.net && CG.net.role === 'host';
+const isGuest  = () => !!CG.net && CG.net.role === 'guest';
 
-/* ============================================================ smating */
-const rndi  = (a,b) => Math.floor(a + Math.random()*(b-a+1));
-const pick  = a => a[rndi(0, a.length-1)];
-const stokkOm = a => { for(let i=a.length-1;i>0;i--){ const j=rndi(0,i); [a[i],a[j]]=[a[j],a[i]]; } return a; };
-const vent  = ms => new Promise(r => setTimeout(r, ms));
-const kraft = u => (u.kort.kraft || 0) + u.sol*REGLER.solKraft + u.buff + u.kbuff;
+/* ============================================================ small things */
+const rndi    = (a,b) => Math.floor(a + Math.random()*(b-a+1));
+const pick    = a => a[rndi(0, a.length-1)];
+const shuffle = a => { for(let i=a.length-1;i>0;i--){ const j=rndi(0,i); [a[i],a[j]]=[a[j],a[i]]; } return a; };
+const wait    = ms => new Promise(r => setTimeout(r, ms));
+const power   = u => (u.card.power || 0) + u.sun*RULES.sunPower + u.buff + u.cbuff;
 
-/* Loggteksten leses av begge sider, men "Du" betyr ulike ting hos dem.
-   Derfor lagres hvem som handlet, og %s / %S settes inn ved visning. */
-function logg(t, side){
-  const post = { t, s:(side == null ? null : side) };
-  KS.logg.push(post);
-  if(KS.logg.length > 40) KS.logg.shift();
-  const el = $('#ksLogg');
-  if(el){ el.textContent = loggTekst(post, 0); }
+/* The log text is read by both sides, but "You" means different things to each
+   of them. We therefore store who acted, and %s / %S are filled in on display. */
+function addLog(t, side){
+  const entry = { t, s:(side == null ? null : side) };
+  CG.log.push(entry);
+  if(CG.log.length > 40) CG.log.shift();
+  const el = $('#cgLog');
+  if(el){ el.textContent = logText(entry, 0); }
 }
-function loggTekst(l, meg){
+function logText(l, me){
   if(!l) return '';
   if(l.s == null) return l.t;
-  const min = l.s === meg;
-  return l.t.replace('%S', min ? 'DIN' : 'MOTSTANDERENS')
-            .replace('%s', min ? 'Du' : 'Motstanderen');
+  const mine = l.s === me;
+  return l.t.replace('%S', mine ? 'YOUR' : "THE OPPONENT'S")
+            .replace('%s', mine ? 'You' : 'The opponent');
 }
 
-/* lofter som ma kunne brytes nar spillet plutselig er over */
-function nyttLofte(){
-  return new Promise((res, rej) => KS.ventende.push({res, rej}));
+/* promises that must be breakable when the game is suddenly over */
+function newPromise(){
+  return new Promise((res, rej) => CG.pending.push({res, rej}));
 }
-/* Loser det siste loftet som venter paa denne skjermen. Lofter som venter paa
-   svar fra motparten er merket 'fjern' og loses av nettmeldingen i stedet. */
-function losLofte(verdi){
-  for(let i = KS.ventende.length - 1; i >= 0; i--){
-    if(KS.ventende[i].fjern) continue;
-    const l = KS.ventende.splice(i, 1)[0];
-    l.res(verdi);
+/* Resolves the last promise waiting on this screen. Promises waiting for an
+   answer from the opponent are marked 'remote' and are resolved by the net
+   message instead. */
+function resolvePromise(value){
+  for(let i = CG.pending.length - 1; i >= 0; i--){
+    if(CG.pending[i].remote) continue;
+    const l = CG.pending.splice(i, 1)[0];
+    l.res(value);
     return;
   }
 }
-function brytAlleLofter(){
-  const k = KS.ventende.splice(0);
-  fjernSvar.clear();
-  for(const l of k) l.rej(SLUTT_SIGNAL);
+function breakAllPromises(){
+  const k = CG.pending.splice(0);
+  remoteAnswers.clear();
+  for(const l of k) l.rej(END_SIGNAL);
 }
 
-/* ============================================================ fjernstyring */
-/* Verten eier motoren. Naar motoren trenger et valg fra gjesten, sendes
-   spoersmalet over kanalen og loftet blir staaende til svaret kommer. */
-const fjernSvar = new Map();   // spoersmalsid -> lofte
-let nesteSpm = 1;
+/* ============================================================ remote control */
+/* The host owns the engine. When the engine needs a choice from the guest, the
+   question is sent over the channel and the promise stands until the answer
+   comes back. */
+const remoteAnswers = new Map();   // question id -> promise
+let nextQuestion = 1;
 
-/* Alt som skal ut gaar gjennom en ko, saa rekkefolgen holder og vi ikke
-   sprenger takgrensa for kringkasting. Bare den siste tilstanden er
-   interessant, saa to paa rad slaas sammen. */
-const utKo = [];
-let utTimer = null;
-const UT_GAP = () => NETT.LOKAL_MODUS ? 0 : 120;
+/* Everything going out passes through a queue, so the order holds and we do
+   not blow the broadcast rate limit. Only the newest state matters, so two in
+   a row are merged. */
+const outQueue = [];
+let outTimer = null;
+const OUT_GAP = () => NET.LOCAL_MODE ? 0 : 120;
 
-function nettSend(m){
-  if(!KS.nett) return;
-  const siste = utKo[utKo.length - 1];
-  if(m.t === 'tilstand' && siste && siste.t === 'tilstand') utKo[utKo.length - 1] = m;
-  else utKo.push(m);
-  skyvKo();
+function netSend(m){
+  if(!CG.net) return;
+  const last = outQueue[outQueue.length - 1];
+  if(m.t === 'state' && last && last.t === 'state') outQueue[outQueue.length - 1] = m;
+  else outQueue.push(m);
+  pushQueue();
 }
-function skyvKo(){
-  if(utTimer || !utKo.length || !KS.nett) return;
-  NETT.send(utKo.shift());
-  utTimer = setTimeout(() => { utTimer = null; skyvKo(); }, UT_GAP());
+function pushQueue(){
+  if(outTimer || !outQueue.length || !CG.net) return;
+  NET.send(outQueue.shift());
+  outTimer = setTimeout(() => { outTimer = null; pushQueue(); }, OUT_GAP());
 }
-function tomKo(){ utKo.length = 0; clearTimeout(utTimer); utTimer = null; }
+function clearQueue(){ outQueue.length = 0; clearTimeout(outTimer); outTimer = null; }
 
-function fjernLofte(id){
+function remotePromise(id){
   return new Promise((res, rej) => {
-    const l = { res, rej, fjern:true, id };
-    fjernSvar.set(id, l);
-    KS.ventende.push(l);
+    const l = { res, rej, remote:true, id };
+    remoteAnswers.set(id, l);
+    CG.pending.push(l);
   });
 }
-function losFjernLofte(id, verdi){
-  const l = fjernSvar.get(id);
+function resolveRemotePromise(id, value){
+  const l = remoteAnswers.get(id);
   if(!l) return;
-  fjernSvar.delete(id);
-  const i = KS.ventende.indexOf(l);
-  if(i >= 0) KS.ventende.splice(i, 1);
-  l.res(verdi);
+  remoteAnswers.delete(id);
+  const i = CG.pending.indexOf(l);
+  if(i >= 0) CG.pending.splice(i, 1);
+  l.res(value);
 }
 
-/* Samme spoersmal, uansett hvem som skal svare. */
-function spor(side, tekst, kort, valg){
-  if(erFjern(KS.p[side])){
-    const id = nesteSpm++;
-    nettSend({ t:'spor', id, tekst, kort:(kort||[]).map(k => k.id), valg });
-    return fjernLofte(id);
+/* The same question, no matter who is to answer it. */
+function ask(side, text, cards, options){
+  if(isRemote(CG.p[side])){
+    const id = nextQuestion++;
+    netSend({ t:'ask', id, text, cards:(cards||[]).map(k => k.id), options });
+    return remotePromise(id);
   }
-  return sporsmal(tekst, kort, valg);
+  return question(text, cards, options);
 }
 
-function avsluttSpill(seier, grunn){
-  KS.slutt = true; KS.seier = seier; KS.grunn = grunn;
-  brytAlleLofter();
-  if(KS.turFerdig){ const f = KS.turFerdig; KS.turFerdig = null; f(); }
-  throw SLUTT_SIGNAL;
+function endGame(won, reason){
+  CG.over = true; CG.won = won; CG.reason = reason;
+  breakAllPromises();
+  if(CG.turnDone){ const f = CG.turnDone; CG.turnDone = null; f(); }
+  throw END_SIGNAL;
 }
 
-/* kjorer en handler og svelger sluttsignalet */
-function trygg(fn){
+/* runs a handler and swallows the end signal */
+function safe(fn){
   return async (...a) => {
     try { await fn(...a); }
-    catch(e){ if(e !== SLUTT_SIGNAL) throw e; }
+    catch(e){ if(e !== END_SIGNAL) throw e; }
   };
 }
 
-/* ============================================================ enheter */
-function nyEnhet(kort, side, sted){
-  return { kort, side, sted, hvilt:false, ny:(sted === 'art'),
-           sol:0, buff:0, kbuff:0, brukt:false };
+/* ============================================================ units */
+function newUnit(card, side, spot){
+  return { card, side, spot, rested:false, fresh:(spot === 'species'),
+           sun:0, buff:0, cbuff:0, used:false };
 }
-function enheter(p){ return [p.leder, ...p.arter]; }
-function alleEnheter(){ return [...enheter(KS.p[0]), ...enheter(KS.p[1])]; }
+function units(p){ return [p.leader, ...p.species]; }
+function allUnits(){ return [...units(CG.p[0]), ...units(CG.p[1])]; }
 
-function nySpiller(lederKort, styring, stokk){
+function newPlayer(leaderCard, control, deck){
   const p = {
-    styring, stokk: stokkOm((stokk || byggStokk(lederKort)).slice()),
-    hand:[], kompost:[], liv:[], arter:[], biotop:null,
-    sol:{ total:0, aktiv:0, stokk:REGLER.solStokk },
-    lederBrukt:false,
+    control, deck: shuffle((deck || buildDeck(leaderCard)).slice()),
+    hand:[], compost:[], life:[], species:[], biotope:null,
+    sun:{ total:0, active:0, deck:RULES.sunDeck },
+    leaderUsed:false,
   };
-  p.leder = nyEnhet(lederKort, 0, 'leder');
+  p.leader = newUnit(leaderCard, 0, 'leader');
   return p;
 }
 
-/* ============================================================ dekk
-   Stokken din kommer fra plenen, ikke fra kortbasen: se cards.js. Har du
-   faerre kort ute enn minstedekket, gaar de samme kortene rundt om igjen
-   til stokken er stor nok, slik at ett kort paa plenen holder til en kamp
-   mot maskinen. Er plenen helt tom, staar planstokken igjen som reserve. */
-function minStokk(lederKort){
+/* ============================================================ deck
+   Your deck comes from the lawn, not from the card base: see cards.js. If you
+   have fewer cards out than the minimum deck, the same cards go round again
+   until the deck is big enough, so one card on the lawn is enough for a battle
+   against the machine. If the lawn is completely empty, the plan deck stands in
+   as the fallback. */
+function myDeck(leaderCard){
   const vm = window.VM;
-  const egen = vm && vm.dekkStokk ? vm.dekkStokk() : [];
-  if(!egen.length) return byggStokk(lederKort);
-  const minst = dekkMinst(lederKort);
-  return egen.length >= minst ? egen : fyllStokk(egen, minst);
+  const own = vm && vm.deckCards ? vm.deckCards() : [];
+  if(!own.length) return buildDeck(leaderCard);
+  const least = minDeckSize(leaderCard);
+  return own.length >= least ? own : padDeck(own, least);
 }
 
-/** en lovlig stokk fra motparten, ellers ingenting */
-function rensStokk(liste){
-  if(!Array.isArray(liste)) return null;
-  const rein = liste.filter(id => typeof id === 'string' && kortAv(id));
-  return rein.length ? rein : null;
+/** a legal deck from the opponent, otherwise nothing */
+function cleanDeck(list){
+  if(!Array.isArray(list)) return null;
+  const clean = list.filter(id => typeof id === 'string' && cardById(id));
+  return clean.length ? clean : null;
 }
 
-/* ============================================================ kortflyt */
-function trekk(p, n=1){
+/* ============================================================ card flow */
+function draw(p, n=1){
   for(let i=0;i<n;i++){
-    if(!p.stokk.length) avsluttSpill(p !== KS.p[0], 'TOM KORTSTOKK');
-    p.hand.push(p.stokk.shift());
+    if(!p.deck.length) endGame(p !== CG.p[0], 'DECK RAN OUT');
+    p.hand.push(p.deck.shift());
   }
 }
-function koArt(u){
-  const p = KS.p[u.side];
-  const i = p.arter.indexOf(u);
+function koSpecies(u){
+  const p = CG.p[u.side];
+  const i = p.species.indexOf(u);
   if(i < 0) return;
-  p.arter.splice(i, 1);
-  p.kompost.push(u.kort.id);
-  logg(u.kort.navn + ' er slatt ut.');
+  p.species.splice(i, 1);
+  p.compost.push(u.card.id);
+  addLog(u.card.name + ' is knocked out.');
 }
-function leggSol(p, n){
-  const gi = Math.min(n, p.sol.stokk, REGLER.solStokk - p.sol.total);
-  p.sol.stokk -= gi; p.sol.total += gi;      // kommer inn hvilt
-  return gi;
+function addSun(p, n){
+  const give = Math.min(n, p.sun.deck, RULES.sunDeck - p.sun.total);
+  p.sun.deck -= give; p.sun.total += give;      // comes in rested
+  return give;
 }
 
-/* ============================================================ effekter */
-async function utfoerEff(side, e, kilde){
+/* ============================================================ effects */
+async function runEffect(side, e, source){
   if(!e) return;
-  const p = KS.p[side];
-  switch(e.gjor){
-    case 'trekk':
-      trekk(p, e.verdi);
-      logg('Trekker ' + e.verdi + ' kort.');
+  const p = CG.p[side];
+  switch(e.does){
+    case 'draw':
+      draw(p, e.value);
+      addLog('Draws ' + e.value + ' cards.');
       break;
-    case 'sol':
-      logg('+' + leggSol(p, e.verdi) + ' SOL (hvilt).');
+    case 'sun':
+      addLog('+' + addSun(p, e.value) + ' SUN (rested).');
       break;
-    case 'selvkraft':
-      if(e.nar === 'mottrekk') kilde.kbuff += e.verdi; else kilde.buff += e.verdi;
-      logg(kilde.kort.navn + ' far +' + e.verdi + ' kraft.');
+    case 'selfPower':
+      if(e.when === 'counter') source.cbuff += e.value; else source.buff += e.value;
+      addLog(source.card.name + ' gets +' + e.value + ' power.');
       break;
-    case 'kraft': {
-      const m = await velgMal(side, u => u.side === side,
-        'GI +' + e.verdi + ' KRAFT');
+    case 'power': {
+      const m = await pickTarget(side, u => u.side === side,
+        'GIVE +' + e.value + ' POWER');
       if(m){
-        if(e.nar === 'mottrekk') m.kbuff += e.verdi; else m.buff += e.verdi;
-        logg(m.kort.navn + ' far +' + e.verdi + ' kraft.');
+        if(e.when === 'counter') m.cbuff += e.value; else m.buff += e.value;
+        addLog(m.card.name + ' gets +' + e.value + ' power.');
       }
       break; }
     case 'ko': {
-      const m = await velgMal(side,
-        u => u.side !== side && u.sted === 'art' && u.kort.kost <= e.maks,
-        'SLÅ UT EN ART (KOST ' + e.maks + ' ELLER MINDRE)');
-      if(m) koArt(m);
+      const m = await pickTarget(side,
+        u => u.side !== side && u.spot === 'species' && u.card.cost <= e.max,
+        'KNOCK OUT A SPECIES (COST ' + e.max + ' OR LESS)');
+      if(m) koSpecies(m);
       break; }
-    case 'hvil': {
-      const m = await velgMal(side,
-        u => u.side !== side && u.sted === 'art' && !u.hvilt && u.kort.kost <= e.maks,
-        'HVIL EN ART (KOST ' + e.maks + ' ELLER MINDRE)');
-      if(m){ m.hvilt = true; logg(m.kort.navn + ' ma hvile.'); }
+    case 'rest': {
+      const m = await pickTarget(side,
+        u => u.side !== side && u.spot === 'species' && !u.rested && u.card.cost <= e.max,
+        'REST A SPECIES (COST ' + e.max + ' OR LESS)');
+      if(m){ m.rested = true; addLog(m.card.name + ' must rest.'); }
       break; }
   }
-  tegn();
+  render();
 }
 
-/* ============================================================ malvalg */
-async function velgMal(side, filter, tekst){
-  const lovlige = alleEnheter().filter(filter);
-  if(!lovlige.length) return null;
-  if(erAi(KS.p[side])) return aiVelgMal(side, lovlige, tekst);
+/* ============================================================ target picking */
+async function pickTarget(side, filter, text){
+  const legal = allUnits().filter(filter);
+  if(!legal.length) return null;
+  if(isAi(CG.p[side])) return aiPickTarget(side, legal, text);
 
-  if(erFjern(KS.p[side])){
-    const id = nesteSpm++;
-    nettSend({ t:'malvalg', id, tekst, lovlige:lovlige.map(stiAv).filter(Boolean) });
-    const sti = await fjernLofte(id);
-    const valgt = sti ? enhetFraSti(speilSti(sti)) : null;
-    return lovlige.includes(valgt) ? valgt : null;
+  if(isRemote(CG.p[side])){
+    const id = nextQuestion++;
+    netSend({ t:'target', id, text, legal:legal.map(pathOf).filter(Boolean) });
+    const path = await remotePromise(id);
+    const chosen = path ? unitFromPath(mirrorPath(path)) : null;
+    return legal.includes(chosen) ? chosen : null;
   }
 
-  KS.malvalg = { lovlige, tekst };
-  tegn();
-  const valg = await nyttLofte();
-  KS.malvalg = null;
-  tegn();
-  return valg;
+  CG.targetPick = { legal, text };
+  render();
+  const choice = await newPromise();
+  CG.targetPick = null;
+  render();
+  return choice;
 }
-function aiVelgMal(side, lovlige, tekst){
-  const egne = lovlige.filter(u => u.side === side);
-  if(egne.length) return egne.sort((a,b) => kraft(b) - kraft(a))[0];
-  return lovlige.sort((a,b) => (b.kort.kost||0) - (a.kort.kost||0))[0];
+function aiPickTarget(side, legal, text){
+  const own = legal.filter(u => u.side === side);
+  if(own.length) return own.sort((a,b) => power(b) - power(a))[0];
+  return legal.sort((a,b) => (b.card.cost||0) - (a.card.cost||0))[0];
 }
 
-/* ============================================================ oppsett */
-function nyttSpill(minLederId, motLederId, motStyring, motStokk){
-  KS.minLeder = minLederId;
-  const minL = kortAv(minLederId);
-  const foeL = kortAv(motLederId) || pick(LEDERE.filter(l => l.id !== minLederId));
-  const min = minStokk(minL);
-  /* Maskinen har ingen plen, saa den faar like mange kort som du stiller
-     med. Motparten i en nettkamp sender sin egen. */
-  const mot = rensStokk(motStokk) || byggAiStokk(foeL, min.length);
-  KS.p[0] = nySpiller(minL, 'lokal', min);
-  KS.p[1] = nySpiller(foeL, motStyring || 'ai', mot);
-  KS.p[0].leder.side = 0;
-  KS.p[1].leder.side = 1;
+/* ============================================================ setup */
+function newGame(myLeaderId, foeLeaderId, foeControl, foeDeck){
+  CG.myLeader = myLeaderId;
+  const myL  = cardById(myLeaderId);
+  const foeL = cardById(foeLeaderId) || pick(LEADERS.filter(l => l.id !== myLeaderId));
+  const mine = myDeck(myL);
+  /* The machine has no lawn, so it gets as many cards as you bring. The
+     opponent in a net battle sends their own. */
+  const foe = cleanDeck(foeDeck) || buildAiDeck(foeL, mine.length);
+  CG.p[0] = newPlayer(myL, 'local', mine);
+  CG.p[1] = newPlayer(foeL, foeControl || 'ai', foe);
+  CG.p[0].leader.side = 0;
+  CG.p[1].leader.side = 1;
   for(let s=0;s<2;s++){
-    const p = KS.p[s];
-    for(let i=0;i<REGLER.apningshand;i++) p.hand.push(p.stokk.shift());
-    for(let i=0;i<p.leder.kort.liv;i++)   p.liv.push(p.stokk.shift());
+    const p = CG.p[s];
+    for(let i=0;i<RULES.openingHand;i++)   p.hand.push(p.deck.shift());
+    for(let i=0;i<p.leader.card.life;i++)  p.life.push(p.deck.shift());
   }
-  KS.forste = rndi(0,1);
-  KS.tur = KS.forste;
-  KS.turNr = 1;
-  KS.slutt = false; KS.kamp = null; KS.valgt = null; KS.malvalg = null;
-  KS.logg = [];
+  CG.first = rndi(0,1);
+  CG.turn = CG.first;
+  CG.turnNo = 1;
+  CG.over = false; CG.battle = null; CG.selected = null; CG.targetPick = null;
+  CG.log = [];
 }
 
-/* apningshanda kan byttes en gang */
-function nyHand(p){
-  p.stokk.push(...p.hand.splice(0));
-  stokkOm(p.stokk);
-  for(let i=0;i<REGLER.apningshand;i++) p.hand.push(p.stokk.shift());
+/* the opening hand may be swapped once */
+function newHand(p){
+  p.deck.push(...p.hand.splice(0));
+  shuffle(p.deck);
+  for(let i=0;i<RULES.openingHand;i++) p.hand.push(p.deck.shift());
 }
 async function mulligan(){
   for(let s=0;s<2;s++){
-    const p = KS.p[s];
-    if(erAi(p)){
-      if(p.hand.filter(id => kortAv(id).kost <= 3).length < 2) nyHand(p);
+    const p = CG.p[s];
+    if(isAi(p)){
+      if(p.hand.filter(id => cardById(id).cost <= 3).length < 2) newHand(p);
       continue;
     }
-    const svar = await spor(s, 'BYTTE ÅPNINGSHÅND?',
-      p.hand.map(id => kortAv(id)), ['BEHOLD', 'BYTT']);
-    if(svar === 1){ nyHand(p); logg('Ny apningshand.'); tegn(); }
+    const answer = await ask(s, 'SWAP THE OPENING HAND?',
+      p.hand.map(id => cardById(id)), ['KEEP', 'SWAP']);
+    if(answer === 1){ newHand(p); addLog('New opening hand.'); render(); }
   }
 }
 
-/* ============================================================ turlokke */
-async function kjorSpill(minLederId, motLederId, motStyring, motStokk){
-  const g = ++KS.gen;
+/* ============================================================ turn loop */
+async function runGame(myLeaderId, foeLeaderId, foeControl, foeDeck){
+  const g = ++CG.gen;
   try {
-    nyttSpill(minLederId, motLederId, motStyring, motStokk);
-    tegn();
+    newGame(myLeaderId, foeLeaderId, foeControl, foeDeck);
+    render();
     await mulligan();
-    if(KS.gen !== g) return;
-    while(!KS.slutt){
-      await turen();
-      if(KS.gen !== g) return;
-      KS.tur = 1 - KS.tur;
-      if(KS.tur === KS.forste) KS.turNr++;
+    if(CG.gen !== g) return;
+    while(!CG.over){
+      await playTurn();
+      if(CG.gen !== g) return;
+      CG.turn = 1 - CG.turn;
+      if(CG.turn === CG.first) CG.turnNo++;
     }
   } catch(e){
-    if(e !== SLUTT_SIGNAL) throw e;
+    if(e !== END_SIGNAL) throw e;
   }
-  if(KS.gen !== g) return;
-  visResultat();
+  if(CG.gen !== g) return;
+  showResult();
 }
 
-async function turen(){
-  const p = KS.p[KS.tur];
-  const forsteEgne = (KS.turNr === 1 && KS.tur === KS.forste);
+async function playTurn(){
+  const p = CG.p[CG.turn];
+  const firstOwn = (CG.turnNo === 1 && CG.turn === CG.first);
 
-  /* 1 oppfriskning */
-  for(const u of enheter(p)){ u.hvilt = false; u.ny = false; u.sol = 0; }
-  p.sol.aktiv = p.sol.total;
-  p.lederBrukt = false;
-  if(p.biotop) p.biotop.brukt = false;
+  /* 1 refresh */
+  for(const u of units(p)){ u.rested = false; u.fresh = false; u.sun = 0; }
+  p.sun.active = p.sun.total;
+  p.leaderUsed = false;
+  if(p.biotope) p.biotope.used = false;
 
-  /* 2 trekk */
-  if(!forsteEgne) trekk(p, 1);
+  /* 2 draw */
+  if(!firstOwn) draw(p, 1);
 
-  /* 3 SOL */
-  const gi = forsteEgne ? REGLER.solForste : REGLER.solVanlig;
-  const n = Math.min(gi, p.sol.stokk, REGLER.solStokk - p.sol.total);
-  p.sol.stokk -= n; p.sol.total += n; p.sol.aktiv += n;
+  /* 3 SUN */
+  const give = firstOwn ? RULES.sunFirst : RULES.sunNormal;
+  const n = Math.min(give, p.sun.deck, RULES.sunDeck - p.sun.total);
+  p.sun.deck -= n; p.sun.total += n; p.sun.active += n;
 
-  logg('%S TUR ' + KS.turNr + ' — +' + n + ' SOL', KS.tur);
-  tegn();
+  addLog('%S TURN ' + CG.turnNo + ' — +' + n + ' SUN', CG.turn);
+  render();
 
-  /* 4 hovedfase. Fjernspilleren venter paa samme loftet som den lokale:
-     handlingene dens kommer inn over kanalen og loser det. */
-  if(erAi(p)){ await vent(650); await aiTur(KS.tur); }
-  else await menneskeTur();
+  /* 4 main phase. The remote player waits on the same promise as the local
+     one: its actions come in over the channel and resolve it. */
+  if(isAi(p)){ await wait(650); await aiTurn(CG.turn); }
+  else await humanTurn();
 
-  /* 5 sluttfase - kraft "denne turen" faller bort */
-  for(const u of alleEnheter()){ u.buff = 0; u.kbuff = 0; }
-  KS.valgt = null;
-  tegn();
+  /* 5 end phase - power "this turn" falls away */
+  for(const u of allUnits()){ u.buff = 0; u.cbuff = 0; }
+  CG.selected = null;
+  render();
 }
 
-function menneskeTur(){
-  return new Promise(res => { KS.turFerdig = res; });
+function humanTurn(){
+  return new Promise(res => { CG.turnDone = res; });
 }
 
-/* ============================================================ spille kort */
-function kanSpille(side, kort){
-  const p = KS.p[side];
-  if(KS.tur !== side || KS.kamp) return false;
-  if(kort.kost > p.sol.aktiv) return false;
-  if(kort.kat === 'hendelse' && kort.eff.nar !== 'hoved') return false;
+/* ============================================================ playing cards */
+function canPlay(side, card){
+  const p = CG.p[side];
+  if(CG.turn !== side || CG.battle) return false;
+  if(card.cost > p.sun.active) return false;
+  if(card.kind === 'event' && card.effect.when !== 'main') return false;
   return true;
 }
 
-async function spillKort(side, handIndeks){
-  const p = KS.p[side];
-  const id = p.hand[handIndeks];
-  const kort = kortAv(id);
-  if(!kanSpille(side, kort)) return;
+async function playCard(side, handIndex){
+  const p = CG.p[side];
+  const id = p.hand[handIndex];
+  const card = cardById(id);
+  if(!canPlay(side, card)) return;
 
-  /* artsomradet rommer fem. Skal en sjette inn, ma en av dine egne vekk. */
-  if(kort.kat === 'art' && p.arter.length >= REGLER.maksArter){
-    let offer;
-    if(erAi(p)) offer = p.arter.slice().sort((a,b) => a.kort.kost - b.kort.kost)[0];
+  /* the species area holds five. For a sixth to come in, one of your own must go. */
+  if(card.kind === 'species' && p.species.length >= RULES.maxSpecies){
+    let victim;
+    if(isAi(p)) victim = p.species.slice().sort((a,b) => a.card.cost - b.card.cost)[0];
     else {
-      const svar = await spor(side, 'ARTSOMRÅDET ER FULLT — HVILKEN SKAL I KOMPOSTEN?',
-        p.arter.map(a => a.kort), ['AVBRYT', ...p.arter.map(a => a.kort.navn)]);
-      if(svar === 0) return;
-      offer = p.arter[svar-1];
+      const answer = await ask(side, 'THE SPECIES AREA IS FULL — WHICH ONE GOES TO THE COMPOST?',
+        p.species.map(a => a.card), ['CANCEL', ...p.species.map(a => a.card.name)]);
+      if(answer === 0) return;
+      victim = p.species[answer-1];
     }
-    koArt(offer);
+    koSpecies(victim);
   }
 
   p.hand.splice(p.hand.indexOf(id), 1);
-  p.sol.aktiv -= kort.kost;
-  VM().LYD.klikk(); VM().dirr(12);
+  p.sun.active -= card.cost;
+  VM().SOUND.click(); VM().vibrate(12);
 
-  if(kort.kat === 'art'){
-    const u = nyEnhet(kort, side, 'art');
-    p.arter.push(u);
-    logg('%s spiller ' + kort.navn + '.', side);
-    tegn();
-    if(kort.eff && kort.eff.nar === 'ved_spill') await utfoerEff(side, kort.eff, u);
-  } else if(kort.kat === 'biotop'){
-    if(p.biotop) p.kompost.push(p.biotop.kort.id);
-    p.biotop = nyEnhet(kort, side, 'biotop');
-    p.biotop.brukt = false;
-    logg('%s legger ut ' + kort.navn + '.', side);
+  if(card.kind === 'species'){
+    const u = newUnit(card, side, 'species');
+    p.species.push(u);
+    addLog('%s plays ' + card.name + '.', side);
+    render();
+    if(card.effect && card.effect.when === 'on_play') await runEffect(side, card.effect, u);
+  } else if(card.kind === 'biotope'){
+    if(p.biotope) p.compost.push(p.biotope.card.id);
+    p.biotope = newUnit(card, side, 'biotope');
+    p.biotope.used = false;
+    addLog('%s puts out ' + card.name + '.', side);
   } else {
-    logg('%s bruker ' + kort.navn + '.', side);
-    tegn();
-    await utfoerEff(side, kort.eff, p.leder);
-    p.kompost.push(id);
+    addLog('%s uses ' + card.name + '.', side);
+    render();
+    await runEffect(side, card.effect, p.leader);
+    p.compost.push(id);
   }
-  tegn();
+  render();
 }
 
-/* gi ett SOL til et kort: +1000 kraft ut turen */
-function giSol(side, u){
-  const p = KS.p[side];
-  if(KS.tur !== side || p.sol.aktiv < 1) return;
-  p.sol.aktiv -= 1; u.sol += 1;
-  VM().LYD.naer();
-  logg(u.kort.navn + ' far 1 SOL (+' + REGLER.solKraft + ' kraft).');
-  tegn();
+/* give one SUN to a card: +1000 power for the rest of the turn */
+function giveSun(side, u){
+  const p = CG.p[side];
+  if(CG.turn !== side || p.sun.active < 1) return;
+  p.sun.active -= 1; u.sun += 1;
+  VM().SOUND.near();
+  addLog(u.card.name + ' gets 1 SUN (+' + RULES.sunPower + ' power).');
+  render();
 }
 
-/* aktiverte effekter pa LEDER og BIOTOP, en gang per tur */
-async function aktiver(side, u){
-  const p = KS.p[side];
-  const e = u.kort.eff;
-  if(!e || e.nar !== 'aktiver' || KS.tur !== side) return;
-  if(u.sted === 'leder'){ if(p.lederBrukt) return; p.lederBrukt = true; }
-  else { if(u.brukt) return; u.brukt = true; }
-  logg(u.kort.navn + ': ' + effTekst(e));
-  await utfoerEff(side, e, u);
+/* activated effects on LEADER and BIOTOPE, once per turn */
+async function activate(side, u){
+  const p = CG.p[side];
+  const e = u.card.effect;
+  if(!e || e.when !== 'activate' || CG.turn !== side) return;
+  if(u.spot === 'leader'){ if(p.leaderUsed) return; p.leaderUsed = true; }
+  else { if(u.used) return; u.used = true; }
+  addLog(u.card.name + ': ' + effectText(e));
+  await runEffect(side, e, u);
 }
 
-/* ============================================================ angrep */
-function kanAngripe(u){
-  if(KS.slutt || KS.kamp) return false;
-  if(KS.tur !== u.side || u.hvilt) return false;
-  if(u.sted === 'biotop') return false;
-  if(u.sted === 'art' && u.ny && !u.kort.nokler.includes('SPRANG')) return false;
+/* ============================================================ attack */
+function canAttack(u){
+  if(CG.over || CG.battle) return false;
+  if(CG.turn !== u.side || u.rested) return false;
+  if(u.spot === 'biotope') return false;
+  if(u.spot === 'species' && u.fresh && !u.card.keys.includes('RUSH')) return false;
   return true;
 }
-function lovligeMal(motSide){
-  const mp = KS.p[motSide];
-  return [mp.leder, ...mp.arter.filter(a => a.hvilt)];
+function legalTargets(foeSide){
+  const fp = CG.p[foeSide];
+  return [fp.leader, ...fp.species.filter(a => a.rested)];
 }
 
-async function angrip(ang, mal){
-  const angS = ang.side, forsvS = 1 - angS;
-  ang.hvilt = true;
-  KS.kamp = { ang, mal, angS, forsvS };
-  logg(ang.kort.navn + ' angriper ' + mal.kort.navn + '!');
-  VM().LYD.treff(); VM().dirr(20);
-  tegn();
-  await vent(420);
+async function attack(att, target){
+  const attS = att.side, defS = 1 - attS;
+  att.rested = true;
+  CG.battle = { att, target, attS, defS };
+  addLog(att.card.name + ' attacks ' + target.card.name + '!');
+  VM().SOUND.hit(); VM().vibrate(20);
+  render();
+  await wait(420);
 
-  /* nar-den-angriper-effekter */
-  const e = ang.kort.eff;
-  if(e && e.nar === 'nar_angrep') await utfoerEff(angS, e, ang);
+  /* when-it-attacks effects */
+  const e = att.card.effect;
+  if(e && e.when === 'on_attack') await runEffect(attS, e, att);
 
-  /* blokksteg */
-  await blokkSteg();
-  /* mottrekksteg */
-  await mottrekkSteg();
-  /* skadesteg */
-  await skadeSteg();
+  /* block step */
+  await blockStep();
+  /* counter step */
+  await counterStep();
+  /* damage step */
+  await damageStep();
 
-  for(const u of alleEnheter()) u.kbuff = 0;
-  KS.kamp = null;
-  tegn();
+  for(const u of allUnits()) u.cbuff = 0;
+  CG.battle = null;
+  render();
 }
 
-async function blokkSteg(){
-  const k = KS.kamp;
-  const fp = KS.p[k.forsvS];
-  const vern = fp.arter.filter(a =>
-    a.kort.nokler.includes('VERN') && !a.hvilt && a !== k.mal);
-  if(!vern.length) return;
+async function blockStep(){
+  const k = CG.battle;
+  const fp = CG.p[k.defS];
+  const blockers = fp.species.filter(a =>
+    a.card.keys.includes('BLOCKER') && !a.rested && a !== k.target);
+  if(!blockers.length) return;
 
-  /* Angrepet stanser uansett — da er det ingenting a ta stilling til. */
-  if(kraft(k.ang) < kraft(k.mal)) return;
+  /* The attack stops anyway - then there is nothing to decide. */
+  if(power(k.att) < power(k.target)) return;
 
-  let valgt = null;
-  if(erAi(fp)) valgt = aiVelgVern(vern);
+  let chosen = null;
+  if(isAi(fp)) chosen = aiPickBlocker(blockers);
   else {
-    const svar = await spor(k.forsvS, 'BRUKE VERN?', vern.map(v => v.kort),
-      ['LA DET STÅ', ...vern.map(v => v.kort.navn)]);
-    if(svar > 0) valgt = vern[svar-1];
+    const answer = await ask(k.defS, 'USE A BLOCKER?', blockers.map(v => v.card),
+      ['LET IT THROUGH', ...blockers.map(v => v.card.name)]);
+    if(answer > 0) chosen = blockers[answer-1];
   }
-  if(valgt){
-    valgt.hvilt = true;
-    k.mal = valgt;
-    logg(valgt.kort.navn + ' bruker VERN og tar angrepet.');
-    tegn();
-    await vent(420);
+  if(chosen){
+    chosen.rested = true;
+    k.target = chosen;
+    addLog(chosen.card.name + ' uses BLOCKER and takes the attack.');
+    render();
+    await wait(420);
   }
 }
 
-async function mottrekkSteg(){
-  const k = KS.kamp;
-  const fp = KS.p[k.forsvS];
-  if(erAi(fp)){ aiMottrekk(); return; }
+async function counterStep(){
+  const k = CG.battle;
+  const fp = CG.p[k.defS];
+  if(isAi(fp)){ aiCounter(); return; }
 
   while(true){
-    const kort = fp.hand.map((id,i) => ({ kort:kortAv(id), i }))
-      .filter(o => o.kort.mot > 0 ||
-        (erMottrekkshendelse(o.kort) && o.kort.kost <= fp.sol.aktiv));
-    if(!kort.length) return;
+    const cards = fp.hand.map((id,i) => ({ card:cardById(id), i }))
+      .filter(o => o.card.counter > 0 ||
+        (isCounterEvent(o.card) && o.card.cost <= fp.sun.active));
+    if(!cards.length) return;
 
-    /* Naermest hvert kort i stokken har en MOT-verdi, saa spoersmalet kom
-       for paa hvert eneste angrep — omtrent ni ganger i partiet, som
-       oftest med "LA DET STA" som eneste fornuftige svar. Her hoppes det
-       over naar svaret ikke kan endre noe: enten star maalet allerede
-       imot, eller saa rekker ikke alt paa handa opp. */
-    const na = kraft(k.mal), inn = kraft(k.ang);
-    if(na > inn) return;
-    const tak = kort.reduce((s,o) => s + Math.max(o.kort.mot,
-      erMottrekkshendelse(o.kort) && o.kort.kost <= fp.sol.aktiv ? o.kort.eff.verdi : 0), 0);
-    if(na + tak < inn) return;
+    /* Nearly every card in the deck has a COUNTER value, so the question came
+       up on every single attack - about nine times a game, most often with
+       "LET IT THROUGH" as the only sensible answer. Here it is skipped when
+       the answer cannot change anything: either the target already holds, or
+       everything in hand still falls short. */
+    const now = power(k.target), incoming = power(k.att);
+    if(now > incoming) return;
+    const ceiling = cards.reduce((s,o) => s + Math.max(o.card.counter,
+      isCounterEvent(o.card) && o.card.cost <= fp.sun.active ? o.card.effect.value : 0), 0);
+    if(now + ceiling < incoming) return;
 
-    const merker = kort.map(o => o.kort.kat === 'hendelse' && o.kort.eff.nar === 'mottrekk'
-      ? o.kort.navn + ' (HENDELSE)' : o.kort.navn + ' +' + o.kort.mot);
-    const svar = await spor(k.forsvS,
-      'MOTTREKK — ' + kraft(k.ang) + ' MOT ' + kraft(k.mal),
-      kort.map(o => o.kort), ['LA DET STÅ', ...merker]);
-    if(svar === 0) return;
-    const valgt = kort[svar-1];
-    fp.hand.splice(valgt.i, 1);
-    if(valgt.kort.kat === 'hendelse' && valgt.kort.eff.nar === 'mottrekk'){
-      fp.sol.aktiv -= valgt.kort.kost;
-      fp.kompost.push(valgt.kort.id);
-      await utfoerEff(k.forsvS, valgt.kort.eff, k.mal);
+    const labels = cards.map(o => o.card.kind === 'event' && o.card.effect.when === 'counter'
+      ? o.card.name + ' (EVENT)' : o.card.name + ' +' + o.card.counter);
+    const answer = await ask(k.defS,
+      'COUNTER — ' + power(k.att) + ' AGAINST ' + power(k.target),
+      cards.map(o => o.card), ['LET IT THROUGH', ...labels]);
+    if(answer === 0) return;
+    const chosen = cards[answer-1];
+    fp.hand.splice(chosen.i, 1);
+    if(chosen.card.kind === 'event' && chosen.card.effect.when === 'counter'){
+      fp.sun.active -= chosen.card.cost;
+      fp.compost.push(chosen.card.id);
+      await runEffect(k.defS, chosen.card.effect, k.target);
     } else {
-      k.mal.kbuff += valgt.kort.mot;
-      fp.kompost.push(valgt.kort.id);
-      logg(valgt.kort.navn + ' som mottrekk: +' + valgt.kort.mot + ' kraft.');
+      k.target.cbuff += chosen.card.counter;
+      fp.compost.push(chosen.card.id);
+      addLog(chosen.card.name + ' as a counter: +' + chosen.card.counter + ' power.');
     }
-    tegn();
+    render();
   }
 }
 
-async function skadeSteg(){
-  const k = KS.kamp;
-  const a = kraft(k.ang), d = kraft(k.mal);
+async function damageStep(){
+  const k = CG.battle;
+  const a = power(k.att), d = power(k.target);
   if(a < d){
-    logg(k.mal.kort.navn + ' star imot (' + d + ' mot ' + a + ').');
-    VM().LYD.klikk();
-    await vent(600);
+    addLog(k.target.card.name + ' holds (' + d + ' against ' + a + ').');
+    VM().SOUND.click();
+    await wait(600);
     return;
   }
-  if(k.mal.sted === 'art'){
-    koArt(k.mal);
-    VM().LYD.skade(); VM().dirr(35);
+  if(k.target.spot === 'species'){
+    koSpecies(k.target);
+    VM().SOUND.damage(); VM().vibrate(35);
   } else {
-    const dobbel  = k.ang.kort.nokler.includes('DOBBELTHOGG');
-    const fortaer = k.ang.kort.nokler.includes('FORTAER');
-    await treffLeder(k.forsvS, dobbel ? 2 : 1, fortaer);
+    const double = k.att.card.keys.includes('DOUBLE_ATTACK');
+    const banish = k.att.card.keys.includes('BANISH');
+    await hitLeader(k.defS, double ? 2 : 1, banish);
   }
-  tegn();
-  await vent(600);
+  render();
+  await wait(600);
 }
 
-/* UTLOESER-spoersmalet kom ogsaa naar svaret ikke kunne endre noe: ingen
-   lovlige mal, tom SOL-stokk eller tom kortstokk. Da gaar livskortet rett
-   paa handa uten a stoppe spillet. */
-function utloserNytter(side, e){
-  const p = KS.p[side], mp = KS.p[1-side];
-  switch(e.gjor){
-    case 'sol':   return p.sol.stokk > 0 && p.sol.total < REGLER.solStokk;
-    case 'trekk': return p.stokk.length > 0;
-    case 'ko':    return mp.arter.some(a => a.kort.kost <= e.maks);
-    case 'hvil':  return mp.arter.some(a => !a.hvilt && a.kort.kost <= e.maks);
-    default:      return true;
+/* The TRIGGER question also came up when the answer could not change anything:
+   no legal targets, an empty SUN deck or an empty card deck. Then the life card
+   goes straight to the hand without stopping the game. */
+function triggerUseful(side, e){
+  const p = CG.p[side], fp = CG.p[1-side];
+  switch(e.does){
+    case 'sun':  return p.sun.deck > 0 && p.sun.total < RULES.sunDeck;
+    case 'draw': return p.deck.length > 0;
+    case 'ko':   return fp.species.some(a => a.card.cost <= e.max);
+    case 'rest': return fp.species.some(a => !a.rested && a.card.cost <= e.max);
+    default:     return true;
   }
 }
 
-async function treffLeder(side, antall, fortaer){
-  const p = KS.p[side];
-  for(let i=0;i<antall;i++){
-    if(!p.liv.length) avsluttSpill(side === 1, 'LIVET ER UTE');
-    const id = p.liv.pop();
-    const kort = kortAv(id);
-    VM().LYD.skade(); VM().dirr(60);
-    if(fortaer){
-      p.kompost.push(id);
-      logg('FORTÆR — livskortet gar rett i komposten.');
+async function hitLeader(side, count, banish){
+  const p = CG.p[side];
+  for(let i=0;i<count;i++){
+    if(!p.life.length) endGame(side === 1, 'OUT OF LIFE');
+    const id = p.life.pop();
+    const card = cardById(id);
+    VM().SOUND.damage(); VM().vibrate(60);
+    if(banish){
+      p.compost.push(id);
+      addLog('BANISH — the life card goes straight to the compost.');
       continue;
     }
-    if(kort.utloser && utloserNytter(side, kort.utloser)){
-      const bruk = erAi(p) ? true
-        : (await spor(side, 'UTLØSER: ' + kort.navn, [kort], ['LA DET LIGGE','BRUK UTLØSER'])) === 1;
-      if(bruk){
-        p.kompost.push(id);
-        logg('UTLØSER: ' + effTekst(kort.utloser));
-        await utfoerEff(side, kort.utloser, p.leder);
+    if(card.trigger && triggerUseful(side, card.trigger)){
+      const use = isAi(p) ? true
+        : (await ask(side, 'TRIGGER: ' + card.name, [card], ['LEAVE IT','USE TRIGGER'])) === 1;
+      if(use){
+        p.compost.push(id);
+        addLog('TRIGGER: ' + effectText(card.trigger));
+        await runEffect(side, card.trigger, p.leader);
         continue;
       }
     }
     p.hand.push(id);
-    logg('%s tar 1 skade — livskortet gar til handa.', side);
-    tegn();
+    addLog('%s takes 1 damage — the life card goes to the hand.', side);
+    render();
   }
-  if(!p.liv.length) logg('%s har ingen liv igjen!', side);
+  if(!p.life.length) addLog('%s has no life left!', side);
 }
 
-/* ============================================================ maskinspiller */
-async function aiTur(side){
-  const p = KS.p[side], mp = KS.p[1-side];
+/* ============================================================ machine player */
+async function aiTurn(side){
+  const p = CG.p[side], fp = CG.p[1-side];
 
-  /* spill kort, dyreste forst */
-  let spilte = true;
-  while(spilte){
-    spilte = false;
-    const valg = p.hand
-      .map((id,i) => ({ k:kortAv(id), i }))
-      .filter(o => kanSpille(side, o.k) && aiVilSpille(side, o.k))
-      .sort((a,b) => b.k.kost - a.k.kost);
-    if(valg.length){ await spillKort(side, valg[0].i); await vent(330); spilte = true; }
-  }
-
-  /* aktivert effekt */
-  if(p.leder.kort.eff && p.leder.kort.eff.nar === 'aktiver'){
-    await aktiver(side, p.leder); await vent(260);
-  }
-  if(p.biotop && p.biotop.kort.eff.nar === 'aktiver'){
-    await aktiver(side, p.biotop); await vent(260);
+  /* play cards, the most expensive first */
+  let played = true;
+  while(played){
+    played = false;
+    const choices = p.hand
+      .map((id,i) => ({ k:cardById(id), i }))
+      .filter(o => canPlay(side, o.k) && aiWantsToPlay(side, o.k))
+      .sort((a,b) => b.k.cost - a.k.cost);
+    if(choices.length){ await playCard(side, choices[0].i); await wait(330); played = true; }
   }
 
-  /* angrep */
-  for(const a of enheter(p).slice()){
-    if(KS.slutt) return;
-    if(!kanAngripe(a)) continue;
-    const mal = aiVelgAngrepsmal(a, mp);
-    if(!mal) continue;
-    /* gi SOL hvis det avgjor angrepet */
-    while(p.sol.aktiv > 0 && kraft(a) < kraft(mal.u)) giSol(side, a);
-    if(kraft(a) < kraft(mal.u) && mal.u.sted === 'art') continue;
-    await angrip(a, mal.u);
-    await vent(400);
+  /* activated effect */
+  if(p.leader.card.effect && p.leader.card.effect.when === 'activate'){
+    await activate(side, p.leader); await wait(260);
   }
-  await vent(350);
+  if(p.biotope && p.biotope.card.effect.when === 'activate'){
+    await activate(side, p.biotope); await wait(260);
+  }
+
+  /* attacks */
+  for(const a of units(p).slice()){
+    if(CG.over) return;
+    if(!canAttack(a)) continue;
+    const target = aiPickAttackTarget(a, fp);
+    if(!target) continue;
+    /* give SUN if it decides the attack */
+    while(p.sun.active > 0 && power(a) < power(target.u)) giveSun(side, a);
+    if(power(a) < power(target.u) && target.u.spot === 'species') continue;
+    await attack(a, target.u);
+    await wait(400);
+  }
+  await wait(350);
 }
 
-function aiVilSpille(side, k){
-  const p = KS.p[side], mp = KS.p[1-side];
-  if(k.kat === 'art'){
-    if(p.arter.length < REGLER.maksArter) return true;
-    /* bytter bare ut en svakere art */
-    return k.kraft > Math.min(...p.arter.map(a => a.kort.kraft));
+function aiWantsToPlay(side, k){
+  const p = CG.p[side], fp = CG.p[1-side];
+  if(k.kind === 'species'){
+    if(p.species.length < RULES.maxSpecies) return true;
+    /* only swaps out a weaker species */
+    return k.power > Math.min(...p.species.map(a => a.card.power));
   }
-  if(k.kat === 'biotop') return !p.biotop;
-  if(k.eff.gjor === 'ko' || k.eff.gjor === 'hvil')
-    return mp.arter.some(a => a.kort.kost <= k.eff.maks && (k.eff.gjor === 'ko' || !a.hvilt));
-  if(k.eff.gjor === 'kraft') return false;   // spares til kamp
+  if(k.kind === 'biotope') return !p.biotope;
+  if(k.effect.does === 'ko' || k.effect.does === 'rest')
+    return fp.species.some(a => a.card.cost <= k.effect.max && (k.effect.does === 'ko' || !a.rested));
+  if(k.effect.does === 'power') return false;   // saved for a battle
   return true;
 }
 
-function aiVelgAngrepsmal(a, mp){
-  const k = kraft(a);
-  const arter = mp.arter.filter(x => x.hvilt && kraft(x) <= k)
-    .sort((x,y) => y.kort.kost - x.kort.kost);
-  if(arter.length && arter[0].kort.kost >= 4) return { u:arter[0] };
-  if(k >= kraft(mp.leder)) return { u:mp.leder };
-  if(arter.length) return { u:arter[0] };
+function aiPickAttackTarget(a, fp){
+  const k = power(a);
+  const species = fp.species.filter(x => x.rested && power(x) <= k)
+    .sort((x,y) => y.card.cost - x.card.cost);
+  if(species.length && species[0].card.cost >= 4) return { u:species[0] };
+  if(k >= power(fp.leader)) return { u:fp.leader };
+  if(species.length) return { u:species[0] };
   return null;
 }
 
-/* Maskinen blokkerte bare naar vernet overlevde angrepet. Siden en LEDER
-   har 5000 kraft og de fleste VERN-kortene ligger under, ble det brukt
-   omtrent ett vern per parti, og noekkelordet var i praksis en tom kropp:
-   en stokk full av VERN vant hvert femte parti. Na ofres et billig vern
-   for a spare et livskort, slik et menneske ville gjort. */
-function aiVelgVern(vern){
-  const k = KS.kamp;
-  const fp = KS.p[k.forsvS];
-  const trygt = vern.filter(v => kraft(v) > kraft(k.ang));
-  if(trygt.length) return trygt.sort((a,b) => kraft(a)-kraft(b))[0];
-  if(k.mal.sted !== 'leder') return null;
-  const billigst = vern.slice().sort((a,b) => a.kort.kost - b.kort.kost)[0];
-  const dobbel = k.ang.kort.nokler.includes('DOBBELTHOGG');
-  if(fp.liv.length <= 2 || dobbel || billigst.kort.kost <= 3) return billigst;
+/* The machine only blocked when the blocker survived the attack. Since a LEADER
+   has 5000 power and most BLOCKER cards sit below that, about one blocker was
+   used per game, and the keyword was in practice an empty shell: a deck full of
+   BLOCKER won every fifth game. Now a cheap blocker is sacrificed to save a life
+   card, the way a human would. */
+function aiPickBlocker(blockers){
+  const k = CG.battle;
+  const fp = CG.p[k.defS];
+  const safeOnes = blockers.filter(v => power(v) > power(k.att));
+  if(safeOnes.length) return safeOnes.sort((a,b) => power(a)-power(b))[0];
+  if(k.target.spot !== 'leader') return null;
+  const cheapest = blockers.slice().sort((a,b) => a.card.cost - b.card.cost)[0];
+  const double = k.att.card.keys.includes('DOUBLE_ATTACK');
+  if(fp.life.length <= 2 || double || cheapest.card.cost <= 3) return cheapest;
   return null;
 }
 
-const erMottrekkshendelse = kort =>
-  kort.kat === 'hendelse' && kort.eff && kort.eff.nar === 'mottrekk';
+const isCounterEvent = card =>
+  card.kind === 'event' && card.effect && card.effect.when === 'counter';
 
-/* Maskinen regnet bare med MOT-verdien og lot MOTTREKK-hendelsene ligge,
-   selv om mennesket kunne spille dem. Na teller begge veier, og den
-   sterkeste tas forst. Hendelsen legges rett paa det angrepne kortet:
-   det er alltid det den skal redde. */
-function aiMottrekk(){
-  const k = KS.kamp, fp = KS.p[k.forsvS];
-  const viktig = k.mal.sted === 'leder'
-    ? fp.liv.length <= 2
-    : k.mal.kort.kost >= 4;
-  if(!viktig) return;
+/* The machine only counted the COUNTER value and left the COUNTER events alone,
+   even though the human could play them. Now both count, and the strongest is
+   taken first. The event lands straight on the attacked card: that is always
+   what it is meant to save. */
+function aiCounter(){
+  const k = CG.battle, fp = CG.p[k.defS];
+  const important = k.target.spot === 'leader'
+    ? fp.life.length <= 2
+    : k.target.card.cost >= 4;
+  if(!important) return;
 
-  while(kraft(k.mal) <= kraft(k.ang)){
-    const valg = fp.hand.map(id => kortAv(id))
-      .map(kort => ({ kort, spilles: erMottrekkshendelse(kort) && kort.kost <= fp.sol.aktiv
-                                     && kort.eff.verdi > kort.mot }))
-      .map(o => ({ ...o, gir: o.spilles ? o.kort.eff.verdi : o.kort.mot }))
-      .filter(o => o.gir > 0)
-      .sort((a,b) => b.gir - a.gir)[0];
-    if(!valg) break;
-    fp.hand.splice(fp.hand.indexOf(valg.kort.id), 1);
-    fp.kompost.push(valg.kort.id);
-    if(valg.spilles) fp.sol.aktiv -= valg.kort.kost;
-    k.mal.kbuff += valg.gir;
-    logg('Motstanderen bruker ' + valg.kort.navn + ' som mottrekk (+' + valg.gir + ').');
+  while(power(k.target) <= power(k.att)){
+    const choice = fp.hand.map(id => cardById(id))
+      .map(card => ({ card, playable: isCounterEvent(card) && card.cost <= fp.sun.active
+                                      && card.effect.value > card.counter }))
+      .map(o => ({ ...o, gives: o.playable ? o.card.effect.value : o.card.counter }))
+      .filter(o => o.gives > 0)
+      .sort((a,b) => b.gives - a.gives)[0];
+    if(!choice) break;
+    fp.hand.splice(fp.hand.indexOf(choice.card.id), 1);
+    fp.compost.push(choice.card.id);
+    if(choice.playable) fp.sun.active -= choice.card.cost;
+    k.target.cbuff += choice.gives;
+    addLog('The opponent uses ' + choice.card.name + ' as a counter (+' + choice.gives + ').');
   }
-  tegn();
+  render();
 }
 
-/* ============================================================ kortgrafikk
-   Modellbildene er store data-URLer. De legges derfor i et eget stilark,
-   en regel per art, slik at brettet kan tegnes om uten a dra med seg
-   flere hundre kilobyte HTML hver gang. */
-let kunstArk = null;
-const kunstLagt = new Set();
-function kunst(kort){
-  const id = kort.artId, kl = 'kunst-' + id;
-  if(kunstLagt.has(id)) return kl;
+/* ============================================================ card graphics
+   The model images are large data URLs. They are therefore put in their own
+   stylesheet, one rule per species, so the board can be redrawn without
+   dragging several hundred kilobytes of HTML along every time. */
+let artSheet = null;
+const artDone = new Set();
+function art(card){
+  const id = card.speciesId, cls = 'art-' + id;
+  if(artDone.has(id)) return cls;
   try {
-    if(!kunstArk){
+    if(!artSheet){
       const s = document.createElement('style');
       document.head.appendChild(s);
-      kunstArk = s.sheet;
+      artSheet = s.sheet;
     }
-    kunstArk.insertRule(`.${kl}{background-image:url(${VM().lagMini(id, null)})}`,
-      kunstArk.cssRules.length);
-    kunstLagt.add(id);
+    artSheet.insertRule(`.${cls}{background-image:url(${VM().makeThumb(id, null)})}`,
+      artSheet.cssRules.length);
+    artDone.add(id);
   } catch(e){ return ''; }
-  return kl;
+  return cls;
 }
-function fargeStil(kort){
-  const f = KORTFARGER[kort.farger[0]];
-  const f2 = KORTFARGER[kort.farger[1] || kort.farger[0]];
-  return `--f:${f.hex};--fm:${f.mork};--fl:${f.lys};--f2:${f2.hex}`;
+function colorStyle(card){
+  const f = CARD_COLORS[card.colors[0]];
+  const f2 = CARD_COLORS[card.colors[1] || card.colors[0]];
+  return `--f:${f.hex};--fm:${f.dark};--fl:${f.light};--f2:${f2.hex}`;
 }
-function katMerke(kort){
-  return { leder:'LEDER', art:'ART', hendelse:'HENDELSE', biotop:'BIOTOP' }[kort.kat];
+function kindLabel(card){
+  return { leader:'LEADER', species:'SPECIES', event:'EVENT', biotope:'BIOTOPE' }[card.kind];
 }
 
-/* stort kort til arket */
-function kortStorHTML(kort){
-  const nok = kort.nokler.map(n => `<span class="kg-nok">${NOKKEL_VIS[n]}</span>`).join('');
-  const linjer = [];
-  if(kort.eff)     linjer.push(effHeltekst(kort.eff));
-  if(kort.utloser) linjer.push(effHeltekst(kort.utloser));
-  return `<article class="kg kg-${kort.kat}" style="${fargeStil(kort)}">
-    <div class="kg-hode">
-      <span class="kg-kost">${kort.kat === 'leder' ? kort.liv : kort.kost}</span>
-      <span class="kg-kostmerke">${kort.kat === 'leder' ? 'LIV' : 'KOST'}</span>
-      <span class="kg-navn">${kort.navn}</span>
-      ${kort.attributt ? `<span class="kg-attr">${kort.attributt}</span>` : ''}
+/* big card for the sheet */
+function bigCardHTML(card){
+  const keys = card.keys.map(n => `<span class="cg-key">${KEYWORD_LABEL[n]}</span>`).join('');
+  const lines = [];
+  if(card.effect)  lines.push(effectFullText(card.effect));
+  if(card.trigger) lines.push(effectFullText(card.trigger));
+  return `<article class="cg cg-${card.kind}" style="${colorStyle(card)}">
+    <div class="cg-head">
+      <span class="cg-cost">${card.kind === 'leader' ? card.life : card.cost}</span>
+      <span class="cg-cost-label">${card.kind === 'leader' ? 'LIFE' : 'COST'}</span>
+      <span class="cg-name">${card.name}</span>
+      ${card.attribute ? `<span class="cg-attr">${card.attribute}</span>` : ''}
     </div>
-    <div class="kg-kunst ${kunst(kort)}">
-      ${kort.mot ? `<span class="kg-mot"><i>MOT</i>${kort.mot}</span>` : ''}
-      <span class="kg-kat">${katMerke(kort)}</span>
+    <div class="cg-art ${art(card)}">
+      ${card.counter ? `<span class="cg-counter"><i>CTR</i>${card.counter}</span>` : ''}
+      <span class="cg-kind">${kindLabel(card)}</span>
     </div>
-    <div class="kg-typer">${kort.typer}</div>
-    <div class="kg-tekst">${nok}${linjer.map(l => `<p>${l}</p>`).join('')}
-      <p class="kg-sci">${kort.sci}</p></div>
-    <div class="kg-bunn">
-      ${kort.kraft != null ? `<span class="kg-kraft">${kort.kraft}</span>` : '<span></span>'}
-      <span class="kg-farge">${kort.farger.map(f => KORTFARGER[f].navn).join(' / ')}</span>
+    <div class="cg-types">${card.types}</div>
+    <div class="cg-text">${keys}${lines.map(l => `<p>${l}</p>`).join('')}
+      <p class="cg-sci">${card.sci}</p></div>
+    <div class="cg-bottom">
+      ${card.power != null ? `<span class="cg-power">${card.power}</span>` : '<span></span>'}
+      <span class="cg-color">${card.colors.map(f => CARD_COLORS[f].name).join(' / ')}</span>
     </div>
   </article>`;
 }
 
-/* lite kort til brettet og handa */
-function kortMiniHTML(kort, o={}){
-  const kl = ['kk', 'kk-' + kort.kat];
-  if(o.hvilt) kl.push('hvilt');
-  if(o.ny)    kl.push('ny');
-  if(o.mal)   kl.push('mal');
-  if(o.valgt) kl.push('valgt');
-  if(o.hand)  kl.push('kk-hand');
-  if(o.udyr)  kl.push('udyr');
-  const kr = o.kraft != null ? o.kraft : kort.kraft;
-  const sol = o.sol ? `<span class="kk-sol">${'●'.repeat(Math.min(5,o.sol))}</span>` : '';
-  return `<div class="${kl.join(' ')}" style="${fargeStil(kort)}" ${o.data||''}>
-    <span class="kk-kost">${kort.kat === 'leder' ? kort.liv : kort.kost}</span>
-    <span class="kk-kunst ${kunst(kort)}"></span>
-    <span class="kk-navn">${kort.navn}</span>
-    ${kr != null ? `<span class="kk-kraft">${kr}</span>` : ''}
-    ${kort.nokler.length ? `<span class="kk-nok">${NOKKEL_VIS[kort.nokler[0]][0]}</span>` : ''}
-    ${sol}
+/* small card for the board and the hand */
+function miniCardHTML(card, o={}){
+  const cls = ['mc', 'mc-' + card.kind];
+  if(o.rested)   cls.push('rested');
+  if(o.fresh)    cls.push('fresh');
+  if(o.target)   cls.push('target');
+  if(o.selected) cls.push('selected');
+  if(o.hand)     cls.push('mc-hand');
+  if(o.dim)      cls.push('dim');
+  const pw = o.power != null ? o.power : card.power;
+  const sun = o.sun ? `<span class="mc-sun">${'●'.repeat(Math.min(5,o.sun))}</span>` : '';
+  return `<div class="${cls.join(' ')}" style="${colorStyle(card)}" ${o.data||''}>
+    <span class="mc-cost">${card.kind === 'leader' ? card.life : card.cost}</span>
+    <span class="mc-art ${art(card)}"></span>
+    <span class="mc-name">${card.name}</span>
+    ${pw != null ? `<span class="mc-power">${pw}</span>` : ''}
+    ${card.keys.length ? `<span class="mc-key">${KEYWORD_LABEL[card.keys[0]][0]}</span>` : ''}
+    ${sun}
   </div>`;
 }
 
-/* ============================================================ tegning */
-function erMal(u){ return !!(KS.malvalg && KS.malvalg.lovlige.includes(u)); }
+/* ============================================================ rendering */
+function isTarget(u){ return !!(CG.targetPick && CG.targetPick.legal.includes(u)); }
 
-function enhetHTML(u, sti){
-  return kortMiniHTML(u.kort, {
-    hvilt:u.hvilt, ny:u.ny, sol:u.sol, kraft:kraft(u),
-    mal:erMal(u), valgt:KS.valgt === u,
-    data:`data-sti="${sti}"`,
+function unitHTML(u, path){
+  return miniCardHTML(u.card, {
+    rested:u.rested, fresh:u.fresh, sun:u.sun, power:power(u),
+    target:isTarget(u), selected:CG.selected === u,
+    data:`data-path="${path}"`,
   });
 }
 
-function solRadHTML(p){
-  const brukt = p.sol.total - p.sol.aktiv;
+function sunRowHTML(p){
   let s = '';
-  for(let i=0;i<p.sol.total;i++) s += `<i class="${i < p.sol.aktiv ? '' : 'brukt'}"></i>`;
-  return `<span class="ks-soltall">${p.sol.aktiv}/${p.sol.total}</span>${s}`;
+  for(let i=0;i<p.sun.total;i++) s += `<i class="${i < p.sun.active ? '' : 'used'}"></i>`;
+  return `<span class="cg-suncount">${p.sun.active}/${p.sun.total}</span>${s}`;
 }
-function livRadHTML(p){
-  return '<i></i>'.repeat(p.liv.length) || '<span class="ks-tomt">INGEN LIV</span>';
+function lifeRowHTML(p){
+  return '<i></i>'.repeat(p.life.length) || '<span class="cg-empty">NO LIFE</span>';
 }
 
-function tegn(){
-  if(!KS.p[0]) return;
-  const me = KS.p[0], foe = KS.p[1];
+function render(){
+  if(!CG.p[0]) return;
+  const me = CG.p[0], foe = CG.p[1];
 
-  $('#foeLiv').innerHTML  = livRadHTML(foe);
-  $('#myLiv').innerHTML   = livRadHTML(me);
-  $('#foeSol').innerHTML  = solRadHTML(foe);
-  $('#mySol').innerHTML   = solRadHTML(me);
+  $('#foeLife').innerHTML = lifeRowHTML(foe);
+  $('#myLife').innerHTML  = lifeRowHTML(me);
+  $('#foeSun').innerHTML  = sunRowHTML(foe);
+  $('#mySun').innerHTML   = sunRowHTML(me);
 
-  $('#foeTall').textContent = `STOKK ${foe.stokk.length} · HÅND ${foe.hand.length} · KOMPOST ${foe.kompost.length}`;
-  $('#myTall').textContent  = `STOKK ${me.stokk.length} · HÅND ${me.hand.length} · KOMPOST ${me.kompost.length}`;
+  $('#foeCount').textContent = `DECK ${foe.deck.length} · HAND ${foe.hand.length} · COMPOST ${foe.compost.length}`;
+  $('#myCount').textContent  = `DECK ${me.deck.length} · HAND ${me.hand.length} · COMPOST ${me.compost.length}`;
 
-  $('#foeLeder').innerHTML = enhetHTML(foe.leder, 'e:1:leder:0');
-  $('#myLeder').innerHTML  = enhetHTML(me.leder,  'e:0:leder:0');
+  $('#foeLeader').innerHTML = unitHTML(foe.leader, 'u:1:leader:0');
+  $('#myLeader').innerHTML  = unitHTML(me.leader,  'u:0:leader:0');
 
-  $('#foeBiotop').innerHTML = foe.biotop ? enhetHTML(foe.biotop, 'e:1:biotop:0') : '<div class="ks-plass">BIOTOP</div>';
-  $('#myBiotop').innerHTML  = me.biotop  ? enhetHTML(me.biotop,  'e:0:biotop:0') : '<div class="ks-plass">BIOTOP</div>';
+  $('#foeBiotope').innerHTML = foe.biotope ? unitHTML(foe.biotope, 'u:1:biotope:0') : '<div class="cg-slot">BIOTOPE</div>';
+  $('#myBiotope').innerHTML  = me.biotope  ? unitHTML(me.biotope,  'u:0:biotope:0') : '<div class="cg-slot">BIOTOPE</div>';
 
-  $('#foeArter').innerHTML = foe.arter.map((a,i) => enhetHTML(a, 'e:1:art:'+i)).join('')
-    || '<div class="ks-plass bred">INGEN ARTER</div>';
-  $('#myArter').innerHTML  = me.arter.map((a,i) => enhetHTML(a, 'e:0:art:'+i)).join('')
-    || '<div class="ks-plass bred">INGEN ARTER</div>';
+  $('#foeSpecies').innerHTML = foe.species.map((a,i) => unitHTML(a, 'u:1:species:'+i)).join('')
+    || '<div class="cg-slot wide">NO SPECIES</div>';
+  $('#mySpecies').innerHTML  = me.species.map((a,i) => unitHTML(a, 'u:0:species:'+i)).join('')
+    || '<div class="cg-slot wide">NO SPECIES</div>';
 
   $('#myHand').innerHTML = me.hand.map((id,i) => {
-    const k = kortAv(id);
-    return kortMiniHTML(k, { hand:true, udyr:!kanSpille(0,k), data:`data-sti="h:${i}"` });
+    const k = cardById(id);
+    return miniCardHTML(k, { hand:true, dim:!canPlay(0,k), data:`data-path="h:${i}"` });
   }).join('');
 
-  const min = KS.tur === 0 && !KS.kamp && !KS.malvalg;
-  $('#ksAvslutt').disabled = !min;
-  $('#ksTur').textContent = KS.slutt ? 'SLUTT'
-    : (KS.tur === 0 ? 'DIN TUR ' : 'MOTSTANDER ') + KS.turNr;
-  $('#ksBanner').hidden = !KS.malvalg;
-  if(KS.malvalg) $('#ksBannerTxt').textContent = KS.malvalg.tekst;
-  document.body.classList.toggle('ks-velger', !!KS.malvalg);
+  const mine = CG.turn === 0 && !CG.battle && !CG.targetPick;
+  $('#cgEnd').disabled = !mine;
+  $('#cgTurn').textContent = CG.over ? 'OVER'
+    : (CG.turn === 0 ? 'YOUR TURN ' : 'OPPONENT ') + CG.turnNo;
+  $('#cgBanner').hidden = !CG.targetPick;
+  if(CG.targetPick) $('#cgBannerTxt').textContent = CG.targetPick.text;
+  document.body.classList.toggle('cg-picking', !!CG.targetPick);
 
-  /* Verten er sannheten: hver gang brettet endrer seg, far gjesten det. */
-  if(erVert()) nettSend({ t:'tilstand', d:lagTilstand(1) });
+  /* The host is the truth: every time the board changes, the guest gets it. */
+  if(isHost()) netSend({ t:'state', d:makeState(1) });
 }
 
-/* ============================================================ ark og dialog */
-function lukkArk(){ $('#ksArk').hidden = true; KS.valgt = null; tegn(); }
+/* ============================================================ sheet and dialog */
+function closeSheet(){ $('#cgSheet').hidden = true; CG.selected = null; render(); }
 
-function apneArk(kort, knapper){
-  $('#ksArkKort').innerHTML = kortStorHTML(kort);
-  $('#ksArkKnapper').innerHTML = knapper
-    .map((b,i) => `<button class="btn ${b.pri ? 'btn-primary' : ''}" data-ark="${i}"${b.av ? ' disabled' : ''}>${b.t}</button>`)
+function openSheet(card, buttons){
+  $('#cgSheetCard').innerHTML = bigCardHTML(card);
+  $('#cgSheetButtons').innerHTML = buttons
+    .map((b,i) => `<button class="btn ${b.pri ? 'btn-primary' : ''}" data-sheet="${i}"${b.off ? ' disabled' : ''}>${b.t}</button>`)
     .join('');
-  $('#ksArk').hidden = false;
-  KS.arkValg = knapper;
+  $('#cgSheet').hidden = false;
+  CG.sheetButtons = buttons;
 }
 
-/* enkel sporsmalsdialog med kortstripe */
-function sporsmal(tekst, kort, valg){
-  $('#ksDialogTxt').textContent = tekst;
-  $('#ksDialogKort').innerHTML = (kort||[]).map(k => kortMiniHTML(k, {})).join('');
-  $('#ksDialogKnapper').innerHTML = valg
+/* simple question dialog with a card strip */
+function question(text, cards, options){
+  $('#cgDialogTxt').textContent = text;
+  $('#cgDialogCards').innerHTML = (cards||[]).map(k => miniCardHTML(k, {})).join('');
+  $('#cgDialogButtons').innerHTML = options
     .map((v,i) => `<button class="btn ${i ? 'btn-primary' : ''}" data-dlg="${i}">${v}</button>`).join('');
-  $('#ksDialog').hidden = false;
-  return nyttLofte().then(v => { $('#ksDialog').hidden = true; return v; });
+  $('#cgDialog').hidden = false;
+  return newPromise().then(v => { $('#cgDialog').hidden = true; return v; });
 }
 
-function visResultat(){
-  vistResultat = true;
-  if(erVert()) nettSend({ t:'tilstand', d:lagTilstand(1) });
-  $('#ksResultTxt').textContent = KS.seier ? 'SEIER!' : 'TAP';
-  $('#ksResultTxt').classList.toggle('tap', !KS.seier);
-  $('#ksResultGrunn').textContent = KS.grunn;
-  $('#ksResult').hidden = false;
-  KS.seier ? VM().LYD.seier() : VM().LYD.tap();
-  VM().dirr(KS.seier ? [40,60,40] : 220);
-  if(KS.seier){ VM().STATE.mynt += 80; VM().oppdaterHud(); }
+function showResult(){
+  resultShown = true;
+  if(isHost()) netSend({ t:'state', d:makeState(1) });
+  $('#cgResultTxt').textContent = CG.won ? 'VICTORY!' : 'DEFEAT';
+  $('#cgResultTxt').classList.toggle('loss', !CG.won);
+  $('#cgResultReason').textContent = CG.reason;
+  $('#cgResult').hidden = false;
+  CG.won ? VM().SOUND.win() : VM().SOUND.lose();
+  VM().vibrate(CG.won ? [40,60,40] : 220);
+  if(CG.won){ VM().STATE.coins += 80; VM().updateHud(); }
 }
 
-/* ============================================================ inndata */
-function sti(el){
-  const d = el.closest('[data-sti]');
-  return d ? d.dataset.sti.split(':') : null;
+/* ============================================================ input */
+function path(el){
+  const d = el.closest('[data-path]');
+  return d ? d.dataset.path.split(':') : null;
 }
-function enhetFraSti(s){
+function unitFromPath(s){
   if(!s) return null;
-  const p = KS.p[+s[1]];
+  const p = CG.p[+s[1]];
   if(!p) return null;
-  if(s[2] === 'leder')  return p.leder;
-  if(s[2] === 'biotop') return p.biotop;
-  return p.arter[+s[3]] || null;
+  if(s[2] === 'leader')  return p.leader;
+  if(s[2] === 'biotope') return p.biotope;
+  return p.species[+s[3]] || null;
 }
-/* Motsatt vei: fra enhet til sti. Stien er trebokstavsspraaket vi sender
-   over nettet, og det samme som ligger i data-sti paa brettet. */
-function stiAv(u){
+/* The other way: from unit to path. The path is the three-letter language we
+   send over the network, and the same thing that sits in data-path on the board. */
+function pathOf(u){
   if(!u) return null;
-  if(u.sted === 'leder')  return ['e', String(u.side), 'leder', '0'];
-  if(u.sted === 'biotop') return ['e', String(u.side), 'biotop', '0'];
-  const i = KS.p[u.side].arter.indexOf(u);
-  return i < 0 ? null : ['e', String(u.side), 'art', String(i)];
+  if(u.spot === 'leader')  return ['u', String(u.side), 'leader', '0'];
+  if(u.spot === 'biotope') return ['u', String(u.side), 'biotope', '0'];
+  const i = CG.p[u.side].species.indexOf(u);
+  return i < 0 ? null : ['u', String(u.side), 'species', String(i)];
 }
-/* Speiler en sti mellom de to perspektivene. Operasjonen er sin egen invers.
-   Stier paa nettet staar alltid i avsenderens perspektiv; mottakeren speiler. */
-function speilSti(s){ return s ? ['e', s[1] === '0' ? '1' : '0', s[2], s[3]] : null; }
+/* Mirrors a path between the two perspectives. The operation is its own inverse.
+   Paths on the network always stand in the sender's perspective; the receiver
+   mirrors them. */
+function mirrorPath(s){ return s ? ['u', s[1] === '0' ? '1' : '0', s[2], s[3]] : null; }
 
-const brettKlikk = trygg(async e => {
-  const s = sti(e.target);
+const boardClick = safe(async e => {
+  const s = path(e.target);
   if(!s) return;
 
-  /* malvalg har forrang */
-  if(KS.malvalg){
-    if(s[0] !== 'e') return;
-    const u = enhetFraSti(s);
-    if(!KS.malvalg.lovlige.includes(u)) return;
-    VM().LYD.klikk();
-    losLofte(u);
+  /* target picking takes priority */
+  if(CG.targetPick){
+    if(s[0] !== 'u') return;
+    const u = unitFromPath(s);
+    if(!CG.targetPick.legal.includes(u)) return;
+    VM().SOUND.click();
+    resolvePromise(u);
     return;
   }
-  if(KS.kamp || KS.tur !== 0 || KS.slutt) return;
+  if(CG.battle || CG.turn !== 0 || CG.over) return;
 
   if(s[0] === 'h'){
     const i = +s[1];
-    const kort = kortAv(KS.p[0].hand[i]);
-    apneArk(kort, [
-      { t:'SPILL · ' + kort.kost + ' SOL', pri:true, av:!kanSpille(0,kort),
-        gjor: async () => { lukkArk(); await handling({ h:'spill', i }); } },
-      { t:'LUKK', gjor: lukkArk },
+    const card = cardById(CG.p[0].hand[i]);
+    openSheet(card, [
+      { t:'PLAY · ' + card.cost + ' SUN', pri:true, off:!canPlay(0,card),
+        run: async () => { closeSheet(); await action({ h:'play', i }); } },
+      { t:'CLOSE', run: closeSheet },
     ]);
     return;
   }
 
-  const u = enhetFraSti(s);
+  const u = unitFromPath(s);
   if(!u) return;
-  KS.valgt = u;
+  CG.selected = u;
 
-  /* eget angrep: velg mal etterpa */
-  const knapper = [];
-  if(u.side === 0 && kanAngripe(u)){
-    knapper.push({ t:'ANGRIP', pri:true, gjor: async () => {
-      lukkArk();
-      const mal = await velgMal(0, x => lovligeMal(1).includes(x), 'VELG MÅL FOR ANGREPET');
-      const til = stiAv(mal);
-      if(til) await handling({ h:'angrip', fra:s, til });
+  /* own attack: pick the target afterwards */
+  const buttons = [];
+  if(u.side === 0 && canAttack(u)){
+    buttons.push({ t:'ATTACK', pri:true, run: async () => {
+      closeSheet();
+      const target = await pickTarget(0, x => legalTargets(1).includes(x), 'PICK A TARGET FOR THE ATTACK');
+      const to = pathOf(target);
+      if(to) await action({ h:'attack', from:s, to });
     }});
   }
-  if(u.side === 0 && u.sted !== 'biotop' && KS.p[0].sol.aktiv > 0){
-    knapper.push({ t:'GI SOL', gjor: async () => { lukkArk(); await handling({ h:'sol', sti:s }); } });
+  if(u.side === 0 && u.spot !== 'biotope' && CG.p[0].sun.active > 0){
+    buttons.push({ t:'GIVE SUN', run: async () => { closeSheet(); await action({ h:'sun', path:s }); } });
   }
-  if(u.side === 0 && u.kort.eff && u.kort.eff.nar === 'aktiver'){
-    const brukt = u.sted === 'leder' ? KS.p[0].lederBrukt : u.brukt;
-    knapper.push({ t:'AKTIVER', av:brukt, gjor: async () => { lukkArk(); await handling({ h:'aktiver', sti:s }); } });
+  if(u.side === 0 && u.card.effect && u.card.effect.when === 'activate'){
+    const used = u.spot === 'leader' ? CG.p[0].leaderUsed : u.used;
+    buttons.push({ t:'ACTIVATE', off:used, run: async () => { closeSheet(); await action({ h:'activate', path:s }); } });
   }
-  knapper.push({ t:'LUKK', gjor: lukkArk });
-  apneArk(u.kort, knapper);
-  tegn();
+  buttons.push({ t:'CLOSE', run: closeSheet });
+  openSheet(u.card, buttons);
+  render();
 });
 
-/* ============================================================ nettkamp */
-/* Verten eier motoren og er alltid side 0 i sin egen KS. Gjesten kjorer ikke
-   motoren i det hele tatt: den far speilvendte oyeblikksbilder der den selv
-   ligger paa plass 0, og kan derfor bruke tegn() og brettKlikk uendret. */
+/* ============================================================ net battle */
+/* The host owns the engine and is always side 0 in its own CG. The guest does
+   not run the engine at all: it gets mirrored snapshots where it sits at
+   position 0 itself, and can therefore use render() and boardClick unchanged. */
 
-let vistResultat = false;
-let vertIGang = false;
+let resultShown = false;
+let hostRunning = false;
 
-/* -------- handlinger -------- */
-/* De fem tingene en spiller faktisk kan gjore. Gjesten sender dem over
-   kanalen i stedet for a utfore dem; verten utforer dem for begge. */
-async function handling(m){
-  if(erGjest()){ nettSend({ t:'handling', m }); return; }
-  await utforHandling(0, m);
+/* -------- actions -------- */
+/* The five things a player can actually do. The guest sends them over the
+   channel instead of performing them; the host performs them for both. */
+async function action(m){
+  if(isGuest()){ netSend({ t:'action', m }); return; }
+  await runAction(0, m);
 }
 
-async function utforHandling(side, m){
-  if(KS.slutt || KS.tur !== side) return;
+async function runAction(side, m){
+  if(CG.over || CG.turn !== side) return;
   switch(m.h){
-    case 'spill':
-      await spillKort(side, +m.i);
+    case 'play':
+      await playCard(side, +m.i);
       break;
-    case 'angrip': {
-      const a = enhetFraSti(m.fra), b = enhetFraSti(m.til);
+    case 'attack': {
+      const a = unitFromPath(m.from), b = unitFromPath(m.to);
       if(!a || !b || a.side !== side) return;
-      if(!kanAngripe(a) || !lovligeMal(1 - side).includes(b)) return;
-      await angrip(a, b);
+      if(!canAttack(a) || !legalTargets(1 - side).includes(b)) return;
+      await attack(a, b);
       break; }
-    case 'sol': {
-      const u = enhetFraSti(m.sti);
-      if(u && u.side === side && u.sted !== 'biotop') giSol(side, u);
+    case 'sun': {
+      const u = unitFromPath(m.path);
+      if(u && u.side === side && u.spot !== 'biotope') giveSun(side, u);
       break; }
-    case 'aktiver': {
-      const u = enhetFraSti(m.sti);
-      if(u && u.side === side) await aktiver(side, u);
+    case 'activate': {
+      const u = unitFromPath(m.path);
+      if(u && u.side === side) await activate(side, u);
       break; }
-    case 'avslutt': {
-      if(KS.kamp || KS.malvalg) return;
-      const f = KS.turFerdig; KS.turFerdig = null;
+    case 'end': {
+      if(CG.battle || CG.targetPick) return;
+      const f = CG.turnDone; CG.turnDone = null;
       if(f) f();
       break; }
   }
 }
 
-function speilHandling(m){
+function mirrorAction(m){
   const r = { ...m };
-  if(r.fra) r.fra = speilSti(r.fra);
-  if(r.til) r.til = speilSti(r.til);
-  if(r.sti) r.sti = speilSti(r.sti);
+  if(r.from) r.from = mirrorPath(r.from);
+  if(r.to)   r.to   = mirrorPath(r.to);
+  if(r.path) r.path = mirrorPath(r.path);
   return r;
 }
 
-/* -------- oyeblikksbilde -------- */
-function serEnhet(u, meg){
+/* -------- snapshot -------- */
+function viewUnit(u, me){
   if(!u) return null;
-  return { k:u.kort.id, side:(u.side === meg ? 0 : 1), sted:u.sted,
-           hvilt:u.hvilt, ny:u.ny, sol:u.sol, buff:u.buff, kbuff:u.kbuff, brukt:u.brukt };
+  return { k:u.card.id, side:(u.side === me ? 0 : 1), spot:u.spot,
+           rested:u.rested, fresh:u.fresh, sun:u.sun, buff:u.buff, cbuff:u.cbuff, used:u.used };
 }
-/* aapen = mottakerens egen side. Motpartens hand og stokk sendes som antall,
-   saa kortene aldri forlater verten. */
-function serSpiller(p, meg, aapen){
+/* open = the receiver's own side. The opponent's hand and deck are sent as
+   counts, so the cards never leave the host. */
+function viewPlayer(p, me, open){
   return {
-    hand: aapen ? p.hand.slice() : p.hand.length,
-    stokk: p.stokk.length, kompost: p.kompost.length, liv: p.liv.length,
-    sol: { ...p.sol }, lederBrukt: p.lederBrukt,
-    leder: serEnhet(p.leder, meg),
-    biotop: serEnhet(p.biotop, meg),
-    arter: p.arter.map(a => serEnhet(a, meg)),
+    hand: open ? p.hand.slice() : p.hand.length,
+    deck: p.deck.length, compost: p.compost.length, life: p.life.length,
+    sun: { ...p.sun }, leaderUsed: p.leaderUsed,
+    leader: viewUnit(p.leader, me),
+    biotope: viewUnit(p.biotope, me),
+    species: p.species.map(a => viewUnit(a, me)),
   };
 }
-function lagTilstand(forSide){
-  const sisteLogg = KS.logg[KS.logg.length - 1];
+function makeState(forSide){
+  const lastLog = CG.log[CG.log.length - 1];
   return {
-    p: [ serSpiller(KS.p[forSide], forSide, true),
-         serSpiller(KS.p[1 - forSide], forSide, false) ],
-    tur:    KS.tur    === forSide ? 0 : 1,
-    forste: KS.forste === forSide ? 0 : 1,
-    turNr: KS.turNr, slutt: KS.slutt, grunn: KS.grunn,
-    seier: forSide === 0 ? KS.seier : !KS.seier,
-    kamp: !!KS.kamp,
-    logg: sisteLogg
-      ? { t:sisteLogg.t, s:(sisteLogg.s == null ? null : (sisteLogg.s === forSide ? 0 : 1)) }
+    p: [ viewPlayer(CG.p[forSide], forSide, true),
+         viewPlayer(CG.p[1 - forSide], forSide, false) ],
+    turn:  CG.turn  === forSide ? 0 : 1,
+    first: CG.first === forSide ? 0 : 1,
+    turnNo: CG.turnNo, over: CG.over, reason: CG.reason,
+    won: forSide === 0 ? CG.won : !CG.won,
+    battle: !!CG.battle,
+    log: lastLog
+      ? { t:lastLog.t, s:(lastLog.s == null ? null : (lastLog.s === forSide ? 0 : 1)) }
       : null,
   };
 }
 
-function deEnhet(e){
+function readUnit(e){
   if(!e) return null;
-  return { kort:kortAv(e.k), side:e.side, sted:e.sted, hvilt:e.hvilt, ny:e.ny,
-           sol:e.sol, buff:e.buff, kbuff:e.kbuff, brukt:e.brukt };
+  return { card:cardById(e.k), side:e.side, spot:e.spot, rested:e.rested, fresh:e.fresh,
+           sun:e.sun, buff:e.buff, cbuff:e.cbuff, used:e.used };
 }
-/* Kortrygger vi bare teller. Da virker livRadHTML og stokketellingen uendret. */
-const fyll = n => new Array(n).fill('?');
+/* Card backs we only count. Then lifeRowHTML and the deck count work unchanged. */
+const fillBacks = n => new Array(n).fill('?');
 
-function deSpiller(d, styring){
+function readPlayer(d, control){
   const p = {
-    styring,
-    hand: Array.isArray(d.hand) ? d.hand.slice() : fyll(d.hand),
-    stokk: fyll(d.stokk), kompost: fyll(d.kompost), liv: fyll(d.liv),
-    sol: { ...d.sol }, lederBrukt: d.lederBrukt,
-    arter: d.arter.map(deEnhet),
-    biotop: deEnhet(d.biotop),
+    control,
+    hand: Array.isArray(d.hand) ? d.hand.slice() : fillBacks(d.hand),
+    deck: fillBacks(d.deck), compost: fillBacks(d.compost), life: fillBacks(d.life),
+    sun: { ...d.sun }, leaderUsed: d.leaderUsed,
+    species: d.species.map(readUnit),
+    biotope: readUnit(d.biotope),
   };
-  p.leder = deEnhet(d.leder);
+  p.leader = readUnit(d.leader);
   return p;
 }
 
-function lesTilstand(d){
-  clearInterval(klarPuls); klarPuls = null;
-  KS.p[0] = deSpiller(d.p[0], 'lokal');
-  KS.p[1] = deSpiller(d.p[1], 'fjern');
-  KS.tur = d.tur; KS.forste = d.forste; KS.turNr = d.turNr;
-  KS.slutt = d.slutt; KS.seier = d.seier; KS.grunn = d.grunn;
-  KS.kamp = d.kamp ? {} : null;
-  KS.valgt = null;
-  /* Enhetene er nye objekter naa, saa et paagaende malvalg maa peke paa nytt. */
-  if(KS.malvalg && KS.malvalg.stier){
-    KS.malvalg.lovlige = KS.malvalg.stier.map(enhetFraSti).filter(Boolean);
+function readState(d){
+  clearInterval(readyPulse); readyPulse = null;
+  CG.p[0] = readPlayer(d.p[0], 'local');
+  CG.p[1] = readPlayer(d.p[1], 'remote');
+  CG.turn = d.turn; CG.first = d.first; CG.turnNo = d.turnNo;
+  CG.over = d.over; CG.won = d.won; CG.reason = d.reason;
+  CG.battle = d.battle ? {} : null;
+  CG.selected = null;
+  /* The units are new objects now, so a target pick in progress must point anew. */
+  if(CG.targetPick && CG.targetPick.paths){
+    CG.targetPick.legal = CG.targetPick.paths.map(unitFromPath).filter(Boolean);
   }
-  if(d.logg){
-    KS.logg.push(d.logg);
-    if(KS.logg.length > 40) KS.logg.shift();
+  if(d.log){
+    CG.log.push(d.log);
+    if(CG.log.length > 40) CG.log.shift();
   }
-  tegn();
-  if(d.logg){ const el = $('#ksLogg'); if(el) el.textContent = loggTekst(d.logg, 0); }
-  if(KS.slutt && !vistResultat){ vistResultat = true; visResultat(); }
+  render();
+  if(d.log){ const el = $('#cgLog'); if(el) el.textContent = logText(d.log, 0); }
+  if(CG.over && !resultShown){ resultShown = true; showResult(); }
 }
 
-/* -------- gjestens svar paa vertens spoersmal -------- */
-async function gjestSpor(m){
-  const kort = (m.kort || []).map(id => kortAv(id)).filter(Boolean);
+/* -------- the guest's answers to the host's questions -------- */
+async function guestAsk(m){
+  const cards = (m.cards || []).map(id => cardById(id)).filter(Boolean);
   let v;
-  try { v = await sporsmal(m.tekst, kort, m.valg); }
+  try { v = await question(m.text, cards, m.options); }
   catch(e){ return; }
-  nettSend({ t:'svar', id:m.id, verdi:v });
+  netSend({ t:'answer', id:m.id, value:v });
 }
 
-async function gjestMalvalg(m){
-  const lovlige = (m.lovlige || []).map(s => enhetFraSti(speilSti(s))).filter(Boolean);
-  if(!lovlige.length){ nettSend({ t:'svar', id:m.id, verdi:null }); return; }
-  const stier = lovlige.map(stiAv).filter(Boolean);
-  KS.malvalg = { lovlige, tekst:m.tekst, stier };
-  tegn();
+async function guestPickTarget(m){
+  const legal = (m.legal || []).map(s => unitFromPath(mirrorPath(s))).filter(Boolean);
+  if(!legal.length){ netSend({ t:'answer', id:m.id, value:null }); return; }
+  const paths = legal.map(pathOf).filter(Boolean);
+  CG.targetPick = { legal, text:m.text, paths };
+  render();
   let u = null;
-  try { u = await nyttLofte(); }
+  try { u = await newPromise(); }
   catch(e){ return; }
-  KS.malvalg = null;
-  tegn();
-  nettSend({ t:'svar', id:m.id, verdi: u ? stiAv(u) : null });
+  CG.targetPick = null;
+  render();
+  netSend({ t:'answer', id:m.id, value: u ? pathOf(u) : null });
 }
 
-/* -------- innkommende meldinger -------- */
-const taImot = trygg(async m => {
-  if(!m || !KS.nett) return;
-  if(m.t === 'farvel'){ avbrytNettkamp('MOTSTANDEREN FORLOT KAMPEN'); return; }
+/* -------- incoming messages -------- */
+const receive = safe(async m => {
+  if(!m || !CG.net) return;
+  if(m.t === 'bye'){ abortNetBattle('THE OPPONENT LEFT THE BATTLE'); return; }
 
-  if(erVert()){
-    if(m.t === 'klar'){ vertStart(m.leder, m.stokk); return; }
-    if(m.t === 'handling'){ await utforHandling(1, speilHandling(m.m)); return; }
-    if(m.t === 'svar'){ losFjernLofte(m.id, m.verdi); return; }
+  if(isHost()){
+    if(m.t === 'ready'){ hostStart(m.leader, m.deck); return; }
+    if(m.t === 'action'){ await runAction(1, mirrorAction(m.m)); return; }
+    if(m.t === 'answer'){ resolveRemotePromise(m.id, m.value); return; }
     return;
   }
   switch(m.t){
-    case 'tilstand': lesTilstand(m.d); break;
-    case 'spor':     await gjestSpor(m); break;
-    case 'malvalg':  await gjestMalvalg(m); break;
+    case 'state':  readState(m.d); break;
+    case 'ask':    await guestAsk(m); break;
+    case 'target': await guestPickTarget(m); break;
   }
 });
 
-/* -------- start og slutt -------- */
-function tomtBrett(tekst){
-  for(const id of ['foeLiv','myLiv','foeSol','mySol','foeLeder','myLeder',
-                   'foeBiotop','myBiotop','foeArter','myArter','myHand']){
+/* -------- start and end -------- */
+function emptyBoard(text){
+  for(const id of ['foeLife','myLife','foeSun','mySun','foeLeader','myLeader',
+                   'foeBiotope','myBiotope','foeSpecies','mySpecies','myHand']){
     const el = $('#' + id); if(el) el.innerHTML = '';
   }
-  $('#foeTall').textContent = ''; $('#myTall').textContent = '';
-  $('#ksTur').textContent = tekst;
-  $('#ksLogg').textContent = ' ';
-  $('#ksAvslutt').disabled = true;
+  $('#foeCount').textContent = ''; $('#myCount').textContent = '';
+  $('#cgTurn').textContent = text;
+  $('#cgLog').textContent = ' ';
+  $('#cgEnd').disabled = true;
 }
 
-function startVert(kampId){
-  KS.nett = { rolle:'vert', kampId };
-  KS.p[0] = KS.p[1] = null;
-  vertIGang = false;
-  nullstill();
-  tomtBrett('VENTER PÅ MOTSTANDEREN');
+function startHost(battleId){
+  CG.net = { role:'host', battleId };
+  CG.p[0] = CG.p[1] = null;
+  hostRunning = false;
+  reset();
+  emptyBoard('WAITING FOR THE OPPONENT');
 }
 
-/* Gjesten vet ikke naar verten har abonnert paa kanalen, saa den gjentar
-   meldingen til det forste oyeblikksbildet kommer tilbake. */
-let klarPuls = null;
-function startGjest(kampId){
-  KS.nett = { rolle:'gjest', kampId };
-  KS.p[0] = KS.p[1] = null;
-  nullstill();
-  tomtBrett('VENTER PÅ MOTSTANDEREN');
-  /* Verten regner ut hele kampen, saa den maa kjenne gjestens stokk. Den
-     sendes med klarmeldingen: kort-id-ene baerer nivaaet, saa verten kan
-     slaa opp de samme kortene uten aa faa noe mer tilsendt. */
-  const si = () => nettSend({ t:'klar', leder:KS.minLeder, stokk:minStokk(kortAv(KS.minLeder)) });
-  si();
-  clearInterval(klarPuls);
-  klarPuls = setInterval(() => { if(erGjest()) si(); else clearInterval(klarPuls); }, 1000);
+/* The guest does not know when the host has subscribed to the channel, so it
+   repeats the message until the first snapshot comes back. */
+let readyPulse = null;
+function startGuest(battleId){
+  CG.net = { role:'guest', battleId };
+  CG.p[0] = CG.p[1] = null;
+  reset();
+  emptyBoard('WAITING FOR THE OPPONENT');
+  /* The host computes the whole battle, so it must know the guest's deck. It is
+     sent with the ready message: the card ids carry the level, so the host can
+     look up the same cards without being sent anything more. */
+  const say = () => netSend({ t:'ready', leader:CG.myLeader, deck:myDeck(cardById(CG.myLeader)) });
+  say();
+  clearInterval(readyPulse);
+  readyPulse = setInterval(() => { if(isGuest()) say(); else clearInterval(readyPulse); }, 1000);
 }
 
-/* Verten venter til gjesten melder seg, saa den vet hvilken leder
-   motparten stiller med. */
-function vertStart(motLeder, motStokk){
-  if(vertIGang || !erVert()) return;
-  vertIGang = true;
-  vistResultat = false;
-  kjorSpill(KS.minLeder, motLeder, 'fjern', motStokk);
+/* The host waits until the guest reports in, so it knows which leader the
+   opponent brings. */
+function hostStart(foeLeader, foeDeck){
+  if(hostRunning || !isHost()) return;
+  hostRunning = true;
+  resultShown = false;
+  runGame(CG.myLeader, foeLeader, 'remote', foeDeck);
 }
 
-function avbrytNettkamp(grunn){
-  if(!KS.nett) return;
-  KS.nett = null;
-  clearInterval(klarPuls); klarPuls = null;
-  KS.gen++;                       // gamle motorlokker gir seg
-  brytAlleLofter();
-  if(KS.turFerdig){ const f = KS.turFerdig; KS.turFerdig = null; f(); }
-  tomKo();
-  NETT.kampUt();
-  VM().toast(grunn);
-  VM().gaTil('lobby');
+function abortNetBattle(reason){
+  if(!CG.net) return;
+  CG.net = null;
+  clearInterval(readyPulse); readyPulse = null;
+  CG.gen++;                       // old engine loops give up
+  breakAllPromises();
+  if(CG.turnDone){ const f = CG.turnDone; CG.turnDone = null; f(); }
+  clearQueue();
+  NET.battleOut();
+  VM().toast(reason);
+  VM().goTo('lobby');
 }
 
-/* Kalles naar spilleren gaar ut av dystskjermen. */
-function forlat(){
-  if(!KS.nett) return;
-  KS.nett = null;
-  clearInterval(klarPuls); klarPuls = null;
-  KS.gen++;
-  brytAlleLofter();
-  if(KS.turFerdig){ const f = KS.turFerdig; KS.turFerdig = null; f(); }
-  NETT.send({ t:'farvel' });
-  tomKo();
-  NETT.kampUt();
+/* Called when the player leaves the battle screen. */
+function leave(){
+  if(!CG.net) return;
+  CG.net = null;
+  clearInterval(readyPulse); readyPulse = null;
+  CG.gen++;
+  breakAllPromises();
+  if(CG.turnDone){ const f = CG.turnDone; CG.turnDone = null; f(); }
+  NET.send({ t:'bye' });
+  clearQueue();
+  NET.battleOut();
 }
 
-/* ============================================================ oppstart */
-let kablet = false;
-function kable(){
-  if(kablet) return;
-  kablet = true;
-  $('#screen-battle').addEventListener('click', brettKlikk);  // dekker brett og hand
+/* ============================================================ startup */
+let wired = false;
+function wire(){
+  if(wired) return;
+  wired = true;
+  $('#screen-battle').addEventListener('click', boardClick);  // covers board and hand
 
-  $('#ksArkKnapper').addEventListener('click', trygg(async e => {
-    const b = e.target.closest('[data-ark]');
+  $('#cgSheetButtons').addEventListener('click', safe(async e => {
+    const b = e.target.closest('[data-sheet]');
     if(!b) return;
-    await KS.arkValg[+b.dataset.ark].gjor();
+    await CG.sheetButtons[+b.dataset.sheet].run();
   }));
-  $('#ksArkBak').addEventListener('click', lukkArk);
+  $('#cgSheetBack').addEventListener('click', closeSheet);
 
-  $('#ksDialogKnapper').addEventListener('click', e => {
+  $('#cgDialogButtons').addEventListener('click', e => {
     const b = e.target.closest('[data-dlg]');
-    if(b) losLofte(+b.dataset.dlg);
+    if(b) resolvePromise(+b.dataset.dlg);
   });
 
-  $('#ksAvslutt').addEventListener('click', trygg(async () => {
-    if(KS.tur !== 0 || KS.kamp || KS.malvalg || KS.slutt) return;
-    VM().LYD.klikk();
-    await handling({ h:'avslutt' });
+  $('#cgEnd').addEventListener('click', safe(async () => {
+    if(CG.turn !== 0 || CG.battle || CG.targetPick || CG.over) return;
+    VM().SOUND.click();
+    await action({ h:'end' });
   }));
 
-  $('#ksAvbryt').addEventListener('click', () => {
-    if(KS.malvalg) losLofte(null);
+  $('#cgCancel').addEventListener('click', () => {
+    if(CG.targetPick) resolvePromise(null);
   });
 
-  /* Lederbytte hoerer til enspillerkampen. I nettkamp velges lederen i lobbyen. */
-  $('#ksBytt').addEventListener('click', () => {
-    if(KS.nett){ VM().toast('LEDEREN VELGES I LOBBYEN'); return; }
-    const i = LEDERE.findIndex(l => l.id === KS.minLeder);
-    KS.minLeder = LEDERE[(i+1) % LEDERE.length].id;
+  /* Swapping leader belongs to the solo battle. In a net battle the leader is
+     chosen in the lobby. */
+  $('#cgSwap').addEventListener('click', () => {
+    if(CG.net){ VM().toast('THE LEADER IS CHOSEN IN THE LOBBY'); return; }
+    const i = LEADERS.findIndex(l => l.id === CG.myLeader);
+    CG.myLeader = LEADERS[(i+1) % LEADERS.length].id;
     start();
   });
 
-  $('#ksIgjen').addEventListener('click', () => {
-    if(KS.nett){ forlat(); VM().gaTil('lobby'); return; }
+  $('#cgAgain').addEventListener('click', () => {
+    if(CG.net){ leave(); VM().goTo('lobby'); return; }
     start();
   });
 }
 
-/* Felles opprydding for alle tre oppstartene. */
-function nullstill(){
-  kable();
-  $('#ksResult').hidden = true;
-  $('#ksDialog').hidden = true;
-  $('#ksArk').hidden = true;
-  $('#ksBanner').hidden = true;
-  document.body.classList.remove('ks-velger');
-  KS.turFerdig = null;
-  KS.malvalg = null;
-  KS.valgt = null;
-  KS.logg = [];
-  vistResultat = false;
-  brytAlleLofter();
-  tomKo();
+/* Shared cleanup for all three startups. */
+function reset(){
+  wire();
+  $('#cgResult').hidden = true;
+  $('#cgDialog').hidden = true;
+  $('#cgSheet').hidden = true;
+  $('#cgBanner').hidden = true;
+  document.body.classList.remove('cg-picking');
+  CG.turnDone = null;
+  CG.targetPick = null;
+  CG.selected = null;
+  CG.log = [];
+  resultShown = false;
+  breakAllPromises();
+  clearQueue();
 }
 
 function start(){
-  KS.nett = null;
-  nullstill();
-  kjorSpill(KS.minLeder);
+  CG.net = null;
+  reset();
+  runGame(CG.myLeader);
 }
 
 return {
-  start, startVert, startGjest, forlat, taImot,
-  motpartBorte: () => avbrytNettkamp('MOTSTANDEREN MISTET FORBINDELSEN'),
-  KS,
+  start, startHost, startGuest, leave, receive,
+  opponentGone: () => abortNetBattle('THE OPPONENT LOST THE CONNECTION'),
+  CG,
 };
 })();

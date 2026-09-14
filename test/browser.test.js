@@ -1,29 +1,29 @@
-/* Aapner spillet i to faner i ekte Chrome, lar den ene utfordre den andre og
-   sjekker at begge havner i samme kamp. Styres over DevTools-protokollen,
-   saa testen trenger ingen pakker. */
+/* Opens the game in two tabs of a real Chrome, lets one challenge the other
+   and checks that both end up in the same battle. Driven over the DevTools
+   protocol, so the test needs no packages. */
 const { spawn, execFileSync } = require('child_process');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const ROT = path.join(__dirname, '..');
+const ROOT = path.join(__dirname, '..');
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
-let feil = 0;
-const sjekk = (ok, hva) => { if(!ok){ feil++; console.log('FEIL: ' + hva); } else console.log('ok  - ' + hva); };
+let failures = 0;
+const check = (ok, what) => { if(!ok){ failures++; console.log('FAIL: ' + what); } else console.log('ok  - ' + what); };
 
-const TYPER = { '.html':'text/html', '.js':'text/javascript', '.css':'text/css',
+const TYPES = { '.html':'text/html', '.js':'text/javascript', '.css':'text/css',
   '.json':'application/json', '.png':'image/png' };
 
-function startTjener(){
+function startServer(){
   return new Promise(res => {
     const t = http.createServer((rq, rs) => {
-      const f = path.join(ROT, decodeURIComponent(rq.url.split('?')[0]) === '/' ? 'index.html'
+      const f = path.join(ROOT, decodeURIComponent(rq.url.split('?')[0]) === '/' ? 'index.html'
         : decodeURIComponent(rq.url.split('?')[0]));
       fs.readFile(f, (e, d) => {
         if(e){ rs.writeHead(404); rs.end(); return; }
-        rs.writeHead(200, { 'content-type': TYPER[path.extname(f)] || 'application/octet-stream' });
+        rs.writeHead(200, { 'content-type': TYPES[path.extname(f)] || 'application/octet-stream' });
         rs.end(d);
       });
     });
@@ -31,402 +31,404 @@ function startTjener(){
   });
 }
 
-/* Alle nettlesere og profiler vi starter, slik at ingenting blir staaende
-   igjen om testen feiler midtveis. */
-const RYDD = { proc:[], mapper:[] };
-function rydd(){
-  for(const p of RYDD.proc){ try { p.kill('SIGKILL'); } catch {} }
-  /* Chrome starter en haug hjelpeprosesser som overlever at hovedprosessen
-     doer. De henger sammen om profilmappa, saa den er noekkelen vi rydder paa. */
-  for(const m of RYDD.mapper){
-    /* Moensteret maa ikke starte med bindestrek: pkill leser det som et flagg. */
-    try { execFileSync('pkill', ['-9', '-f', m]); } catch {}
+/* Every browser and profile we start, so nothing is left running if the test
+   fails halfway through. */
+const CLEANUP = { proc:[], dirs:[] };
+function cleanup(){
+  for(const p of CLEANUP.proc){ try { p.kill('SIGKILL'); } catch {} }
+  /* Chrome starts a pile of helper processes that survive the death of the
+     main process. What they have in common is the profile directory, so that
+     is the key we clean on. */
+  for(const d of CLEANUP.dirs){
+    /* The pattern must not start with a dash: pkill reads it as a flag. */
+    try { execFileSync('pkill', ['-9', '-f', d]); } catch {}
   }
-  for(const m of RYDD.mapper){ try { fs.rmSync(m, { recursive:true, force:true }); } catch {} }
-  RYDD.proc = []; RYDD.mapper = [];
+  for(const d of CLEANUP.dirs){ try { fs.rmSync(d, { recursive:true, force:true }); } catch {} }
+  CLEANUP.proc = []; CLEANUP.dirs = [];
 }
-process.on('exit', rydd);
-for(const sig of ['SIGINT','SIGTERM']) process.on(sig, () => { rydd(); process.exit(1); });
+process.on('exit', cleanup);
+for(const sig of ['SIGINT','SIGTERM']) process.on(sig, () => { cleanup(); process.exit(1); });
 
-function startChrome(profil){
-  RYDD.mapper.push(profil);
+function startChrome(profile){
+  CLEANUP.dirs.push(profile);
   return new Promise((res, rej) => {
     const p = spawn(CHROME, ['--headless=new', '--remote-debugging-port=0',
-      '--user-data-dir=' + profil, '--no-first-run', '--no-default-browser-check',
-      /* headless Chrome har ingen GPU: programvarerendering gir WebGL likevel */
+      '--user-data-dir=' + profile, '--no-first-run', '--no-default-browser-check',
+      /* headless Chrome has no GPU: software rendering gives us WebGL anyway */
       '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
       '--mute-audio', 'about:blank']);
     let buf = '';
-    const paaData = d => {
+    const onData = d => {
       buf += d;
       const m = buf.match(/ws:\/\/[^\s]+/);
-      if(m){ p.stderr.off('data', paaData); res({ proc:p, ws:m[0] }); }
+      if(m){ p.stderr.off('data', onData); res({ proc:p, ws:m[0] }); }
     };
-    RYDD.proc.push(p);
-    p.stderr.on('data', paaData);
-    setTimeout(() => rej(new Error('Chrome svarte ikke')), 20000);
+    CLEANUP.proc.push(p);
+    p.stderr.on('data', onData);
+    setTimeout(() => rej(new Error('Chrome did not answer')), 20000);
   });
 }
 
-/* --------- minimal DevTools-klient --------- */
-function kobleTil(url){
+/* --------- minimal DevTools client --------- */
+function connect(url){
   const ws = new WebSocket(url);
   let nr = 0;
-  const venter = new Map();
-  const klar = new Promise(r => ws.addEventListener('open', r));
-  const hendelser = [];
+  const waiting = new Map();
+  const ready = new Promise(r => ws.addEventListener('open', r));
+  const events = [];
   ws.addEventListener('message', e => {
     const m = JSON.parse(e.data);
-    if(m.id && venter.has(m.id)){
-      const { res, rej } = venter.get(m.id); venter.delete(m.id);
+    if(m.id && waiting.has(m.id)){
+      const { res, rej } = waiting.get(m.id); waiting.delete(m.id);
       m.error ? rej(new Error(m.error.message)) : res(m.result);
       return;
     }
     if(m.method === 'Runtime.exceptionThrown'){
       const d = m.params.exceptionDetails;
-      hendelser.push((m.sessionId||'?') + ' ' +
+      events.push((m.sessionId||'?') + ' ' +
         ((d.exception && d.exception.description) || d.text) +
         ' @ ' + (d.url||'') + ':' + (d.lineNumber+1));
     }
     if(m.method === 'Log.entryAdded' && m.params.entry.level === 'error'){
-      hendelser.push((m.sessionId||'?') + ' LOG ' + m.params.entry.text +
+      events.push((m.sessionId||'?') + ' LOG ' + m.params.entry.text +
         ' @ ' + (m.params.entry.url||''));
     }
   });
   return {
-    klar,
-    kall(metode, params = {}, sessionId){
+    ready,
+    call(method, params = {}, sessionId){
       const id = ++nr;
       return new Promise((res, rej) => {
-        venter.set(id, { res, rej });
-        ws.send(JSON.stringify({ id, method:metode, params, sessionId }));
+        waiting.set(id, { res, rej });
+        ws.send(JSON.stringify({ id, method, params, sessionId }));
       });
     },
-    lukk(){ ws.close(); },
-    hendelser,
+    close(){ ws.close(); },
+    events,
   };
 }
 
-const sov = ms => new Promise(r => setTimeout(r, ms));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 (async () => {
-  const tjener = await startTjener();
-  const adr = 'http://127.0.0.1:' + tjener.address().port + '/?fake-nett';
-  const profil = fs.mkdtempSync(path.join(os.tmpdir(), 'villmark-'));
-  const { proc, ws } = await startChrome(profil);
-  const cdp = kobleTil(ws);
-  await cdp.klar;
+  const server = await startServer();
+  const addr = 'http://127.0.0.1:' + server.address().port + '/?fake-net';
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'villmark-'));
+  const { proc, ws } = await startChrome(profile);
+  const cdp = connect(ws);
+  await cdp.ready;
 
-  const feilmeldinger = [];
+  const errorMessages = [];
 
-  async function nyFane(){
-    const { targetId } = await cdp.kall('Target.createTarget', { url:'about:blank' });
-    const { sessionId } = await cdp.kall('Target.attachToTarget', { targetId, flatten:true });
-    await cdp.kall('Runtime.enable', {}, sessionId);
-    await cdp.kall('Log.enable', {}, sessionId);
-    await cdp.kall('Page.enable', {}, sessionId);
-    await cdp.kall('Page.addScriptToEvaluateOnNewDocument', { source:
-      "window.__lastfeil=[];addEventListener('error',e=>window.__lastfeil.push(String(e.message)+' @ '+(e.filename||'')+':'+e.lineno));" +
-      "addEventListener('unhandledrejection',e=>window.__lastfeil.push('rejection: '+e.reason));" }, sessionId);
-    await cdp.kall('Page.navigate', { url:adr }, sessionId);
+  async function newTab(){
+    const { targetId } = await cdp.call('Target.createTarget', { url:'about:blank' });
+    const { sessionId } = await cdp.call('Target.attachToTarget', { targetId, flatten:true });
+    await cdp.call('Runtime.enable', {}, sessionId);
+    await cdp.call('Log.enable', {}, sessionId);
+    await cdp.call('Page.enable', {}, sessionId);
+    await cdp.call('Page.addScriptToEvaluateOnNewDocument', { source:
+      "window.__lasterrors=[];addEventListener('error',e=>window.__lasterrors.push(String(e.message)+' @ '+(e.filename||'')+':'+e.lineno));" +
+      "addEventListener('unhandledrejection',e=>window.__lasterrors.push('rejection: '+e.reason));" }, sessionId);
+    await cdp.call('Page.navigate', { url:addr }, sessionId);
     return sessionId;
   }
-  async function kjor(sid, uttrykk){
-    const r = await cdp.kall('Runtime.evaluate',
-      { expression:uttrykk, returnByValue:true, awaitPromise:true }, sid);
+  async function run(sid, expression){
+    const r = await cdp.call('Runtime.evaluate',
+      { expression, returnByValue:true, awaitPromise:true }, sid);
     if(r.exceptionDetails){
       const d = r.exceptionDetails;
-      const melding = (d.exception && (d.exception.description || d.exception.value)) || d.text;
-      throw new Error(melding + '  <- ' + uttrykk);
+      const message = (d.exception && (d.exception.description || d.exception.value)) || d.text;
+      throw new Error(message + '  <- ' + expression);
     }
     return r.result.value;
   }
 
-  const a = await nyFane();
-  const b = await nyFane();
-  await sov(3500);
+  const a = await newTab();
+  const b = await newTab();
+  await sleep(3500);
 
-  /* samle opp feil fra begge faner */
-  for(const [navn, sid] of [['A', a], ['B', b]]){
-    const f = await kjor(sid, `(() => { window.__feil = window.__feil || [];
-      if(!window.__hekta){ window.__hekta = true;
-        window.addEventListener('error', e => window.__feil.push(String(e.message)));
+  /* collect errors from both tabs */
+  for(const [name, sid] of [['A', a], ['B', b]]){
+    const f = await run(sid, `(() => { window.__errors = window.__errors || [];
+      if(!window.__hooked){ window.__hooked = true;
+        window.addEventListener('error', e => window.__errors.push(String(e.message)));
       }
-      return window.__feil; })()`);
-    void navn; void f;
+      return window.__errors; })()`);
+    void name; void f;
   }
 
 
-  /* --------- last lobbyen i begge faner --------- */
+  /* --------- load the lobby in both tabs --------- */
   for(const sid of [a, b]){
-    sjekk(await kjor(sid, 'typeof NETT === "object" && typeof LOBBY === "object" && typeof KORTSPILL === "object"'),
-      'skriptene lastet i fanen');
-    await kjor(sid, 'VM.gaTil("lobby")');
+    check(await run(sid, 'typeof NET === "object" && typeof LOBBY === "object" && typeof CARDGAME === "object"'),
+      'the scripts loaded in the tab');
+    await run(sid, 'VM.goTo("lobby")');
   }
-  await sov(1500);
+  await sleep(1500);
 
-  await kjor(a, 'NETT.settNavn("ALFA")');
-  await kjor(b, 'NETT.settNavn("BETA")');
-  await sov(2500);
+  await run(a, 'NET.setName("ALFA")');
+  await run(b, 'NET.setName("BETA")');
+  await sleep(2500);
 
-  const listeA = await kjor(a, 'document.querySelectorAll("#lobListe .lob-rad").length');
-  const listeB = await kjor(b, 'document.querySelectorAll("#lobListe .lob-rad").length');
-  sjekk(listeA === 1, 'fane A ser den andre spilleren (fikk ' + listeA + ')');
-  sjekk(listeB === 1, 'fane B ser den andre spilleren (fikk ' + listeB + ')');
-  sjekk(await kjor(a, 'document.querySelector("#lobListe .lob-rad-navn").textContent') === 'BETA',
-    'fane A ser riktig navn paa motparten');
+  const listA = await run(a, 'document.querySelectorAll("#lobbyList .lobby-row").length');
+  const listB = await run(b, 'document.querySelectorAll("#lobbyList .lobby-row").length');
+  check(listA === 1, 'tab A sees the other player (got ' + listA + ')');
+  check(listB === 1, 'tab B sees the other player (got ' + listB + ')');
+  check(await run(a, 'document.querySelector("#lobbyList .lobby-row-name").textContent') === 'BETA',
+    'tab A sees the right name on the opponent');
 
-  /* --------- dekket kommer fra plenen --------- */
-  /* Kortstokken er plenen, saa en tom plen har ingen kort og kampen er
-     stengt. Vi setter ut nok arter til at dekket er lovlig. */
-  const c = await nyFane();
-  await sov(3000);
-  await kjor(c, 'VM.gaTil("lobby")');
-  await sov(800);
-  sjekk(await kjor(c, 'document.querySelector("#lobMotAI").disabled'),
-    'en tom plen gir ingen kort, saa kampen er stengt');
-  sjekk(await kjor(c, '!document.querySelector("#lobDekkHint").hidden'),
-    'og spilleren faar vite hvorfor');
+  /* --------- the deck comes from the lawn --------- */
+  /* The deck is the lawn, so an empty lawn has no cards and the battle is
+     closed. We place enough species for the deck to be legal. */
+  const c = await newTab();
+  await sleep(3000);
+  await run(c, 'VM.goTo("lobby")');
+  await sleep(800);
+  check(await run(c, 'document.querySelector("#lobbyVsAi").disabled'),
+    'an empty lawn gives no cards, so the battle is closed');
+  check(await run(c, '!document.querySelector("#lobbyDeckHint").hidden'),
+    'and the player is told why');
 
-  await kjor(c, `(() => {
+  await run(c, `(() => {
     for(let i = 0; i < 20; i++){
       const sp = SPECIES[i % SPECIES.length];
-      VM.STATE.eksemplarer.push({ uid:9200 + i, art:sp.id, niva: i === 0 ? 3 : 1,
+      VM.STATE.specimens.push({ uid:9200 + i, species:sp.id, level: i === 0 ? 3 : 1,
         variant:null, x:i, z:i });
-      VM.STATE.dekk.add(9200 + i);
-      VM.STATE.funnet.add(sp.id);
+      VM.STATE.deck.add(9200 + i);
+      VM.STATE.found.add(sp.id);
     }
-    VM.gaTil('field'); })()`);
-  await sov(600);
-  await kjor(c, 'VM.gaTil("lobby")');
-  await sov(900);
+    VM.goTo('field'); })()`);
+  await sleep(600);
+  await run(c, 'VM.goTo("lobby")');
+  await sleep(900);
 
-  sjekk(!(await kjor(c, 'document.querySelector("#lobMotAI").disabled')),
-    'en plen med nok arter aapner kampen');
-  const ruter = await kjor(c, 'document.querySelectorAll("#lobDekk .lob-kort").length');
-  sjekk(ruter === 20, 'dekkvelgeren viser en rute per art paa plenen (fikk ' + ruter + ')');
-  sjekk(await kjor(c, 'document.querySelectorAll("#lobDekk .lob-kort.med").length') === 20,
-    'alt som staar ute er med i dekket til noen tar det ut');
-  sjekk(await kjor(c, 'document.querySelector("#lobDekk .lob-kort-niva") !== null'),
-    'et eksemplar som er dratt opp et nivaa er merket');
+  check(!(await run(c, 'document.querySelector("#lobbyVsAi").disabled')),
+    'a lawn with enough species opens the battle');
+  const slots = await run(c, 'document.querySelectorAll("#lobbyDeck .lobby-card").length');
+  check(slots === 20, 'the deck editor shows one slot per species on the lawn (got ' + slots + ')');
+  check(await run(c, 'document.querySelectorAll("#lobbyDeck .lobby-card.in").length') === 20,
+    'everything on the lawn is in the deck until somebody takes it out');
+  check(await run(c, 'document.querySelector("#lobbyDeck .lobby-card-level") !== null'),
+    'a specimen dragged up a level is marked');
 
-  /* --------- kort kan tas ut og settes inn igjen --------- */
-  const foerUt = await kjor(c, 'VM.dekkStokk().length');
-  await kjor(c, 'document.querySelector("#lobDekk .lob-kort").click()');
-  await sov(300);
-  sjekk(await kjor(c, 'VM.dekkStokk().length') === foerUt - 1,
-    'et kort som klikkes bort forsvinner fra dekket');
-  sjekk(await kjor(c, 'document.querySelectorAll("#lobDekk .lob-kort").length') === 20,
-    'men ruta blir staaende, saa den kan settes inn igjen');
-  await kjor(c, 'document.querySelector("#lobDekk .lob-kort").click()');
-  await sov(300);
-  sjekk(await kjor(c, 'VM.dekkStokk().length') === foerUt,
-    'og et nytt klikk setter det inn igjen');
+  /* --------- a card can be taken out and put back in --------- */
+  const beforeOut = await run(c, 'VM.deckCards().length');
+  await run(c, 'document.querySelector("#lobbyDeck .lobby-card").click()');
+  await sleep(300);
+  check(await run(c, 'VM.deckCards().length') === beforeOut - 1,
+    'a card that is clicked away disappears from the deck');
+  check(await run(c, 'document.querySelectorAll("#lobbyDeck .lobby-card").length') === 20,
+    'but the slot stays, so it can be put back in');
+  await run(c, 'document.querySelector("#lobbyDeck .lobby-card").click()');
+  await sleep(300);
+  check(await run(c, 'VM.deckCards().length') === beforeOut,
+    'and another click puts it back in');
 
-  /* --------- enspillerkampen skal fortsatt virke --------- */
-  await kjor(c, 'document.querySelector("#lobMotAI").click()');
-  await sov(1500);
-  /* Kortene flytter seg mens turene gaar, saa vi teller alle stedene et kort
-     kan staa. Summen skal vaere den stokken spilleren stilte med. */
-  const eier = i => `(p => p.stokk.length + p.hand.length + p.liv.length
-    + p.arter.length + p.kompost.length + (p.biotop ? 1 : 0))(KORTSPILL.KS.p[${i}])`;
-  sjekk(await kjor(c, eier(0)) === 20,
-    'kampen spilles med plenen, ikke med planstokken');
-  sjekk(await kjor(c, eier(1)) === 20,
-    'maskinen stiller med like mange kort');
-  sjekk(await kjor(c, 'KORTSPILL.KS.nett === null'),
-    'enspillerkampen bruker ikke nettet');
-  sjekk(await kjor(c, 'KORTSPILL.KS.p[1].styring') === 'ai',
-    'motstanderen i enspillerkampen styres av maskinen');
-  sjekk(await kjor(c, 'document.querySelectorAll("#myHand .kk").length > 0'),
-    'enspillerkampen har tegnet handa');
-  await kjor(c, 'VM.gaTil("field")');
-  await sov(400);
+  /* --------- the solo battle must still work --------- */
+  await run(c, 'document.querySelector("#lobbyVsAi").click()');
+  await sleep(1500);
+  /* Cards move around as the turns go by, so we count every place a card can
+     sit. The sum must be the deck the player brought. */
+  const owns = i => `(p => p.deck.length + p.hand.length + p.life.length
+    + p.species.length + p.compost.length + (p.biotope ? 1 : 0))(CARDGAME.CG.p[${i}])`;
+  check(await run(c, owns(0)) === 20,
+    'the battle is played with the lawn, not with the plan deck');
+  check(await run(c, owns(1)) === 20,
+    'the machine brings the same number of cards');
+  check(await run(c, 'CARDGAME.CG.net === null'),
+    'the solo battle does not use the network');
+  check(await run(c, 'CARDGAME.CG.p[1].control') === 'ai',
+    'the opponent in the solo battle is driven by the machine');
+  check(await run(c, 'document.querySelectorAll("#myHand .mc").length > 0'),
+    'the solo battle has drawn the hand');
+  await run(c, 'VM.goTo("field")');
+  await sleep(400);
 
-  /* --------- B besoeker plenen til A --------- */
-  /* A setter ut en art, saa det er noe aa se paa hos naboen. */
-  await kjor(a, `VM.STATE.eksemplarer.push({ uid:9001, art:SPECIES[0].id, niva:1,
-    variant:null, x:4, z:4 }); VM.STATE.funnet.add(SPECIES[0].id); VM.gaTil('field');`);
-  await sov(900);
-  /* Lagringen venter litt paa flere endringer foer den skriver, saa vi ser
-     etter den i stedet for aa gjette paa en pause. */
-  let skrevet = false;
-  for(let i = 0; i < 12 && !skrevet; i++){
-    skrevet = await kjor(a, `(() => { const d = JSON.parse(localStorage.getItem('villmark-plen-v1') || '{}');
-      return (d.eksemplarer || []).some(e => e.uid === 9001); })()`);
-    if(!skrevet) await sov(400);
+  /* --------- B visits A's lawn --------- */
+  /* A places a species, so there is something to look at next door. */
+  await run(a, `VM.STATE.specimens.push({ uid:9001, species:SPECIES[0].id, level:1,
+    variant:null, x:4, z:4 }); VM.STATE.found.add(SPECIES[0].id); VM.goTo('field');`);
+  await sleep(900);
+  /* The save waits a moment for more changes before it writes, so we look for
+     it instead of guessing at a pause. */
+  let written = false;
+  for(let i = 0; i < 12 && !written; i++){
+    written = await run(a, `(() => { const d = JSON.parse(localStorage.getItem('villmark-lawn-v1') || '{}');
+      return (d.specimens || []).some(e => e.uid === 9001); })()`);
+    if(!written) await sleep(400);
   }
-  sjekk(skrevet, 'plenen skrives til telefonen naar den endrer seg');
-  await kjor(a, 'VM.gaTil("lobby")');
-  await sov(900);
+  check(written, 'the lawn is written to the phone when it changes');
+  await run(a, 'VM.goTo("lobby")');
+  await sleep(900);
 
-  await kjor(b, 'document.querySelector("#lobListe .lob-rad").click()');
-  await sov(400);
-  sjekk(await kjor(b, '!document.querySelector("#lobVelg").hidden'),
-    'fane B faar valget mellom aa besoeke og aa utfordre');
+  await run(b, 'document.querySelector("#lobbyList .lobby-row").click()');
+  await sleep(400);
+  check(await run(b, '!document.querySelector("#lobbyPick").hidden'),
+    'tab B gets the choice between visiting and challenging');
 
-  await kjor(b, 'document.querySelector("#lobVelgBesok").click()');
-  await sov(1500);
-  sjekk(await kjor(b, 'document.querySelector("#screen-field").classList.contains("active")'),
-    'fane B havner paa plenen etter et besoek');
-  sjekk(await kjor(b, '!document.querySelector("#feltBesok").hidden'),
-    'fane B ser hvem sin plen den staar paa');
-  sjekk(await kjor(b, 'document.querySelector("#feltBesokNavn").textContent') === 'PLENEN TIL ALFA',
-    'linja navngir verten');
-  sjekk(await kjor(b, 'document.body.classList.contains("visiting")'),
-    'plenen er merket som gjesteplen');
-  sjekk(await kjor(b, 'VM.STATE.eksemplarer.some(e => e.uid === 9001)'),
-    'fane B ser arten som staar paa plenen til A');
+  await run(b, 'document.querySelector("#lobbyPickVisit").click()');
+  await sleep(1500);
+  check(await run(b, 'document.querySelector("#screen-field").classList.contains("active")'),
+    'tab B lands on the lawn after a visit');
+  check(await run(b, '!document.querySelector("#fieldVisit").hidden'),
+    'tab B sees whose lawn it is standing on');
+  check(await run(b, 'document.querySelector("#fieldVisitName").textContent') === 'LAWN OF ALFA',
+    'the line names the host');
+  check(await run(b, 'document.body.classList.contains("visiting")'),
+    'the lawn is marked as a guest lawn');
+  check(await run(b, 'VM.STATE.specimens.some(e => e.uid === 9001)'),
+    'tab B sees the species standing on A\'s lawn');
 
-  /* ut igjen: egen plen skal vaere tilbake, og ingenting av A skal henge igjen */
-  await kjor(b, 'document.querySelector("#feltBesokUt").click()');
-  await sov(1200);
-  sjekk(await kjor(b, '!VM.STATE.eksemplarer.some(e => e.uid === 9001)'),
-    'fane B har sin egen plen tilbake etterpaa');
-  sjekk(await kjor(b, 'document.querySelector("#feltBesok").hidden'),
-    'besoekslinja er borte igjen');
-  sjekk(await kjor(b, 'document.querySelector("#screen-lobby").classList.contains("active")'),
-    'TILBAKE gaar til lista du kom fra');
-  await sov(600);
+  /* back out: your own lawn must be back, and nothing of A must be left */
+  await run(b, 'document.querySelector("#fieldVisitOut").click()');
+  await sleep(1200);
+  check(await run(b, '!VM.STATE.specimens.some(e => e.uid === 9001)'),
+    'tab B has its own lawn back afterwards');
+  check(await run(b, 'document.querySelector("#fieldVisit").hidden'),
+    'the visit line is gone again');
+  check(await run(b, 'document.querySelector("#screen-lobby").classList.contains("active")'),
+    'BACK goes to the list you came from');
+  await sleep(600);
 
-  /* --------- A utfordrer B --------- */
-  /* Begge maa ha en plen aa spille med: uten kort er utfordringen stengt. */
-  const sattUt = (fra, niva) => `(() => {
+  /* --------- A challenges B --------- */
+  /* Both need a lawn to play with: without cards the challenge is closed. */
+  const placed = (from, level) => `(() => {
     for(let i = 0; i < 18; i++){
-      const sp = SPECIES[(i + ${fra}) % SPECIES.length];
-      VM.STATE.eksemplarer.push({ uid:${fra} + i, art:sp.id, niva: i === 0 ? ${niva} : 1,
+      const sp = SPECIES[(i + ${from}) % SPECIES.length];
+      VM.STATE.specimens.push({ uid:${from} + i, species:sp.id, level: i === 0 ? ${level} : 1,
         variant:null, x:i, z:i });
-      VM.STATE.dekk.add(${fra} + i);
-      VM.STATE.funnet.add(sp.id);
+      VM.STATE.deck.add(${from} + i);
+      VM.STATE.found.add(sp.id);
     } })()`;
-  await kjor(a, sattUt(9300, 2));
-  await kjor(b, sattUt(9400, 4));
-  await kjor(a, 'VM.gaTil("field"); VM.gaTil("lobby")');
-  await kjor(b, 'VM.gaTil("field"); VM.gaTil("lobby")');
-  await sov(900);
-  sjekk(!(await kjor(a, 'document.querySelector("#lobMotAI").disabled')),
-    'fane A har et lovlig dekk foer utfordringen');
+  await run(a, placed(9300, 2));
+  await run(b, placed(9400, 4));
+  await run(a, 'VM.goTo("field"); VM.goTo("lobby")');
+  await run(b, 'VM.goTo("field"); VM.goTo("lobby")');
+  await sleep(900);
+  check(!(await run(a, 'document.querySelector("#lobbyVsAi").disabled')),
+    'tab A has a legal deck before the challenge');
 
-  await kjor(a, 'document.querySelector("#lobListe .lob-rad").click()');
-  await sov(400);
-  await kjor(a, 'document.querySelector("#lobVelgDyst").click()');
-  await sov(900);
-  sjekk(await kjor(a, '!document.querySelector("#lobVent").hidden'),
-    'fane A venter paa svar');
-  sjekk(await kjor(b, 'document.querySelector("#lobListe .lob-rad").classList.contains("utfordrer")'),
-    'fane B faar merket ved navnet til den som utfordrer');
+  await run(a, 'document.querySelector("#lobbyList .lobby-row").click()');
+  await sleep(400);
+  await run(a, 'document.querySelector("#lobbyPickDuel").click()');
+  await sleep(900);
+  check(await run(a, '!document.querySelector("#lobbyWait").hidden'),
+    'tab A is waiting for an answer');
+  check(await run(b, 'document.querySelector("#lobbyList .lobby-row").classList.contains("challenging")'),
+    'tab B gets the mark next to the name of the challenger');
 
-  await kjor(b, 'document.querySelector("#lobListe .lob-rad").click()');
-  await sov(500);
-  sjekk(await kjor(b, '!document.querySelector("#lobSpor").hidden'),
-    'fane B faar spoersmaal om aa godta, ikke valget');
-  sjekk(await kjor(b, 'document.querySelector("#lobVelg").hidden'),
-    'valgdialogen ligger stille naar noen utfordrer deg');
+  await run(b, 'document.querySelector("#lobbyList .lobby-row").click()');
+  await sleep(500);
+  check(await run(b, '!document.querySelector("#lobbyAsk").hidden'),
+    'tab B is asked to accept, not given the choice');
+  check(await run(b, 'document.querySelector("#lobbyPick").hidden'),
+    'the choice dialog stays put when somebody challenges you');
 
-  await kjor(b, 'document.querySelector("#lobGodta").click()');
-  await sov(3000);
+  await run(b, 'document.querySelector("#lobbyAccept").click()');
+  await sleep(3000);
 
-  /* --------- begge skal vaere i kamp --------- */
-  for(const [navn, sid] of [['A', a], ['B', b]]){
-    sjekk(await kjor(sid, 'document.querySelector("#screen-battle").classList.contains("active")'),
-      'fane ' + navn + ' er paa kampskjermen');
-    sjekk(await kjor(sid, 'KORTSPILL.KS.nett !== null'),
-      'fane ' + navn + ' har en nettkamp');
-    sjekk(await kjor(sid, '!!KORTSPILL.KS.p[0]'),
-      'fane ' + navn + ' har faatt et brett');
-    sjekk(await kjor(sid, 'document.querySelectorAll("#myHand .kk").length > 0'),
-      'fane ' + navn + ' har tegnet handa');
+  /* --------- both must be in the battle --------- */
+  for(const [name, sid] of [['A', a], ['B', b]]){
+    check(await run(sid, 'document.querySelector("#screen-battle").classList.contains("active")'),
+      'tab ' + name + ' is on the battle screen');
+    check(await run(sid, 'CARDGAME.CG.net !== null'),
+      'tab ' + name + ' has a net battle');
+    check(await run(sid, '!!CARDGAME.CG.p[0]'),
+      'tab ' + name + ' has been given a board');
+    check(await run(sid, 'document.querySelectorAll("#myHand .mc").length > 0'),
+      'tab ' + name + ' has drawn the hand');
   }
-  sjekk(await kjor(a, 'KORTSPILL.KS.nett.rolle') === 'vert', 'fane A er vert');
-  sjekk(await kjor(b, 'KORTSPILL.KS.nett.rolle') === 'gjest', 'fane B er gjest');
+  check(await run(a, 'CARDGAME.CG.net.role') === 'host', 'tab A is the host');
+  check(await run(b, 'CARDGAME.CG.net.role') === 'guest', 'tab B is the guest');
 
-  /* Verten regner ut hele kampen, saa gjestens plen maa ha kommet dit.
-     Bare B har et eksemplar paa nivaa 4, saa kortet sier hvem stokken kom
-     fra. Nivaaet ligger i kort-id-en, og verten bygger kortet selv. */
-  const merke = (i, n) => `(p => [...p.stokk, ...p.hand, ...p.liv]
-    .some(id => typeof id === 'string' && id.endsWith('@${n}')))(KORTSPILL.KS.p[${i}])`;
-  sjekk(await kjor(a, merke(0, 2)), 'verten spiller med sin egen plen');
-  sjekk(await kjor(a, merke(1, 4)), 'gjestens plen kom fram til verten');
-  sjekk(await kjor(a, 'KORTSPILL.KS.tur') !== await kjor(b, 'KORTSPILL.KS.tur'),
-    'turen er speilvendt mellom fanene');
+  /* The host computes the whole battle, so the guest's lawn must have reached
+     it. Only B has a specimen at level 4, so the card says where the deck came
+     from. The level sits in the card id, and the host builds the card itself. */
+  const mark = (i, n) => `(p => [...p.deck, ...p.hand, ...p.life]
+    .some(id => typeof id === 'string' && id.endsWith('@${n}')))(CARDGAME.CG.p[${i}])`;
+  check(await run(a, mark(0, 2)), 'the host plays with its own lawn');
+  check(await run(a, mark(1, 4)), 'the guest\'s lawn reached the host');
+  check(await run(a, 'CARDGAME.CG.turn') !== await run(b, 'CARDGAME.CG.turn'),
+    'the turn is mirrored between the tabs');
 
-  /* --------- spoersmaal over kanalen: aapningshanda --------- */
-  for(const [navn, sid] of [['A', a], ['B', b]]){
-    sjekk(await kjor(sid, '!document.querySelector("#ksDialog").hidden'),
-      'fane ' + navn + ' faar spoersmaal om aapningshanda');
-    await kjor(sid, 'document.querySelector("#ksDialogKnapper [data-dlg=\'0\']").click()');
+  /* --------- a question over the channel: the opening hand --------- */
+  for(const [name, sid] of [['A', a], ['B', b]]){
+    check(await run(sid, '!document.querySelector("#cgDialog").hidden'),
+      'tab ' + name + ' is asked about the opening hand');
+    await run(sid, 'document.querySelector("#cgDialogButtons [data-dlg=\'0\']").click()');
   }
-  await sov(1500);
-  for(const [navn, sid] of [['A', a], ['B', b]]){
-    sjekk(await kjor(sid, 'document.querySelector("#ksDialog").hidden'),
-      'fane ' + navn + ' er ferdig med aapningshanda');
+  await sleep(1500);
+  for(const [name, sid] of [['A', a], ['B', b]]){
+    check(await run(sid, 'document.querySelector("#cgDialog").hidden'),
+      'tab ' + name + ' is done with the opening hand');
   }
 
-  /* Spill videre til noen faar raad til et kort, saa ekte klikk i ekte DOM
-     blir testet ogsaa: kortarket, SPILL-knappen og synkingen til motparten. */
-  const PROVE_SPILL = `(() => {
-    const KS = KORTSPILL.KS;
-    if(KS.tur !== 0) return 'ikke min tur';
-    for(let i=0;i<KS.p[0].hand.length;i++){
-      const kort = document.querySelector('[data-sti="h:' + i + '"]');
-      if(!kort) continue;
-      kort.click();
-      if(document.querySelector('#ksArk').hidden) continue;
-      const knapp = document.querySelector('#ksArkKnapper [data-ark="0"]');
-      if(!knapp || knapp.disabled){ document.querySelector('#ksArkBak').click(); continue; }
-      knapp.click();
-      return 'spilte';
+  /* Play on until somebody can afford a card, so a real click in a real DOM
+     gets tested too: the card sheet, the PLAY button and the sync to the
+     opponent. */
+  const TRY_PLAY = `(() => {
+    const CG = CARDGAME.CG;
+    if(CG.turn !== 0) return 'not my turn';
+    for(let i=0;i<CG.p[0].hand.length;i++){
+      const card = document.querySelector('[data-path="h:' + i + '"]');
+      if(!card) continue;
+      card.click();
+      if(document.querySelector('#cgSheet').hidden) continue;
+      const button = document.querySelector('#cgSheetButtons [data-sheet="0"]');
+      if(!button || button.disabled){ document.querySelector('#cgSheetBack').click(); continue; }
+      button.click();
+      return 'played';
     }
-    return 'ingen raad';
+    return 'cannot afford';
   })()`;
 
-  let spilte = false, spiller = null, seer = null, foerArter = 0;
-  for(let runde = 0; runde < 8 && !spilte; runde++){
-    const vertHarTuren = await kjor(a, 'KORTSPILL.KS.tur === 0');
-    spiller = vertHarTuren ? a : b;
-    seer    = vertHarTuren ? b : a;
-    foerArter = await kjor(seer, 'KORTSPILL.KS.p[1].arter.length');
-    const utfall = await kjor(spiller, PROVE_SPILL);
-    await sov(1200);
-    if(utfall === 'spilte'){ spilte = true; break; }
-    await kjor(spiller, 'document.querySelector("#ksAvslutt").click()');
-    await sov(1400);
+  let played = false, player = null, watcher = null, speciesBefore = 0;
+  for(let round = 0; round < 8 && !played; round++){
+    const hostHasTurn = await run(a, 'CARDGAME.CG.turn === 0');
+    player  = hostHasTurn ? a : b;
+    watcher = hostHasTurn ? b : a;
+    speciesBefore = await run(watcher, 'CARDGAME.CG.p[1].species.length');
+    const outcome = await run(player, TRY_PLAY);
+    await sleep(1200);
+    if(outcome === 'played'){ played = true; break; }
+    await run(player, 'document.querySelector("#cgEnd").click()');
+    await sleep(1400);
   }
-  sjekk(spilte, 'fikk spilt et kort gjennom brukerflaten');
-  if(spilte){
-    sjekk(await kjor(seer, 'KORTSPILL.KS.p[1].arter.length') >= foerArter,
-      'motparten ser brettet etter at det ble spilt et kort');
-    sjekk(await kjor(seer, 'KORTSPILL.KS.p[1].sol.aktiv')
-       === await kjor(spiller, 'KORTSPILL.KS.p[0].sol.aktiv'),
-      'solregnskapet stemmer mellom fanene');
-    /* Bare gjesten skal vaere blind: verten eier motoren og har all tilstand. */
-    if(seer === b){
-      sjekk(await kjor(b, 'KORTSPILL.KS.p[1].hand.every(x => x === "?")'),
-        'gjesten ser ikke vertens kort');
+  check(played, 'managed to play a card through the user interface');
+  if(played){
+    check(await run(watcher, 'CARDGAME.CG.p[1].species.length') >= speciesBefore,
+      'the opponent sees the board after a card was played');
+    check(await run(watcher, 'CARDGAME.CG.p[1].sun.active')
+       === await run(player, 'CARDGAME.CG.p[0].sun.active'),
+      'the sun accounting matches between the tabs');
+    /* Only the guest must be blind: the host owns the engine and has all the state. */
+    if(watcher === b){
+      check(await run(b, 'CARDGAME.CG.p[1].hand.every(x => x === "?")'),
+        'the guest does not see the host\'s cards');
     }
-    sjekk(await kjor(b, 'KORTSPILL.KS.p[1].hand.every(x => x === "?")'),
-      'gjesten ser aldri vertens kort');
+    check(await run(b, 'CARDGAME.CG.p[1].hand.every(x => x === "?")'),
+      'the guest never sees the host\'s cards');
   }
 
-  /* --------- plenen overlever at sida lastes paa nytt --------- */
-  /* Fane C staar for seg selv: A og B er i kamp og roerer ikke plenen sin. */
-  await kjor(c, `VM.STATE.eksemplarer.push({ uid:9101, art:SPECIES[1].id, niva:1,
-    variant:null, x:-5, z:6 }); VM.STATE.funnet.add(SPECIES[1].id); VM.gaTil('field');`);
-  await sov(900);
-  await cdp.kall('Page.reload', {}, c);
-  await sov(4000);
-  sjekk(await kjor(c, 'VM.STATE.eksemplarer.some(e => e.uid === 9101)'),
-    'plenen kommer tilbake etter at sida lastes paa nytt');
-  sjekk(await kjor(c, 'VM.STATE.funnet.has(SPECIES[1].id)'),
-    'funnlista kommer tilbake etter at sida lastes paa nytt');
+  /* --------- the lawn survives a page reload --------- */
+  /* Tab C stands on its own: A and B are in a battle and do not touch their lawns. */
+  await run(c, `VM.STATE.specimens.push({ uid:9101, species:SPECIES[1].id, level:1,
+    variant:null, x:-5, z:6 }); VM.STATE.found.add(SPECIES[1].id); VM.goTo('field');`);
+  await sleep(900);
+  await cdp.call('Page.reload', {}, c);
+  await sleep(4000);
+  check(await run(c, 'VM.STATE.specimens.some(e => e.uid === 9101)'),
+    'the lawn comes back after the page is reloaded');
+  check(await run(c, 'VM.STATE.found.has(SPECIES[1].id)'),
+    'the find list comes back after the page is reloaded');
 
-  for(const [navn, sid] of [['A', a], ['B', b]]){
-    const f = await kjor(sid, 'JSON.stringify(window.__feil || [])');
-    if(f && f !== '[]'){ feilmeldinger.push(navn + ': ' + f); }
+  for(const [name, sid] of [['A', a], ['B', b]]){
+    const f = await run(sid, 'JSON.stringify(window.__errors || [])');
+    if(f && f !== '[]'){ errorMessages.push(name + ': ' + f); }
   }
-  sjekk(feilmeldinger.length === 0, 'ingen skriptfeil i nettleseren: ' + feilmeldinger.join(' | '));
+  check(errorMessages.length === 0, 'no script errors in the browser: ' + errorMessages.join(' | '));
 
-  cdp.lukk(); tjener.close();   // rydd() dreper hele prosessgruppa
-  console.log(feil ? '\n' + feil + ' feil' : '\nAlle nettlesersjekker gikk gjennom');
-  process.exit(feil ? 1 : 0);
-})().catch(e => { console.error('KRASJ:', e); process.exit(2); });
+  cdp.close(); server.close();   // cleanup() kills the whole process group
+  console.log(failures ? '\n' + failures + ' failures' : '\nAll browser checks passed');
+  process.exit(failures ? 1 : 0);
+})().catch(e => { console.error('CRASH:', e); process.exit(2); });

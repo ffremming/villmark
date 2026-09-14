@@ -1,7 +1,7 @@
 {
   "name": "Villmark",
   "short_name": "Villmark",
-  "description": "Skann, samle og dyst med norske arter.",
+  "description": "Scan, collect and duel with the species of Norway.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

@@ -1,49 +1,49 @@
-Villmark artsmodeller
-=====================
+Villmark species models
+=======================
 
-Denne pakken inneholder ONNX-konverterte kopier av to modeller fra andre
-opphavspersoner. Vektene er uendret; filene er konvertert fra PyTorch til
-ONNX og redusert i presisjon. Se README.md for en full beskrivelse av
-endringene.
+This package contains ONNX-converted copies of two models by other authors.
+The weights are unchanged; the files have been converted from PyTorch to
+ONNX and reduced in precision. See README.md for a full description of the
+changes.
 
 -------------------------------------------------------------------------
 SpeciesNet  (speciesnet.onnx, speciesnet.labels.json)
 
   Copyright 2024 Google LLC
 
-  Lisensiert under Apache License, Version 2.0. Se LICENSE.
-  Kilde: https://github.com/google/cameratrapai
-  Vekter: https://www.kaggle.com/models/google/speciesnet (pyTorch/v4.0.3b)
+  Licensed under the Apache License, Version 2.0. See LICENSE.
+  Source: https://github.com/google/cameratrapai
+  Weights: https://www.kaggle.com/models/google/speciesnet (pyTorch/v4.0.3b)
 
-  Endret: eksportert til ONNX opset 17 med fast batchstorrelse 1, konvertert
-  til fp16. Labellisten er skrevet om fra tekstfil til JSON, uendret innhold
-  og rekkefolge.
+  Changed: exported to ONNX opset 17 with a fixed batch size of 1, converted
+  to fp16. The label list was rewritten from a text file to JSON, with the
+  contents and the order unchanged.
 
 -------------------------------------------------------------------------
 birder resnet_v2_50_inat21  (inat21.onnx, inat21.labels.json)
 
-  Fra Birder-prosjektet.
+  From the Birder project.
 
-  Lisensiert under Apache License, Version 2.0. Se LICENSE.
-  Kilde: https://huggingface.co/birder-project/resnet_v2_50_inat21
-  Prosjekt: https://gitlab.com/birder/birder
+  Licensed under the Apache License, Version 2.0. See LICENSE.
+  Source: https://huggingface.co/birder-project/resnet_v2_50_inat21
+  Project: https://gitlab.com/birder/birder
 
-  Endret: 256px-varianten eksportert til ONNX opset 17 med fast
-  batchstorrelse 1, kvantisert til int8 (QDQ, per kanal, percentile-
-  kalibrering). Klasselisten er skrevet om til JSON og utvidet med slekt,
-  familie, orden, klasse og rekke.
+  Changed: the 256px variant exported to ONNX opset 17 with a fixed batch
+  size of 1, quantized to int8 (QDQ, per channel, percentile calibration).
+  The class list was rewritten as JSON and extended with genus, family,
+  order, class and phylum.
 
 -------------------------------------------------------------------------
-iNaturalist 2021  (taksonomien i inat21.labels.json)
+iNaturalist 2021  (the taxonomy in inat21.labels.json)
 
-  Artsnavn og taksonomiske rangeringer stammer fra iNat2021-konkurransens
-  kategoriliste.
+  The species names and the taxonomic ranks come from the category list of
+  the iNat2021 competition.
 
-  Kilde: https://github.com/visipedia/inat_comp/tree/master/2021
+  Source: https://github.com/visipedia/inat_comp/tree/master/2021
 
 -------------------------------------------------------------------------
 MegaDetector
 
-  Ikke inkludert. SpeciesNet-pakken fra Kaggle inneholder MegaDetector v5a,
-  men Villmark bruker helbilde-klassifikatoren 4.0.3b, som ikke trenger en
-  detektor.
+  Not included. The SpeciesNet package from Kaggle contains MegaDetector
+  v5a, but Villmark uses the whole-image classifier 4.0.3b, which needs no
+  detector.

@@ -1,17 +1,17 @@
-"""Eksporterer SpeciesNet 4.0.3b til ONNX for nettleseren.
+"""Exports SpeciesNet 4.0.3b to ONNX for the browser.
 
-    python tools/export_speciesnet.py --kalibrering bilder/
+    python tools/export_speciesnet.py --calibration images/
 
-Modellen er helbilde-klassifikatoren, saa MegaDetector trengs ikke.
-Inndata er NHWC float32 i [0,1] ved 480x480 - ingen mean/std-normalisering.
-Det er ikke en antagelse: se SpeciesNetClassifier.batch_predict i
-google/cameratrapai, som gjor `img.arr / 255` og mater HWC rett inn.
+The model is the whole-image classifier, so MegaDetector is not needed.
+The input is NHWC float32 in [0,1] at 480x480 - no mean/std normalization.
+That is not an assumption: see SpeciesNetClassifier.batch_predict in
+google/cameratrapai, which does `img.arr / 255` and feeds HWC straight in.
 
-Merk et bevisst avvik: SpeciesNet beskjaerer topp og bunn av bildet for aa
-unngaa aa laere tidsstempelbanner fra viltkameraer. Et mobilbilde har ikke
-slike banner, og beskjaeringen ville kuttet motivet. Spillet bruker derfor
-senterkvadrat. Kalibreringen under gjor det samme, slik at int8-skalaene
-passer bildene modellen faktisk faar.
+Note one deliberate difference: SpeciesNet crops the top and the bottom of the
+image to avoid learning the timestamp banners of camera traps. A phone photo
+has no such banners, and the crop would cut the subject. The game therefore
+uses the centre square. The calibration below does the same, so the int8
+scales fit the images the model actually gets.
 """
 
 from __future__ import annotations
@@ -23,80 +23,80 @@ import numpy as np
 import torch
 from PIL import Image
 
-import felles
+import common
 
-NAVN = "speciesnet"
-STORRELSE = 480
-MODELL_ID = "kaggle:google/speciesnet/pyTorch/v4.0.3b"
+NAME = "speciesnet"
+SIZE = 480
+MODEL_ID = "kaggle:google/speciesnet/pyTorch/v4.0.3b"
 
 
-def forbehandle(sti: pathlib.Path) -> np.ndarray:
-    """Senterkvadrat, skalert til 480x480, NHWC i [0,1]."""
-    bilde = Image.open(sti).convert("RGB")
-    side = min(bilde.size)
-    venstre = (bilde.width - side) // 2
-    topp = (bilde.height - side) // 2
-    bilde = bilde.crop((venstre, topp, venstre + side, topp + side))
-    bilde = bilde.resize((STORRELSE, STORRELSE), Image.BILINEAR)
-    arr = np.asarray(bilde, dtype=np.float32) / 255.0
+def preprocess(path: pathlib.Path) -> np.ndarray:
+    """Centre square, scaled to 480x480, NHWC in [0,1]."""
+    image = Image.open(path).convert("RGB")
+    side = min(image.size)
+    left = (image.width - side) // 2
+    top = (image.height - side) // 2
+    image = image.crop((left, top, left + side, top + side))
+    image = image.resize((SIZE, SIZE), Image.BILINEAR)
+    arr = np.asarray(image, dtype=np.float32) / 255.0
     return arr[None, ...]
 
 
-class NHWCInnpakning(torch.nn.Module):
-    """Modellen tar NHWC allerede, men vi pakker den for aa laase signaturen."""
+class NHWCWrapper(torch.nn.Module):
+    """The model already takes NHWC; we wrap it only to pin the signature."""
 
-    def __init__(self, indre):
+    def __init__(self, inner):
         super().__init__()
-        self.indre = indre
+        self.inner = inner
 
     def forward(self, x):
-        return self.indre(x)
+        return self.inner(x)
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument(
-        "--kalibrering",
+        "--calibration",
         type=pathlib.Path,
-        help="mappe med 30-60 bilder tatt med mobilkamera. Uten denne skrives fp16 (~110 MB) i stedet for int8 (~55 MB).",
+        help="folder with 30-60 photos taken on a phone camera. Without it fp16 (~110 MB) is written instead of int8 (~55 MB).",
     )
-    ap.add_argument("--modell", default=MODELL_ID)
-    ap.add_argument("--metode", default="percentile", choices=["percentile", "minmax", "entropy"],
-                    help="kalibreringsmetode for int8")
-    ap.add_argument("--maks-bilder", type=int, default=48, dest="maks_bilder",
-                    help="hvor mange kalibreringsbilder som brukes. Percentile holder "
-                         "histogrammer for hver aktivering i minnet, saa store "
-                         "inndataformater krever faerre bilder.")
+    ap.add_argument("--model", default=MODEL_ID)
+    ap.add_argument("--method", default="percentile", choices=["percentile", "minmax", "entropy"],
+                    help="calibration method for int8")
+    ap.add_argument("--max-images", type=int, default=48, dest="max_images",
+                    help="how many calibration images are used. Percentile keeps a "
+                         "histogram per activation in memory, so large input "
+                         "shapes need fewer images.")
     args = ap.parse_args()
 
     from speciesnet.classifier import SpeciesNetClassifier
 
-    print(f"laster {args.modell} ...")
-    klass = SpeciesNetClassifier(args.modell, device="cpu")
-    labels = [klass.labels[i] for i in range(len(klass.labels))]
+    print(f"loading {args.model} ...")
+    classifier = SpeciesNetClassifier(args.model, device="cpu")
+    labels = [classifier.labels[i] for i in range(len(classifier.labels))]
     print(f"  {len(labels)} labels")
 
-    felles.UT.mkdir(parents=True, exist_ok=True)
-    fp32 = felles.UT / f"{NAVN}.fp32.onnx"
-    eksempel = torch.zeros(1, STORRELSE, STORRELSE, 3, dtype=torch.float32)
-    felles.eksporter_onnx(NHWCInnpakning(klass.model), eksempel, fp32)
+    common.OUT.mkdir(parents=True, exist_ok=True)
+    fp32 = common.OUT / f"{NAME}.fp32.onnx"
+    sample = torch.zeros(1, SIZE, SIZE, 3, dtype=torch.float32)
+    common.export_onnx(NHWCWrapper(classifier.model), sample, fp32)
 
-    ut = felles.UT / f"{NAVN}.onnx"
-    if args.kalibrering:
-        leser = felles.Kalibrering(args.kalibrering, forbehandle, "bilde", args.maks_bilder)
-        felles.kvantiser_int8(fp32, ut, leser, args.metode)
-        presisjon = "int8"
+    out = common.OUT / f"{NAME}.onnx"
+    if args.calibration:
+        reader = common.Calibration(args.calibration, preprocess, "image", args.max_images)
+        common.quantize_int8(fp32, out, reader, args.method)
+        precision = "int8"
     else:
-        print("  ingen kalibreringsbilder - skriver fp16 i stedet")
-        felles.konverter_fp16(fp32, ut)
-        presisjon = "fp16"
+        print("  no calibration images - writing fp16 instead")
+        common.convert_fp16(fp32, out)
+        precision = "fp16"
 
-    felles.skriv_meta(
-        NAVN,
+    common.write_meta(
+        NAME,
         {
-            "kilde": args.modell,
-            "presisjon": presisjon,
-            "input": [STORRELSE, STORRELSE],
+            "kilde": args.model,
+            "precision": precision,
+            "input": [SIZE, SIZE],
             "layout": "NHWC",
             "scale": 1 / 255,
             "mean": [0.0, 0.0, 0.0],
@@ -106,7 +106,7 @@ def main() -> None:
         },
         labels,
     )
-    print("ferdig. Last opp modeller/ til Hugging Face.")
+    print("done. Upload models/ to Hugging Face.")
 
 
 if __name__ == "__main__":

@@ -1,14 +1,15 @@
-"""Delte hjelpefunksjoner for de to eksportskriptene.
+"""Shared helpers for the two export scripts.
 
-Kjores lokalt, aldri av spillet. Skriver tre filer per modell:
-    <navn>.int8.onnx     kvantisert modell
-    <navn>.meta.json     inndataform, normalisering, layout
-    <navn>.labels.json   klasseliste i modellens egen rekkefolge
+Run locally, never by the game. Writes three files per model:
+    <name>.int8.onnx     quantized model
+    <name>.meta.json     input shape, normalization, layout
+    <name>.labels.json   class list in the model's own order
 """
 
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import shutil
 
@@ -16,126 +17,133 @@ import numpy as np
 import onnx
 import torch
 
-UT = pathlib.Path(__file__).resolve().parent.parent / "modeller"
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+OUT = ROOT / "models"
+
+# birder caches its downloaded weights in MODELS_DIR, which defaults to
+# "models" next to the working directory. That is where the exported species
+# models live, so the cache is pushed into its own folder to keep the two
+# apart. Must be set before birder is imported.
+os.environ.setdefault("MODELS_DIR", str(ROOT / "birder-cache"))
 
 
-def eksporter_onnx(modell, eksempel_input, sti: pathlib.Path, opset: int = 17) -> None:
-    """Skriver en fp32 ONNX-fil. Fast batch 1 - nettleseren kjorer ett bilde."""
-    modell.eval()
-    sti.parent.mkdir(parents=True, exist_ok=True)
+def export_onnx(model, sample_input, path: pathlib.Path, opset: int = 17) -> None:
+    """Writes an fp32 ONNX file. Fixed batch 1 - the browser runs one image."""
+    model.eval()
+    path.parent.mkdir(parents=True, exist_ok=True)
     with torch.no_grad():
         torch.onnx.export(
-            modell,
-            eksempel_input,
-            str(sti),
-            input_names=["bilde"],
+            model,
+            sample_input,
+            str(path),
+            input_names=["image"],
             output_names=["logits"],
             opset_version=opset,
             do_constant_folding=True,
             dynamo=False,
         )
-    onnx.checker.check_model(onnx.load(str(sti)))
-    print(f"  fp32 ONNX: {sti.name}  {sti.stat().st_size / 1e6:.1f} MB")
+    onnx.checker.check_model(onnx.load(str(path)))
+    print(f"  fp32 ONNX: {path.name}  {path.stat().st_size / 1e6:.1f} MB")
 
 
-class Kalibrering:
-    """Leser bilder fra en mappe og mater dem inn som kalibreringsdata.
+class Calibration:
+    """Reads images from a folder and feeds them in as calibration data.
 
-    Statisk kvantisering krever ekte bilder. Uten dem blir int8-vektene
-    skalert paa gjetning og modellen taper mye mer enn de ~1 % som er
-    normalt. Derfor krever skriptene en kalibreringsmappe for int8.
+    Static quantization needs real images. Without them the int8 weights are
+    scaled on guesswork and the model loses far more than the ~1 % that is
+    normal. That is why the scripts require a calibration folder for int8.
     """
 
-    def __init__(self, mappe: pathlib.Path, forbehandle, inputnavn: str, maks: int = 64):
-        self.filer = [
+    def __init__(self, folder: pathlib.Path, preprocess, input_name: str, limit: int = 64):
+        self.files = [
             p
-            for p in sorted(mappe.rglob("*"))
+            for p in sorted(folder.rglob("*"))
             if p.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}
-        ][:maks]
-        if not self.filer:
-            raise SystemExit(f"fant ingen bilder i {mappe}")
-        print(f"  kalibrerer paa {len(self.filer)} bilder")
-        self.forbehandle = forbehandle
-        self.inputnavn = inputnavn
+        ][:limit]
+        if not self.files:
+            raise SystemExit(f"found no images in {folder}")
+        print(f"  calibrating on {len(self.files)} images")
+        self.preprocess = preprocess
+        self.input_name = input_name
         self.rewind()
 
     def get_next(self):
         return next(self._data, None)
 
     def rewind(self):
-        """Percentile og Entropy leser datasettet to ganger. Uten en ekte
-        rewind ville andre runde faatt null bilder, og skalaene blitt satt
-        paa ingenting."""
-        self._data = ({self.inputnavn: self.forbehandle(p)} for p in self.filer)
+        """Percentile and Entropy read the data set twice. Without a real
+        rewind the second pass would get zero images, and the scales would be
+        set on nothing."""
+        self._data = ({self.input_name: self.preprocess(p)} for p in self.files)
 
 
-def kvantiser_int8(fp32: pathlib.Path, ut: pathlib.Path, leser, metode: str = "percentile") -> None:
-    """Statisk int8-kvantisering.
+def quantize_int8(fp32: pathlib.Path, out: pathlib.Path, reader, method: str = "percentile") -> None:
+    """Static int8 quantization.
 
-    Kalibreringsmetoden avgjor mye. MinMax setter skalaen etter den storste
-    verdien den saa, saa en enkelt uteligger presser hele omraadet og alle de
-    vanlige verdiene klemmes sammen. Percentile kutter halen og gir som regel
-    bedre treffsikkerhet paa CNN-er.
+    The calibration method matters a lot. MinMax sets the scale from the
+    largest value it saw, so a single outlier stretches the whole range and
+    squeezes all the ordinary values together. Percentile clips the tail and
+    is usually more accurate on CNNs.
     """
     from onnxruntime.quantization import CalibrationMethod, QuantFormat, QuantType, quantize_static
     from onnxruntime.quantization.shape_inference import quant_pre_process
 
-    metoder = {
+    methods = {
         "minmax": (CalibrationMethod.MinMax, {}),
         "percentile": (CalibrationMethod.Percentile, {"CalibPercentile": 99.999}),
         "entropy": (CalibrationMethod.Entropy, {}),
     }
-    if metode not in metoder:
-        raise SystemExit(f"ukjent kalibreringsmetode: {metode}")
-    kalib, ekstra = metoder[metode]
-    print(f"  kalibreringsmetode: {metode}")
+    if method not in methods:
+        raise SystemExit(f"unknown calibration method: {method}")
+    calib, extra = methods[method]
+    print(f"  calibration method: {method}")
 
-    forbehandlet = fp32.with_suffix(".prep.onnx")
-    quant_pre_process(str(fp32), str(forbehandlet), skip_symbolic_shape=True)
+    prepared = fp32.with_suffix(".prep.onnx")
+    quant_pre_process(str(fp32), str(prepared), skip_symbolic_shape=True)
     quantize_static(
-        str(forbehandlet),
-        str(ut),
-        leser,
+        str(prepared),
+        str(out),
+        reader,
         quant_format=QuantFormat.QDQ,
         activation_type=QuantType.QUInt8,
         weight_type=QuantType.QInt8,
         per_channel=True,
-        calibrate_method=kalib,
-        extra_options=ekstra,
+        calibrate_method=calib,
+        extra_options=extra,
     )
-    forbehandlet.unlink(missing_ok=True)
-    print(f"  int8 ONNX: {ut.name}  {ut.stat().st_size / 1e6:.1f} MB")
+    prepared.unlink(missing_ok=True)
+    print(f"  int8 ONNX: {out.name}  {out.stat().st_size / 1e6:.1f} MB")
 
 
-def konverter_fp16(fp32: pathlib.Path, ut: pathlib.Path) -> None:
-    """Halv presisjon. Dobbelt saa stor som int8, men krever ingen bilder."""
+def convert_fp16(fp32: pathlib.Path, out: pathlib.Path) -> None:
+    """Half precision. Twice the size of int8, but it needs no images."""
     from onnxconverter_common import float16
 
-    modell = float16.convert_float_to_float16(
+    model = float16.convert_float_to_float16(
         onnx.load(str(fp32)), keep_io_types=True, disable_shape_infer=True
     )
-    onnx.save(modell, str(ut))
-    print(f"  fp16 ONNX: {ut.name}  {ut.stat().st_size / 1e6:.1f} MB")
+    onnx.save(model, str(out))
+    print(f"  fp16 ONNX: {out.name}  {out.stat().st_size / 1e6:.1f} MB")
 
 
-def skriv_meta(navn: str, meta: dict, labels: list) -> None:
-    UT.mkdir(parents=True, exist_ok=True)
-    (UT / f"{navn}.meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
-    (UT / f"{navn}.labels.json").write_text(
+def write_meta(name: str, meta: dict, labels: list) -> None:
+    OUT.mkdir(parents=True, exist_ok=True)
+    (OUT / f"{name}.meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    (OUT / f"{name}.labels.json").write_text(
         json.dumps(labels, ensure_ascii=False), encoding="utf-8"
     )
-    print(f"  meta + {len(labels)} labels skrevet")
+    print(f"  meta + {len(labels)} labels written")
 
 
-def kopier_som(kilde: pathlib.Path, navn: str) -> pathlib.Path:
-    """Gir modellen navnet klassifiser.js forventer: <navn>.int8.onnx."""
-    maal = UT / f"{navn}.onnx"
-    if kilde.resolve() != maal.resolve():
-        shutil.copy2(kilde, maal)
-    return maal
+def copy_as(source: pathlib.Path, name: str) -> pathlib.Path:
+    """Gives the model the name classify.js expects: <name>.int8.onnx."""
+    target = OUT / f"{name}.onnx"
+    if source.resolve() != target.resolve():
+        shutil.copy2(source, target)
+    return target
 
 
-def topp5(logits: np.ndarray, labels: list) -> list:
+def top5(logits: np.ndarray, labels: list) -> list:
     p = np.exp(logits - logits.max())
     p /= p.sum()
     idx = np.argsort(p)[::-1][:5]

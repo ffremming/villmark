@@ -1,327 +1,342 @@
-# Artsmodeller — byggesteg
+# Species models — the build step
 
-Dette er et engangssteg som kjøres lokalt. Spillet kjører det aldri. Resultatet
-er tre små filer per modell som lastes opp til Hugging Face og hentes derfra av
-nettleseren.
+This is a one-off step that runs locally. The game never runs it. The result is
+three small files per model, uploaded to Hugging Face and fetched from there by
+the browser.
 
-Spillet fungerer uten dette steget: står `KLASSIFISER.base` urørt i `index.html`,
-bruker SKANN-skjermen det simulerte skannet akkurat som før.
+The game works without this step: leave `CLASSIFIER.base` untouched in
+`index.html` and the SCAN screen uses the simulated scan exactly as before.
 
-## Hvorfor to modeller
+## Why two models
 
-Målt mot de 72 artene i `species.js`, mot modellenes faktiske labellister:
+Measured against the 72 species in `species.js`, against the actual label lists
+of the models:
 
-| | eksakt | slekt | familie | ingen |
+| | exact | genus | family | none |
 |---|---|---|---|---|
 | SpeciesNet 4.0.3b | 21 | 2 | 6 | 43 |
 | birder `resnet_v2_50_inat21` | 53 | 10 | 4 | 5 |
-| **beste av de to** | **58** | 6 | 3 | 5 |
+| **best of the two** | **58** | 6 | 3 | 5 |
 
-SpeciesNet kjenner ingen planter, ingen sopp og ingen fisk, men den er sterkest
-på viltkamera-pattedyrene. iNat21 dekker resten.
+SpeciesNet knows no plants, no fungi and no fish, but it is the strongest on
+the camera-trap mammals. iNat21 covers the rest.
 
-**iNat21 kjøres først.** Den er både den billigste — 256×256 mot SpeciesNets
-480×480 — og den med bredest dekning. Et eksakt artstreff over 45 % avslutter
-skannet der, og den tunge modellen lastes aldri ned. SpeciesNet hentes først
-når iNat21 er usikker, og er spesialisten på `Lepus timidus`, `Lynx lynx`,
-`Gulo gulo` og `Vulpes lagopus`, som iNat21 bare når på slekt.
+**iNat21 runs first.** It is both the cheapest — 256×256 against SpeciesNet's
+480×480 — and the one with the widest coverage. An exact species hit above 45 %
+ends the scan there, and the heavy model is never downloaded. SpeciesNet is
+fetched only when iNat21 is unsure, and it is the specialist on `Lepus
+timidus`, `Lynx lynx`, `Gulo gulo` and `Vulpes lagopus`, which iNat21 only
+reaches at genus level.
 
-Målt i headless Chromium, samme ti bilder: sikre treff tar **475–724 ms**.
-Med motsatt rekkefølge tok de samme bildene ~2400 ms, fordi hvert eneste skann
-betalte for 480×480-modellen først.
+Measured in headless Chromium, the same ten images: certain hits take
+**475–724 ms**. With the order reversed the same images took ~2400 ms, because
+every single scan paid for the 480×480 model first.
 
-Kjør `node tools/dekning.js` etter hver utvidelse av `species.js`. Den henter
-begge labellistene og rapporterer hvilke arter som er ufangbare. Skriptet
-avslutter med feilkode hvis en art hverken dekkes av en modell eller av en
-gruppebro.
+Run `node tools/coverage.js` after every extension of `species.js`. It fetches
+both label lists and reports which species are uncatchable. The script exits
+with an error code if a species is covered neither by a model nor by a group
+bridge.
 
-## Oppsett
+## Setup
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r tools/requirements.txt
 ```
 
-SpeciesNet-vektene hentes fra Kaggle og krever innlogging én gang:
+The SpeciesNet weights come from Kaggle and need one sign-in:
 
 ```bash
 pip install kagglehub
 python -c "import kagglehub; kagglehub.login()"
 ```
 
-## Kalibreringsbilder
+## Calibration images
 
-Statisk int8-kvantisering trenger ekte bilder for å finne riktige tallområder.
-Det er ikke trening — modellens vekter røres ikke, skriptet måler bare hvilke
-verdier aktiveringene faktisk bruker, slik at int8-skalaene settes riktig.
+Static int8 quantization needs real images to find the right number ranges. It
+is not training — the model's weights are never touched, the script only
+measures which values the activations actually use, so the int8 scales are set
+correctly.
 
-Bildene hentes automatisk:
+The images are fetched automatically:
 
 ```bash
-python tools/hent_kalibrering.py
+python tools/fetch_calibration.py
 ```
 
-Den henter ett bilde per art i `species.js` fra Wikipedias REST-API, pluss ti
-scener uten art i seg — skogbunn, mose, ur, snø, bark, overskyet himmel —
-fordi skanneren ofte peker på ingenting spesielt. Bildene havner i
-`tools/kalibrering/` og er gitignorert.
+It fetches one image per species in `species.js` from Wikipedia's REST API,
+plus ten scenes with no species in them — forest floor, moss, scree, snow,
+bark, overcast sky — because the scanner often points at nothing in particular.
+The images land in `tools/calibration/` and are gitignored.
 
-Har du egne mobilbilder, er de bedre: de har samme optikk og lyssetting som
-det modellen møter i bruk. Pek `--kalibrering` på den mappa i stedet.
+If you have your own phone photos, they are better: they have the same optics
+and lighting as what the model meets in use. Point `--calibration` at that
+folder instead.
 
-Uten `--kalibrering` skriver skriptene fp16. Det virker, men filen blir
-omtrent dobbelt så stor.
+Without `--calibration` the scripts write fp16. That works, but the file comes
+out roughly twice the size.
 
-### Kalibreringsmetoden avgjør kvaliteten
+### The calibration method decides the quality
 
-`--metode percentile` er standard, og det er ikke en detalj. MinMax setter
-skalaen etter den største verdien den så, så én uteligger presser hele
-tallområdet og alle de vanlige verdiene klemmes sammen. Målt på de ti
-testbildene:
+`--method percentile` is the default, and that is not a detail. MinMax sets the
+scale from the largest value it saw, so a single outlier stretches the whole
+number range and squeezes all the ordinary values together. Measured on the ten
+test images:
 
-| metode | størrelse | riktig art |
+| method | size | right species |
 |---|---|---|
-| fp16 (ingen kalibrering) | 88,1 MB | 9/10 |
-| int8 minmax | 44,7 MB | 8/10 — `bjork` ble til `OSP` |
-| int8 percentile | 44,7 MB | **9/10** |
+| fp16 (no calibration) | 88.1 MB | 9/10 |
+| int8 minmax | 44.7 MB | 8/10 — `birch` turned into `ASPEN` |
+| int8 percentile | 44.7 MB | **9/10** |
 
-Percentile gir altså fp16-kvalitet til halve størrelsen. `entropy` finnes
-også som valg, men er tregere og ga ingen gevinst her.
+Percentile gives fp16 quality at half the size. `entropy` is available as well,
+but it is slower and gave nothing here.
 
-### SpeciesNet skal ikke kvantiseres
+### SpeciesNet must not be quantized
 
-Det gjelder bare iNat21. SpeciesNet er EfficientNetV2 med SE-blokker og swish,
-og den tåler ikke per-tensor int8-aktiveringer: modellen svarte `blank` på alt,
-også et bilde av rødrev som fp16-versjonen tar med 99,5 %. Målt 8/10 → 5/10.
+This applies to iNat21 only. SpeciesNet is EfficientNetV2 with SE blocks and
+swish, and it does not survive per-tensor int8 activations: the model answered
+`blank` to everything, including a picture of a red fox that the fp16 version
+takes at 99.5 %. Measured 8/10 → 5/10.
 
-Kjør derfor `export_speciesnet.py` **uten** `--kalibrering`. 112 MB fp16 er
-prisen, og den betales sjelden — modellen lastes bare ned når iNat21 er usikker.
+So run `export_speciesnet.py` **without** `--calibration`. 112 MB of fp16 is
+the price, and it is paid rarely — the model is downloaded only when iNat21 is
+unsure.
 
-Et forsøk med 48 kalibreringsbilder ble drept av kjernen (`exit=137`, minne):
-percentile holder histogrammer for hver aktivering, og ved 480×480 blir de for
-store. `--maks-bilder` finnes for å styre det, men løser ikke kvalitetstapet.
+An attempt with 48 calibration images was killed by the kernel (`exit=137`,
+memory): percentile keeps a histogram per activation, and at 480×480 they grow
+too large. `--max-images` exists to control that, but it does not solve the
+loss of quality.
 
-Merk: nettlesertesten fanger ikke dette. Den viste fortsatt 10/10 med en død
-SpeciesNet, fordi iNat21 kjøres først og bærer alle ti bildene alene. Test
-modellene hver for seg med `test_ende_til_ende.py` når du endrer eksporten.
+Note: the browser test does not catch this. It still showed 10/10 with a dead
+SpeciesNet, because iNat21 runs first and carries all ten images on its own.
+Test the models separately with `test_end_to_end.py` when you change the
+export.
 
-## Kjøring
+## Running
 
 ```bash
-python tools/hent_kalibrering.py
-python tools/export_speciesnet.py --kalibrering tools/kalibrering/
-python tools/export_inat21.py     --kalibrering tools/kalibrering/
+python tools/fetch_calibration.py
+python tools/export_speciesnet.py --calibration tools/calibration/
+python tools/export_inat21.py     --calibration tools/calibration/
 ```
 
-Ut i `modeller/`:
+Out into `models/`:
 
 ```
 speciesnet.onnx    speciesnet.meta.json    speciesnet.labels.json
 inat21.onnx        inat21.meta.json        inat21.labels.json
 ```
 
-Presisjonen står i `meta.json`, ikke i filnavnet — samme fil heter det samme
-enten den er int8 eller fp16, så `klassifiser.js` slipper å gjette.
-`<navn>.fp32.onnx` er en mellomfil som bare trengs av `test_parity.py`; den
-kan slettes etterpå.
+The precision is recorded in `meta.json`, not in the file name — the same file
+is called the same thing whether it is int8 or fp16, so `classify.js` does not
+have to guess. `<name>.fp32.onnx` is an intermediate file needed only by
+`test_parity.py`; it can be deleted afterwards.
 
-`meta.json` bærer inndataform, layout og normalisering, slik at
-`klassifiser.js` slipper å gjette. SpeciesNet er **NHWC** i `[0,1]` uten
-mean/std; iNat21 er **NCHW** med ImageNet-normalisering.
+`meta.json` carries the input shape, the layout and the normalization, so
+`classify.js` does not have to guess. SpeciesNet is **NHWC** in `[0,1]` without
+mean/std; iNat21 is **NCHW** with ImageNet normalization.
 
-## Verifisering
+## Verification
 
 ```bash
-python tools/test_parity.py --modell speciesnet --bilder bilder/
-python tools/test_parity.py --modell inat21     --bilder bilder/
-node tools/test_artsmapping.js
+python tools/test_parity.py --model speciesnet --images images/
+python tools/test_parity.py --model inat21     --images images/
+node tools/test_speciesmapping.js
 ```
 
 ```bash
-node tools/dekning.js
-python tools/test_ende_til_ende.py --modell inat21 --last-ned --ut /tmp/pred.json
-node tools/mapping_av_predikasjoner.js /tmp/pred.json
-python tools/test_nettleser.py
+node tools/coverage.js
+python tools/test_end_to_end.py --model inat21 --download --out /tmp/pred.json
+node tools/prediction_mapping.js /tmp/pred.json
+python tools/test_browser.py
 ```
 
-`test_parity.py` kjører PyTorch og ONNX på de samme bildene og krever samme
-topp-1. Toleransen følger presisjonen: fp32 1e-4, fp16 1e-2, int8 5e-2. Feil
-topp-1 er alltid en feil. Målt for `inat21` fp16: **10/10**, største avvik
-0,0027 — ren fp16-avrunding.
+`test_parity.py` runs PyTorch and ONNX on the same images and demands the same
+top-1. The tolerance follows the precision: fp32 1e-4, fp16 1e-2, int8 5e-2. A
+wrong top-1 is always a failure. Measured for `inat21` fp16: **10/10**, largest
+difference 0.0027 — plain fp16 rounding.
 
-`test_artsmapping.js` dekker mappingen fra modellabel til art i biblioteket
-(30 tester). `dekning.js` er beskrevet over.
+`test_speciesmapping.js` covers the mapping from model label to a species in
+the library (30 tests). `coverage.js` is described above.
 
-`test_ende_til_ende.py` kjører den eksporterte ONNX-fila på ekte bilder med
-nøyaktig samme forbehandling som `klassifiser.js` gjør i nettleseren —
-senterkvadrat, skalering, normalisering fra `meta.json`. Den fanger feil i
-layout, mean/std og labelrekkefølge før de dukker opp på telefonen. Med
-`--last-ned` henter den ett bilde per art fra Wikipedias REST-API.
-`mapping_av_predikasjoner.js` tar topp-5-lista videre gjennom den ekte
-`artsmapping.js` og sier hvilken art spillet ville gitt deg.
+`test_end_to_end.py` runs the exported ONNX file on real images with exactly
+the same preprocessing `classify.js` does in the browser — centre square,
+scaling, normalization from `meta.json`. It catches errors in layout, mean/std
+and label order before they show up on the phone. With `--download` it fetches
+one image per species from Wikipedia's REST API. `prediction_mapping.js` takes
+the top-5 list on through the real `speciesmapping.js` and says which species
+the game would have given you.
 
-`test_nettleser.py` er den eneste testen som prøver det koden faktisk gjør på
-en telefon: laster onnxruntime-web fra CDN, kjører modellen i en worker med
-`numThreads = 1`, tegner bildet i en canvas og leser pikslene ut igjen. Den
-serverer repoet på `127.0.0.1` — en secure context, så Cache API oppfører seg
-som på GitHub Pages — og kaller den ekte `KLASSIFISER.klassifiser()`. Til slutt
-klikker den seg gjennom SKANN uten kamera og krever at spillet lander på
-funn-skjermen, altså at fallbacken står.
+`test_browser.py` is the only test that tries what the code actually does on a
+phone: loads onnxruntime-web from the CDN, runs the model in a worker with
+`numThreads = 1`, draws the image into a canvas and reads the pixels back out.
+It serves the repo on `127.0.0.1` — a secure context, so the Cache API behaves
+the way it does on GitHub Pages — and calls the real `CLASSIFIER.classify()`.
+Finally it clicks its way through SCAN without a camera and demands that the
+game lands on the reveal screen, that is, that the fallback holds.
 
-Krever playwright, som ikke er med i `requirements.txt` fordi den drar med seg
-en Chromium på et par hundre MB:
+Needs playwright, which is not in `requirements.txt` because it pulls in a
+Chromium of a couple of hundred MB:
 
 ```bash
 pip install playwright && playwright install chromium
-python tools/test_nettleser.py
+python tools/test_browser.py
 ```
 
-Målt i headless Chromium på en M-serie Mac, wasm på én tråd: **10/10 riktig**,
-første skann 2,8 s inkludert modellasting, deretter 526–725 ms. En telefon er
-langsommere, regn med noen sekunder per skann.
+Measured in headless Chromium on an M-series Mac, wasm on one thread: **10/10
+correct**, the first scan 2.8 s including model loading, then 526–725 ms. A
+phone is slower, reckon on a few seconds per scan.
 
-Målt resultat for `inat21` fp16, 10 bilder fra Wikipedia:
+Measured result for `inat21` fp16, 10 images from Wikipedia:
 
 ```
-ok   bjork       -> BJØRK       SIKKER      22.0 %   modellen sa: Betula pubescens
-ok   elg         -> ELG         SIKKER      45.5 %   modellen sa: Alces alces
-ok   fluesopp    -> FLUESOPP    SIKKER      98.7 %   modellen sa: Amanita muscaria
-ok   gran        -> GRAN        SIKKER      30.2 %   modellen sa: Picea obovata
-ok   havorn      -> HAVØRN      SIKKER      91.5 %   modellen sa: Haliaeetus albicilla
-ok   kantarell   -> KANTARELL   SIKKER      98.2 %   modellen sa: Cantharellus cibarius
-ok   rev         -> REV         SIKKER      94.3 %   modellen sa: Vulpes vulpes
-ok   rosslyng    -> RØSSLYNG    SIKKER      92.9 %   modellen sa: Calluna vulgaris
-FEIL tare        -> INGEN       UKJENT ART   8.2 %   modellen sa: Limulus polyphemus
-ok*  torsk       -> SEI         USIKKER     58.9 %   modellen sa: Mullus surmuletus
+ok   birch       -> BIRCH       CERTAIN         22.0 %   the model said: Betula pubescens
+ok   chanterelle -> CHANTERELLE CERTAIN         98.2 %   the model said: Cantharellus cibarius
+FAIL kelp        -> NONE        UNKNOWN SPECIES  8.2 %   the model said: Limulus polyphemus
+ok   flyagaric   -> FLY AGARIC  CERTAIN         98.7 %   the model said: Amanita muscaria
+ok   fox         -> FOX         CERTAIN         94.3 %   the model said: Vulpes vulpes
+ok   heather     -> HEATHER     CERTAIN         92.9 %   the model said: Calluna vulgaris
+ok   moose       -> MOOSE       CERTAIN         45.5 %   the model said: Alces alces
+ok   seaeagle    -> SEA EAGLE   CERTAIN         91.5 %   the model said: Haliaeetus albicilla
+ok   spruce      -> SPRUCE      CERTAIN         30.2 %   the model said: Picea obovata
+ok*  cod         -> SAITHE      UNCERTAIN       58.9 %   the model said: Mullus surmuletus
 ```
 
-`gran` viser hvorfor mappingen ser på hele topp-5: modellens førstevalg er
-`Picea obovata`, men `Picea abies` ligger på plass to og vinner fordi et
-eksakt artstreff slår en slektsgjetning.
+`spruce` shows why the mapping looks at the whole top 5: the model's first
+choice is `Picea obovata`, but `Picea abies` sits in second place and wins,
+because an exact species hit beats a guess at genus level.
 
-`tare` er den ærlige svakheten. På et undervannsbilde av stortare svarte
-modellen `Limulus polyphemus` — dolkhale — med 8,2 %. Ingen algeklasse i
-topp-5, så gruppebroen fyrte ikke. Broen redder tangartene bare når modellen
-i det minste ser at det er en alge. I praksis er `tare`, `sukkertare` og
-`grisetang` fortsatt vanskelige å fange.
+`kelp` is the honest weakness. On an underwater photo of oarweed the model
+answered `Limulus polyphemus` — horseshoe crab — at 8.2 %. No algal class in
+the top 5, so the group bridge never fired. The bridge saves the seaweeds only
+when the model at least sees that it is an alga. In practice `kelp`,
+`sugarkelp` and `knottedwrack` are still hard to catch.
 
-## WebGPU og int8
+## WebGPU and int8
 
-`onnxruntime-web` 1.29 sin WebGPU-backend klarer ikke per-kanal-kvantiserte
-`DequantizeLinear`-noder. Den krever at `scale` og `zero_point` har samme rang,
-mens per-kanal gir 1-D `scale` og skalar `zero_point`:
+The WebGPU backend of `onnxruntime-web` 1.29 cannot handle per-channel
+quantized `DequantizeLinear` nodes. It requires `scale` and `zero_point` to
+have the same rank, while per-channel gives a 1-D `scale` and a scalar
+`zero_point`:
 
 ```
 [WebGPU] Kernel "[DequantizeLinear] body.stage1.0.block1.0.bias_DequantizeLinear"
 failed. Error: scale and zero-point inputs must have the same rank.
 ```
 
-Feilen kommer ved **kjøring**, ikke ved oppretting av sesjonen, så en try/catch
-rundt `InferenceSession.create` fanger ingenting.
+The error comes at **run time**, not when the session is created, so a
+try/catch around `InferenceSession.create` catches nothing.
 
-`klassifiser.js` håndterer det i to lag: int8-modeller går rett på wasm, og
-`kjorRobust()` fanger kjernefeil under kjøring, bygger sesjonen på nytt med wasm
-og prøver én gang til. Modellen huskes som wasm-bare resten av økta.
+`classify.js` handles it in two layers: int8 models go straight to wasm, and
+`runRobust()` catches kernel errors during the run, rebuilds the session on
+wasm and tries once more. The model is remembered as wasm-only for the rest of
+the session.
 
-**Testen må kjøres med GPU påskrudd.** Headless Chromium får normalt ingen
-GPU-adapter og faller stille til wasm — derfor slapp denne feilen gjennom alle
-tidligere kjøringer, og traff først på en ekte Chrome:
-
-```bash
-VILLMARK_WEBGPU=1 python tools/test_nettleser.py
-```
-
-Måling med GPU på: 18/18 riktig, og bildene som trenger begge modellene falt fra
-~2500 ms til ~500 ms, fordi SpeciesNet er fp16 og kjører fint på WebGPU.
-
-## Når modellen ikke skal svare
-
-Ingen av modellene har en «dette er ikke en organisme»-utgang. iNat21 fordeler
-alltid sannsynlighet over sine 10 000 arter, også når du peker kameraet på en
-laptop. Uten et gulv ble et bilde av et skrivebord til `HUBRO` på 5,1 %, en bil
-til `ULV` på 6,4 % og et tastatur til `SEI` på 5,6 %.
-
-To mekanismer stopper det:
-
-**Gulv per nivå** — `MIN_P_NIVA` i `artsmapping.js` er `[0.10, 0.25, 0.40]`.
-Svakere bevis krever høyere sikkerhet: et eksakt artsnavn på 12 % er verdt mer
-enn en familiegjetning på 12 %. Tallene er valgt mot måledata — ekte funn ligger
-på 46–99 %, med `bjork` som unntak på 12,5 %, mens alle falske lå under 17 %.
-
-**Blank-veto** — `BLANK_VETO` i `klassifiser.js`. SpeciesNet har en egen
-`blank`-klasse for bilder uten dyr. Sier den blank med minst 60 % sikkerhet, og
-iNat21 bare har en gjetning på slekt eller familie, forkastes gjetningen. Et
-eksakt artstreff overlever, siden SpeciesNet sier blank på alle planter og sopp.
-
-Regresjonstesten dekker dette: bildene som heter `_ikke_*` i `provebilder/` er
-laptop, tastatur, skjerm, skrivebord, kontor, kaffekopp, bil og murvegg, og
-testen krever `UKJENT ART` for hvert av dem. Målt: 18/18 riktig, der de åtte
-falske gir 1,8–16,7 % og avvises.
-
-## Arter ingen modell kjenner
-
-Fem arter har null dekning: `torsk`, `sei`, `tare`, `sukkertare` og
-`grisetang`. SpeciesNet har ingen fisk overhodet, iNat21 har 183 fiskearter
-men ingen Gadiformes, og brunalger finnes ingen steder.
-
-`GRUPPEBRO` i `artsmapping.js` fanger dem på høyere taksonomisk nivå: alt som
-er `Actinopterygii` og ikke allerede er plassert lander på en av gadidene, og
-alt som er rød-, grønn- eller brunalge lander på en av tangartene. Resultatet
-merkes alltid USIKKER, så spilleren ser at det var en gjetning. Broen sjekkes
-etter slekt og familie, så en laks treffer `Salmo salar` eksakt og når aldri
-broen.
-
-## Uavgjort mellom flere arter
-
-Når en slekt eller familie rommer flere av spillets arter — `Vulpes` har både
-rev og fjellrev, `Ericaceae` har fire — velges først en art spilleren mangler,
-deretter den minst sjeldne. Uten den første regelen ville fjellrev vært
-umulig: ingen modell kjenner `Vulpes lagopus`, så fjellrev nås bare på
-slektsnivå, og der ville rev alltid vunnet.
-
-## XP etter sikkerhet
-
-`NIVA_XP` i `app.js` skalerer utbyttet: sikkert artstreff 1,0, nærmeste
-slektning 0,6, usikker 0,35. Det simulerte skannet har ikke noe nivå og gir
-full uttelling som før.
-
-## Publisering
+**The test must be run with the GPU switched on.** Headless Chromium normally
+gets no GPU adapter and falls back to wasm in silence — which is why this bug
+slipped through every earlier run and first hit on a real Chrome:
 
 ```bash
-huggingface-cli upload DITT-BRUKERNAVN/villmark-modeller modeller/ .
+VILLMARK_WEBGPU=1 python tools/test_browser.py
 ```
 
-Sett så adressen i `index.html`:
+Measured with the GPU on: 18/18 correct, and the images that need both models
+fell from ~2500 ms to ~500 ms, because SpeciesNet is fp16 and runs fine on
+WebGPU.
+
+## When the model should not answer
+
+Neither model has a "this is not an organism" output. iNat21 always spreads
+probability across its 10 000 species, including when you point the camera at a
+laptop. Without a floor, a picture of a desk became `EAGLE OWL` at 5.1 %, a car
+became `WOLF` at 6.4 % and a keyboard became `SAITHE` at 5.6 %.
+
+Two mechanisms stop that:
+
+**A floor per level** — `MIN_P_LEVEL` in `speciesmapping.js` is
+`[0.10, 0.25, 0.40]`. Weaker evidence demands higher confidence: an exact
+species name at 12 % is worth more than a family guess at 12 %. The numbers
+were chosen against measurements — real finds sit at 46–99 %, with `birch` as
+the exception at 12.5 %, while every false one was below 17 %.
+
+**The blank veto** — `BLANK_VETO` in `classify.js`. SpeciesNet has its own
+`blank` class for pictures without animals. If it says blank with at least 60 %
+confidence, and iNat21 only has a guess at genus or family level, the guess is
+discarded. An exact species hit survives, since SpeciesNet says blank on every
+plant and fungus.
+
+The regression test covers this: the images called `_not_*` in `sample_images/`
+are a laptop, a keyboard, a monitor, a desk, an office, a coffee cup, a car and
+a brick wall, and the test demands `UNKNOWN SPECIES` for every one of them.
+Measured: 18/18 correct, where the eight false ones give 1.8–16.7 % and are
+rejected.
+
+## Species no model knows
+
+Five species have zero coverage: `cod`, `saithe`, `kelp`, `sugarkelp` and
+`knottedwrack`. SpeciesNet has no fish at all, iNat21 has 183 fish species but
+no Gadiformes, and brown algae exist nowhere.
+
+`GROUP_BRIDGE` in `speciesmapping.js` catches them at a higher taxonomic level:
+anything that is `Actinopterygii` and is not already placed lands on one of the
+gadids, and anything that is a red, green or brown alga lands on one of the
+seaweeds. The result is always marked UNCERTAIN, so the player sees that it was
+a guess. The bridge is checked after genus and family, so a salmon hits
+`Salmo salar` exactly and never reaches the bridge.
+
+## Ties between several species
+
+When a genus or a family holds several of the game's species — `Vulpes` has
+both fox and arctic fox, `Ericaceae` has four — a species the player is missing
+is chosen first, then the least rare one. Without the first rule the arctic fox
+would be impossible: no model knows `Vulpes lagopus`, so the arctic fox is only
+reached at genus level, and there the fox would always win.
+
+## XP by confidence
+
+`LEVEL_XP` in `app.js` scales the reward: a certain species hit 1.0, nearest
+relative 0.6, uncertain 0.35. The simulated scan has no level and pays out in
+full as before.
+
+## Publishing
+
+```bash
+huggingface-cli upload YOUR-USERNAME/villmark-modeller models/ .
+```
+
+Then set the address in `index.html`:
 
 ```js
-KLASSIFISER.base = 'https://huggingface.co/DITT-BRUKERNAVN/villmark-modeller/resolve/main/';
+CLASSIFIER.base = 'https://huggingface.co/YOUR-USERNAME/villmark-modeller/resolve/main/';
 ```
 
-Modellene skal **ikke** committes til dette repoet. GitHub Pages tåler ikke
-100 MB binærfiler, og hver ny versjon ville ligget igjen i git-historikken for
-alltid. Hugging Face sender `Access-Control-Allow-Origin: *`, så nettleseren
-får hente dem direkte.
+The models must **not** be committed to this repo. GitHub Pages cannot take
+100 MB binaries, and every new version would stay in the git history forever.
+Hugging Face sends `Access-Control-Allow-Origin: *`, so the browser can fetch
+them directly.
 
-## Avvik fra originalt forbehandlingssteg
+## Difference from the original preprocessing
 
-SpeciesNet beskjærer topp og bunn av bildet før klassifisering. Det er gjort
-for viltkameraer, som legger tidsstempelbanner der, og modellen skal ikke lære
-seg kameramerke i stedet for art. Et mobilbilde har ingen slike banner, og
-beskjæringen ville kuttet motivet. Spillet bruker senterkvadrat i stedet, og
-kalibreringen gjør det samme, slik at int8-skalaene passer bildene modellen
-faktisk får.
+SpeciesNet crops the top and the bottom of the image before classifying. That
+is done for camera traps, which put timestamp banners there, and the model must
+not learn the camera brand instead of the species. A phone photo has no such
+banners, and the crop would cut the subject. The game uses the centre square
+instead, and the calibration does the same, so the int8 scales fit the images
+the model actually gets.
 
-## Mobil
+## Mobile
 
-Spillet kjører på GitHub Pages, som ikke kan sette COOP/COEP-hoder. Da finnes
-ikke `SharedArrayBuffer`, og onnxruntime-web må kjøre på én tråd. `klassifiser.js`
-setter derfor `numThreads = 1` og `proxy = true`, slik at inferensen ligger i en
-worker og 3D-scenen fortsetter å animere mens telefonen regner. WebGPU brukes
-når `navigator.gpu` finnes, med wasm som fallback — også når WebGPU feiler
-under sesjonsoppsett, som skjer på en del Android-GPUer.
+The game runs on GitHub Pages, which cannot set COOP/COEP headers. Then
+`SharedArrayBuffer` does not exist, and onnxruntime-web has to run on one
+thread. `classify.js` therefore sets `numThreads = 1` and `proxy = true`, so
+the inference sits in a worker and the 3D scene keeps animating while the phone
+computes. WebGPU is used when `navigator.gpu` exists, with wasm as the fallback
+— also when WebGPU fails during session setup, which happens on a number of
+Android GPUs.
 
-Modellene lastes aldri uten at spilleren har trykket JA i dialogen, og bare når
-de trengs: dyremodellen ved første ekte skann, plantemodellen først når
-dyremodellen ikke finner noe. Begge caches i Cache API og hentes én gang per
-enhet. Telefoner med 4 GB minne eller mindre holder bare én modell i live om
-gangen.
+The models are never loaded without the player pressing YES in the dialog, and
+only when they are needed: the animal model on the first real scan, the plant
+model only when the animal model finds nothing. Both are cached in the Cache
+API and fetched once per device. Phones with 4 GB of memory or less keep only
+one model alive at a time.

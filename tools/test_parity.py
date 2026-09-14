@@ -1,17 +1,17 @@
-"""Sjekker at ONNX-modellen svarer likt som PyTorch-modellen.
+"""Checks that the ONNX model answers the same as the PyTorch model.
 
-    python tools/test_parity.py --modell speciesnet --bilder bilder/
+    python tools/test_parity.py --model speciesnet --images images/
 
-Krav for godkjent: samme topp-1 paa hvert bilde, og et avvik i sannsynlighet
-som holder seg innenfor det presisjonen tilsier.
+To pass: the same top-1 on every image, and a difference in probability that
+stays within what the precision allows.
 
-Grensene er satt etter hva tallformatene faktisk kan:
-  fp32  1e-4   ren eksport, bare grafoptimalisering skiller
-  fp16  1e-2   fp16 har rundt tre siffer, saa 0.003 paa en p=0.45 er normalt
-  int8  5e-2   kvantisering flytter mer, men topp-1 skal staa
+The limits follow what the number formats can actually do:
+  fp32  1e-4   a clean export, only graph optimization differs
+  fp16  1e-2   fp16 has about three digits, so 0.003 on a p=0.45 is normal
+  int8  5e-2   quantization moves more, but top-1 must hold
 
-Feil topp-1 er alltid en feil, uansett presisjon. Det er den som avslorer
-gale layout, mean/std eller labelrekkefolge.
+A wrong top-1 is always a failure, whatever the precision. That is the one
+that exposes a wrong layout, wrong mean/std or a wrong label order.
 """
 
 from __future__ import annotations
@@ -24,104 +24,104 @@ import sys
 import numpy as np
 import onnxruntime as ort
 
-import felles
+import common
 
-BILDETYPER = {".jpg", ".jpeg", ".png", ".webp"}
+IMAGE_TYPES = {".jpg", ".jpeg", ".png", ".webp"}
 
 
-def navn_av(label) -> str:
-    """iNat21-labels er objekter, SpeciesNet-labels er strenger."""
+def name_of(label) -> str:
+    """iNat21 labels are objects, SpeciesNet labels are strings."""
     return label["name"] if isinstance(label, dict) else str(label)
 
 
-def last_torch(modellnavn: str):
-    if modellnavn == "speciesnet":
+def load_torch(model_name: str):
+    if model_name == "speciesnet":
         from speciesnet.classifier import SpeciesNetClassifier
 
-        import export_speciesnet as eks
+        import export_speciesnet as exp
 
-        klass = SpeciesNetClassifier(eks.MODELL_ID, device="cpu")
-        return klass.model, eks.forbehandle
-    if modellnavn == "inat21":
+        classifier = SpeciesNetClassifier(exp.MODEL_ID, device="cpu")
+        return classifier.model, exp.preprocess
+    if model_name == "inat21":
         import birder
 
-        import export_inat21 as eks
+        import export_inat21 as exp
 
-        net, model_info = birder.load_pretrained_model(eks.MODELL, inference=True)
-        storrelse = birder.get_size_from_signature(model_info.signature)
-        h, w = (storrelse if isinstance(storrelse, (list, tuple)) else (storrelse, storrelse))[:2]
+        net, model_info = birder.load_pretrained_model(exp.MODEL, inference=True)
+        size = birder.get_size_from_signature(model_info.signature)
+        h, w = (size if isinstance(size, (list, tuple)) else (size, size))[:2]
         stats = model_info.rgb_stats
         mean = np.array(list(stats["mean"]), dtype=np.float32)
         std = np.array(list(stats["std"]), dtype=np.float32)
 
         from PIL import Image
 
-        def forbehandle(sti: pathlib.Path) -> np.ndarray:
-            bilde = Image.open(sti).convert("RGB")
-            side = min(bilde.size)
-            v = (bilde.width - side) // 2
-            t = (bilde.height - side) // 2
-            bilde = bilde.crop((v, t, v + side, t + side)).resize((w, h), Image.BILINEAR)
-            arr = np.asarray(bilde, dtype=np.float32) / 255.0
+        def preprocess(path: pathlib.Path) -> np.ndarray:
+            image = Image.open(path).convert("RGB")
+            side = min(image.size)
+            left = (image.width - side) // 2
+            top = (image.height - side) // 2
+            image = image.crop((left, top, left + side, top + side)).resize((w, h), Image.BILINEAR)
+            arr = np.asarray(image, dtype=np.float32) / 255.0
             return ((arr - mean) / std).transpose(2, 0, 1)[None, ...]
 
-        return net, forbehandle
-    raise SystemExit(f"ukjent modell: {modellnavn}")
+        return net, preprocess
+    raise SystemExit(f"unknown model: {model_name}")
 
 
 def main() -> None:
     import torch
 
     ap = argparse.ArgumentParser()
-    ap.add_argument("--modell", choices=["speciesnet", "inat21"], required=True)
-    ap.add_argument("--bilder", type=pathlib.Path, required=True)
-    ap.add_argument("--antall", type=int, default=20)
+    ap.add_argument("--model", choices=["speciesnet", "inat21"], required=True)
+    ap.add_argument("--images", type=pathlib.Path, required=True)
+    ap.add_argument("--count", type=int, default=20)
     args = ap.parse_args()
 
-    onnx_sti = felles.UT / f"{args.modell}.onnx"
-    meta_sti = felles.UT / f"{args.modell}.meta.json"
-    if not onnx_sti.exists():
-        raise SystemExit(f"fant ikke {onnx_sti} - kjor eksportskriptet forst")
-    meta = json.loads(meta_sti.read_text(encoding="utf-8"))
-    labels = json.loads((felles.UT / f"{args.modell}.labels.json").read_text(encoding="utf-8"))
-    grense = {"fp32": 1e-4, "fp16": 1e-2, "int8": 5e-2}.get(meta["presisjon"], 1e-2)
+    onnx_path = common.OUT / f"{args.model}.onnx"
+    meta_path = common.OUT / f"{args.model}.meta.json"
+    if not onnx_path.exists():
+        raise SystemExit(f"could not find {onnx_path} - run the export script first")
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    labels = json.loads((common.OUT / f"{args.model}.labels.json").read_text(encoding="utf-8"))
+    limit = {"fp32": 1e-4, "fp16": 1e-2, "int8": 5e-2}.get(meta["precision"], 1e-2)
 
-    net, forbehandle = last_torch(args.modell)
+    net, preprocess = load_torch(args.model)
     net.eval()
-    okt = ort.InferenceSession(str(onnx_sti), providers=["CPUExecutionProvider"])
-    innavn = okt.get_inputs()[0].name
+    session = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
+    input_name = session.get_inputs()[0].name
 
-    filer = [p for p in sorted(args.bilder.rglob("*")) if p.suffix.lower() in BILDETYPER][: args.antall]
-    if not filer:
-        raise SystemExit(f"fant ingen bilder i {args.bilder}")
+    files = [p for p in sorted(args.images.rglob("*")) if p.suffix.lower() in IMAGE_TYPES][: args.count]
+    if not files:
+        raise SystemExit(f"found no images in {args.images}")
 
-    feil = 0
-    for sti in filer:
-        x = forbehandle(sti)
+    failures = 0
+    for path in files:
+        x = preprocess(path)
         with torch.no_grad():
             torch_logits = net(torch.from_numpy(x)).numpy()[0]
-        onnx_logits = okt.run(None, {innavn: x})[0][0]
+        onnx_logits = session.run(None, {input_name: x})[0][0]
 
-        t_topp = felles.topp5(torch_logits, labels)
-        o_topp = felles.topp5(onnx_logits, labels)
-        t_navn = navn_av(t_topp[0][0])
-        o_navn = navn_av(o_topp[0][0])
-        samme = t_navn == o_navn
-        avvik = abs(t_topp[0][1] - o_topp[0][1])
+        t_top = common.top5(torch_logits, labels)
+        o_top = common.top5(onnx_logits, labels)
+        t_name = name_of(t_top[0][0])
+        o_name = name_of(o_top[0][0])
+        same = t_name == o_name
+        gap = abs(t_top[0][1] - o_top[0][1])
 
-        if not samme:
-            feil += 1
-            print(f"FEIL  {sti.name}: torch sa {t_navn}, onnx sa {o_navn}")
-        elif avvik > grense:
-            feil += 1
-            print(f"AVVIK {sti.name}: {t_navn}  p {t_topp[0][1]:.4f} mot {o_topp[0][1]:.4f}"
-                  f"  (avvik {avvik:.4f} > {grense})")
+        if not same:
+            failures += 1
+            print(f"FAIL  {path.name}: torch said {t_name}, onnx said {o_name}")
+        elif gap > limit:
+            failures += 1
+            print(f"DRIFT {path.name}: {t_name}  p {t_top[0][1]:.4f} against {o_top[0][1]:.4f}"
+                  f"  (difference {gap:.4f} > {limit})")
         else:
-            print(f"ok    {sti.name}: {t_navn}  ({t_topp[0][1]:.3f}, avvik {avvik:.4f})")
+            print(f"ok    {path.name}: {t_name}  ({t_top[0][1]:.3f}, difference {gap:.4f})")
 
-    print(f"\n{len(filer) - feil}/{len(filer)} bilder innenfor grensen "
-          f"{grense} for {meta['presisjon']}")
-    sys.exit(1 if feil else 0)
+    print(f"\n{len(files) - failures}/{len(files)} images within the limit "
+          f"{limit} for {meta['precision']}")
+    sys.exit(1 if failures else 0)
 
 
 if __name__ == "__main__":

@@ -5,142 +5,142 @@ const fs = require('fs');
 const vm = require('vm');
 const path = require('path');
 
-const ROT = path.join(__dirname, '..');
-const les = f => fs.readFileSync(path.join(ROT, f), 'utf8');
+const ROOT = path.join(__dirname, '..');
+const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
 
-let feil = 0;
-const sjekk = (ok, hva) => { if(!ok){ feil++; console.log('FEIL: ' + hva); } else console.log('ok  - ' + hva); };
+let failures = 0;
+const check = (ok, what) => { if(!ok){ failures++; console.log('FAIL: ' + what); } else console.log('ok  - ' + what); };
 
 /* ---------------------------------------------------------- harness */
-/* const-ene i de to filene ligger i skriptets eget skop, ikke paa
-   kontekstobjektet, saa siste uttrykk gir oss taket paa dem. */
+/* The consts in the two files live in the script's own scope, not on the
+   context object, so the last expression is our handle on them. */
 const ctx = vm.createContext({ console, Math, JSON, Set, Map, Array, Object, Number, isFinite });
-const K = vm.runInContext(les('species.js') + '\n' + les('cards.js') + `
-;({ SPECIES, SPECIES_BY_ID, KORTBASE, LEDERE, REGLER, KOSTKURVE,
-    kortAv, kortIdFor, delKortId, kortKost, kortKraft,
-    byggDekkStokk, dekkbareEksemplarer, dekkMinst, byggAiStokk, byggStokk,
-    fyllStokk });`, ctx);
+const K = vm.runInContext(read('species.js') + '\n' + read('cards.js') + `
+;({ SPECIES, SPECIES_BY_ID, CARD_BASE, LEADERS, RULES, COST_CURVE,
+    cardById, cardIdFor, splitCardId, cardCost, cardPower,
+    buildDeckFromLawn, deckableSpecimens, minDeckSize, buildAiDeck, buildDeck,
+    padDeck });`, ctx);
 
-const ex = (uid, art, niva, x) =>
-  ({ uid, art, niva, variant:null, x: x === undefined ? 0 : x, z: x === undefined ? 0 : x });
+const ex = (uid, species, level, x) =>
+  ({ uid, species, level, variant:null, x: x === undefined ? 0 : x, z: x === undefined ? 0 : x });
 
 /* ---------------------------------------------------------- card ids */
 {
-  sjekk(K.kortIdFor('rev', 1) === 'rev', 'nivaa 1 beholder den bare arts-id-en');
-  sjekk(K.kortIdFor('rev', 3) === 'rev@3', 'hoyere nivaa henger paa id-en');
+  check(K.cardIdFor('fox', 1) === 'fox', 'level 1 keeps the bare species id');
+  check(K.cardIdFor('fox', 3) === 'fox@3', 'a higher level is appended to the id');
 
-  const a = K.delKortId('rev');
-  const b = K.delKortId('rev@4');
-  sjekk(a.artId === 'rev' && a.niva === 1, 'en bar arts-id leses som nivaa 1');
-  sjekk(b.artId === 'rev' && b.niva === 4, 'nivaaet leses ut igjen');
+  const a = K.splitCardId('fox');
+  const b = K.splitCardId('fox@4');
+  check(a.speciesId === 'fox' && a.level === 1, 'a bare species id reads as level 1');
+  check(b.speciesId === 'fox' && b.level === 4, 'the level is read back out');
 
-  sjekk(K.kortAv('rev') === K.KORTBASE.rev, 'nivaa 1 kommer rett fra kortbasen');
-  sjekk(K.kortAv('rev@3').artId === 'rev' && K.kortAv('rev@3').niva === 3,
-    'et nivaakort bygges ved forste oppslag');
-  sjekk(K.kortAv('rev@3') === K.kortAv('rev@3'),
-    'og blir liggende, saa to oppslag gir samme kort');
-  sjekk(K.kortAv('finnesikke@2') === undefined, 'ukjent art gir ingen kort');
-  sjekk(K.kortAv('finnesikke') === undefined, 'ukjent id gir ingen kort');
+  check(K.cardById('fox') === K.CARD_BASE.fox, 'level 1 comes straight from the card base');
+  check(K.cardById('fox@3').speciesId === 'fox' && K.cardById('fox@3').level === 3,
+    'a level card is built on the first lookup');
+  check(K.cardById('fox@3') === K.cardById('fox@3'),
+    'and stays, so two lookups give the same card');
+  check(K.cardById('doesnotexist@2') === undefined, 'an unknown species gives no card');
+  check(K.cardById('doesnotexist') === undefined, 'an unknown id gives no card');
 }
 
 /* ---------------------------------------------------------- the cost ladder */
 {
-  const sp = K.SPECIES_BY_ID.rev;
-  const kost = n => K.kortKost(sp, n);
-  sjekk(kost(1) === K.KORTBASE.rev.kost, 'nivaa 1 koster det kortbasen sier');
+  const sp = K.SPECIES_BY_ID.fox;
+  const cost = n => K.cardCost(sp, n);
+  check(cost(1) === K.CARD_BASE.fox.cost, 'level 1 costs what the card base says');
 
-  let synker = false, forrige = kost(1);
+  let falls = false, previous = cost(1);
   for(let n = 2; n <= 12; n++){
-    if(kost(n) < forrige) synker = true;
-    forrige = kost(n);
+    if(cost(n) < previous) falls = true;
+    previous = cost(n);
   }
-  sjekk(!synker, 'kosten faller aldri naar nivaaet stiger');
+  check(!falls, 'the cost never falls as the level rises');
 
-  const tak = K.KOSTKURVE[K.KOSTKURVE.length - 1][1];
-  sjekk(kost(40) === tak, 'stigen stopper paa den dyreste kosten');
-  sjekk(K.kortKraft(sp, 40) > K.kortKraft(sp, 1), 'et hoyt nivaa gir mer kraft');
-  sjekk(K.kortKraft(sp, 40) === K.kortKraft(sp, 80),
-    'over taket gir nivaaet ikke mer kraft');
+  const ceiling = K.COST_CURVE[K.COST_CURVE.length - 1][1];
+  check(cost(40) === ceiling, 'the ladder stops at the most expensive cost');
+  check(K.cardPower(sp, 40) > K.cardPower(sp, 1), 'a high level gives more power');
+  check(K.cardPower(sp, 40) === K.cardPower(sp, 80),
+    'above the ceiling the level gives no more power');
 
-  /* et VERN staar to hakk over kraftkurven - det skal ogsaa gjelde
-     nivaakortene, ellers blir et oppgradert VERN svakere enn et nytt */
-  const vern = K.SPECIES.find(s => K.KORTBASE[s.id].nokler.includes('VERN'));
-  sjekk(K.kortAv(K.kortIdFor(vern.id, 3)).kraft
-      > K.kortAv(vern.id).kraft, 'et oppgradert VERN beholder paaslaget sitt');
+  /* A BLOCKER sits two notches above the power curve - that must hold for the
+     level cards too, or an upgraded BLOCKER ends up weaker than a fresh one. */
+  const blocker = K.SPECIES.find(s => K.CARD_BASE[s.id].keys.includes('BLOCKER'));
+  check(K.cardById(K.cardIdFor(blocker.id, 3)).power
+      > K.cardById(blocker.id).power, 'an upgraded BLOCKER keeps its bonus');
 }
 
 /* ---------------------------------------------------------- what may be a card */
 {
-  const plen = [
-    ex(1, 'rev',   1),
-    ex(2, 'rev',   3),
-    ex(3, 'ekorn', 1),
-    ex(4, 'bjorn', 1, null),      // ikke satt ut enda
-    { uid:5, art:'finnesikke', niva:1, variant:null, x:0, z:0 },
+  const lawn = [
+    ex(1, 'fox',      1),
+    ex(2, 'fox',      3),
+    ex(3, 'squirrel', 1),
+    ex(4, 'bear',     1, null),   // not placed yet
+    { uid:5, species:'doesnotexist', level:1, variant:null, x:0, z:0 },
   ];
 
-  const ute = K.dekkbareEksemplarer(plen);
-  sjekk(ute.length === 3, 'bare eksemplarer som staar ute teller');
-  sjekk(!ute.some(e => e.uid === 4), 'et eksemplar som venter paa aa bli satt ut er ikke med');
-  sjekk(!ute.some(e => e.uid === 5), 'en art som ikke finnes kastes');
+  const out = K.deckableSpecimens(lawn);
+  check(out.length === 3, 'only specimens that are actually placed count');
+  check(!out.some(e => e.uid === 4), 'a specimen waiting to be placed is left out');
+  check(!out.some(e => e.uid === 5), 'a species that does not exist is thrown away');
 
-  const alt = K.byggDekkStokk(plen, null);
-  sjekk(alt.join(',') === 'rev,rev@3,ekorn',
-    'uten valg blir alt som staar ute til kort, hvert paa sitt nivaa');
+  const all = K.buildDeckFromLawn(lawn, null);
+  check(all.join(',') === 'fox,fox@3,squirrel',
+    'with no selection everything placed becomes a card, each at its own level');
 
-  const valgt = K.byggDekkStokk(plen, new Set([1, 3]));
-  sjekk(valgt.join(',') === 'rev,ekorn', 'et fravalgt eksemplar blir ikke kort');
-  sjekk(K.byggDekkStokk(plen, new Set()).length === 0, 'et tomt valg gir et tomt dekk');
-  sjekk(K.byggDekkStokk([], null).length === 0, 'en tom plen gir et tomt dekk');
-  sjekk(K.byggDekkStokk(undefined, null).length === 0, 'ingen plen gir et tomt dekk');
+  const chosen = K.buildDeckFromLawn(lawn, new Set([1, 3]));
+  check(chosen.join(',') === 'fox,squirrel', 'a deselected specimen does not become a card');
+  check(K.buildDeckFromLawn(lawn, new Set()).length === 0, 'an empty selection gives an empty deck');
+  check(K.buildDeckFromLawn([], null).length === 0, 'an empty lawn gives an empty deck');
+  check(K.buildDeckFromLawn(undefined, null).length === 0, 'no lawn gives an empty deck');
 
-  /* to eksemplarer av samme art paa samme nivaa er to like kort: kopitaket
-     fra planstokken gjelder ikke her */
-  const seksRev = K.byggDekkStokk([1,2,3,4,5,6].map(u => ex(u, 'rev', 1)), null);
-  sjekk(seksRev.length === 6 && seksRev.every(id => id === 'rev'),
-    'seks rever paa plenen er seks rev-kort, uansett kopitaket');
+  /* Two specimens of the same species at the same level are two identical
+     cards: the copy limit from the plan deck does not apply here. */
+  const sixFoxes = K.buildDeckFromLawn([1,2,3,4,5,6].map(u => ex(u, 'fox', 1)), null);
+  check(sixFoxes.length === 6 && sixFoxes.every(id => id === 'fox'),
+    'six foxes on the lawn are six fox cards, copy limit or not');
 
-  /* hvert kort i dekket maa kunne slaas opp igjen */
-  sjekk(alt.every(id => K.kortAv(id)), 'hvert kort i dekket finnes i kortbasen');
+  /* Every card in the deck must be resolvable again */
+  check(all.every(id => K.cardById(id)), 'every card in the deck exists in the card base');
 }
 
 /* ---------------------------------------------------------- deck size */
 {
-  for(const leder of K.LEDERE){
-    const minst = K.dekkMinst(leder);
-    sjekk(minst > leder.liv + K.REGLER.apningshand,
-      'minstedekket mot ' + leder.navn + ' har kort igjen etter hand og liv');
+  for(const leader of K.LEADERS){
+    const least = K.minDeckSize(leader);
+    check(least > leader.life + K.RULES.openingHand,
+      'the minimum deck against ' + leader.name + ' has cards left after hand and life');
   }
-  const mest = K.LEDERE.reduce((a,b) => a.liv > b.liv ? a : b);
-  const minst = K.LEDERE.reduce((a,b) => a.liv < b.liv ? a : b);
-  sjekk(K.dekkMinst(mest) >= K.dekkMinst(minst),
-    'en leder med flere liv krever et storre dekk');
+  const most = K.LEADERS.reduce((a,b) => a.life > b.life ? a : b);
+  const fewest = K.LEADERS.reduce((a,b) => a.life < b.life ? a : b);
+  check(K.minDeckSize(most) >= K.minDeckSize(fewest),
+    'a leader with more life demands a bigger deck');
 }
 
 /* ---------------------------------------------------------- the machine */
 {
-  const leder = K.LEDERE[0];
+  const leader = K.LEADERS[0];
   for(const n of [1, 14, 50, 137]){
-    const ai = K.byggAiStokk(leder, n);
-    sjekk(ai.length === n, 'maskinen stiller med ' + n + ' kort naar du gjor det');
-    sjekk(ai.every(id => K.kortAv(id)), 'alle maskinens kort finnes (' + n + ')');
+    const ai = K.buildAiDeck(leader, n);
+    check(ai.length === n, 'the machine brings ' + n + ' cards when you do');
+    check(ai.every(id => K.cardById(id)), 'every card of the machine exists (' + n + ')');
   }
-  sjekk(K.byggAiStokk(leder, 137).length > K.byggStokk(leder).length,
-    'planstokken forlenges naar plenen din er stoerre enn den');
+  check(K.buildAiDeck(leader, 137).length > K.buildDeck(leader).length,
+    'the plan deck is extended when your lawn is bigger than it');
 }
 
 /* ---------------------------------------------------------- padding */
 {
-  sjekk(K.fyllStokk(['rev'], 14).length === 14 &&
-        K.fyllStokk(['rev'], 14).every(id => id === 'rev'),
-    'ett kort gaar rundt om igjen til stokken er stor nok');
-  sjekk(K.fyllStokk(['rev','hare'], 5).join(',') === 'rev,hare,rev,hare,rev',
-    'flere kort gaar rundt i samme rekkefolge');
-  sjekk(K.fyllStokk(['rev','hare','gran'], 2).join(',') === 'rev,hare',
-    'en for stor kilde klippes ned');
-  sjekk(K.fyllStokk([], 14).length === 0, 'tom kilde gir tom stokk');
-  sjekk(K.fyllStokk(['rev'], 0).length === 0, 'null kort gir tom stokk');
+  check(K.padDeck(['fox'], 14).length === 14 &&
+        K.padDeck(['fox'], 14).every(id => id === 'fox'),
+    'one card goes round again until the deck is big enough');
+  check(K.padDeck(['fox','hare'], 5).join(',') === 'fox,hare,fox,hare,fox',
+    'several cards go round in the same order');
+  check(K.padDeck(['fox','hare','spruce'], 2).join(',') === 'fox,hare',
+    'a source that is too big is cut down');
+  check(K.padDeck([], 14).length === 0, 'an empty source gives an empty deck');
+  check(K.padDeck(['fox'], 0).length === 0, 'zero cards gives an empty deck');
 }
 
-console.log(feil ? '\n' + feil + ' dekksjekker feilet' : '\nAlle dekksjekker gikk gjennom');
-process.exit(feil ? 1 : 0);
+console.log(failures ? '\n' + failures + ' deck checks failed' : '\nAll deck checks passed');
+process.exit(failures ? 1 : 0);

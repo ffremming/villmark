@@ -1,353 +1,352 @@
-/* Kjorer to KORTSPILL-motorer i hver sin VM-kontekst og lar dem spille mot
-   hverandre gjennom et NETT-stubb. Da testes speiling, spoersmalsflyt,
-   handlinger og sladding uten nettleser. */
+/* Runs two CARDGAME engines in separate VM contexts and lets them play against
+   each other through a stubbed NET. That tests mirroring, the question flow,
+   actions and hidden information without a browser. */
 const fs = require('fs');
 const vm = require('vm');
 const path = require('path');
 
-const ROT = path.join(__dirname, '..');
-const les = f => fs.readFileSync(path.join(ROT, f), 'utf8');
+const ROOT = path.join(__dirname, '..');
+const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
 
-let feil = 0;
-const sjekk = (ok, hva) => { if(!ok){ feil++; console.log('FEIL: ' + hva); } };
+let failures = 0;
+const check = (ok, what) => { if(!ok){ failures++; console.log('FAIL: ' + what); } };
 
-/* ---------------------------------------------------------- DOM-stubb */
-function lagDom(){
+/* ---------------------------------------------------------- DOM stub */
+function makeDom(){
   const el = new Map();
-  const nytt = id => ({
+  const make = id => ({
     id, textContent:'', innerHTML:'', hidden:true, disabled:false,
-    dataset:{}, lyttere:{},
+    dataset:{}, listeners:{},
     classList:{ toggle(){}, add(){}, remove(){}, contains(){ return false; } },
-    addEventListener(navn, f){ (this.lyttere[navn] ||= []).push(f); },
-    fyr(navn, e){ for(const f of (this.lyttere[navn]||[])) f(e); },
+    addEventListener(name, f){ (this.listeners[name] ||= []).push(f); },
+    fire(name, e){ for(const f of (this.listeners[name]||[])) f(e); },
   });
-  const finn = sel => {
+  const find = sel => {
     const id = sel.replace('#','');
-    if(!el.has(id)) el.set(id, nytt(id));
+    if(!el.has(id)) el.set(id, make(id));
     return el.get(id);
   };
-  return { finn, body:nytt('body') };
+  return { find, body:make('body') };
 }
 
-/* ---------------------------------------------------------- en spiller */
-function lagSide(navn){
-  const dom = lagDom();
-  const sendt = [];
-  const S = { navn, dom, sendt, motpart:null, toaster:[] };
+/* ---------------------------------------------------------- one player */
+function makeSide(name){
+  const dom = makeDom();
+  const sent = [];
+  const S = { name, dom, sent, opponent:null, toasts:[] };
 
-  const sandkasse = {
+  const sandbox = {
     console,
-    /* Animasjonspausene i motoren gjor en full kamp uutholdelig treg her,
-       saa sandkassen far en setTimeout uten ventetid. */
+    /* The animation pauses in the engine make a full battle unbearably slow
+       here, so the sandbox gets a setTimeout with no delay. */
     setTimeout: (f, ms, ...a) => setTimeout(f, 0, ...a),
     clearTimeout, setInterval, clearInterval, queueMicrotask,
     Math, Date, JSON, Symbol, Promise, Array, Object, String, Number, Map, Set,
     document: {
-      querySelector: dom.finn,
+      querySelector: dom.find,
       get body(){ return dom.body; },
     },
-    NETT: {
-      LOKAL_MODUS: true,
-      send(m){ sendt.push(m); if(S.motpart) S.motpart.lever(JSON.parse(JSON.stringify(m))); },
-      kampUt(){},
-      get rolle(){ return 'test'; },
+    NET: {
+      LOCAL_MODE: true,
+      send(m){ sent.push(m); if(S.opponent) S.opponent.deliver(JSON.parse(JSON.stringify(m))); },
+      battleOut(){},
+      get role(){ return 'test'; },
     },
   };
-  sandkasse.window = sandkasse;
-  sandkasse.globalThis = sandkasse;
-  sandkasse.VM = {
-    STATE:{ mynt:0 },
-    LYD:{ klikk(){}, naer(){}, treff(){}, skade(){}, seier(){}, tap(){} },
-    dirr(){}, toast(t){ S.toaster.push(t); }, oppdaterHud(){},
-    gaTil(){}, lagMini(){}, visningsNavn(x){ return x; },
-    /* Plenen til denne siden. Er den tom, faller motoren tilbake til
-       planstokken, akkurat som i en fane uten plen. */
-    dekkStokk: () => (S.stokk || []).slice(),
+  sandbox.window = sandbox;
+  sandbox.globalThis = sandbox;
+  sandbox.VM = {
+    STATE:{ coins:0 },
+    SOUND:{ click(){}, near(){}, hit(){}, damage(){}, win(){}, lose(){} },
+    vibrate(){}, toast(t){ S.toasts.push(t); }, updateHud(){},
+    goTo(){}, makeThumb(){}, displayName(x){ return x; },
+    /* This side's lawn. If it is empty the engine falls back to the plan
+       deck, exactly as in a tab with no lawn. */
+    deckCards: () => (S.deck || []).slice(),
   };
 
-  const ctx = vm.createContext(sandkasse);
-  for(const f of ['species.js','cards.js','battle.js']) vm.runInContext(les(f), ctx, { filename:f });
-  /* const paa toppniva havner i kontekstens leksikalske skop, ikke paa
-     globalobjektet, saa vi maa hente det med en egen kjoring. */
-  const K = vm.runInContext('KORTSPILL', ctx);
+  const ctx = vm.createContext(sandbox);
+  for(const f of ['species.js','cards.js','battle.js']) vm.runInContext(read(f), ctx, { filename:f });
+  /* A top-level const lands in the context's lexical scope, not on the global
+     object, so we have to fetch it with a run of its own. */
+  const K = vm.runInContext('CARDGAME', ctx);
   S.ctx = ctx;
-  S.KS = K.KS;
-  S.spill = K;
-  S.lever = m => K.taImot(m);
+  S.CG = K.CG;
+  S.game = K;
+  S.deliver = m => K.receive(m);
   return S;
 }
 
-const ctxAv = S => S.ctx;
+const ctxOf = S => S.ctx;
 
-/* ---------------------------------------------------------- hjelpere */
-const tikk = () => new Promise(r => setTimeout(r, 0));
-async function ro(n = 60){ for(let i=0;i<n;i++) await tikk(); }
+/* ---------------------------------------------------------- helpers */
+const tick = () => new Promise(r => setTimeout(r, 0));
+async function settle(n = 60){ for(let i=0;i<n;i++) await tick(); }
 
-/* Svarer paa en aapen dialog med gitt knappeindeks. */
-function svarDialog(S, i){
-  const d = S.dom.finn('#ksDialog');
+/* Answers an open dialog with the given button index. */
+function answerDialog(S, i){
+  const d = S.dom.find('#cgDialog');
   if(d.hidden) return false;
-  S.dom.finn('#ksDialogKnapper').fyr('click', {
+  S.dom.find('#cgDialogButtons').fire('click', {
     target:{ closest: sel => sel === '[data-dlg]' ? { dataset:{ dlg:String(i) } } : null },
   });
   return true;
 }
-function avsluttTur(S){
-  S.dom.finn('#ksAvslutt').fyr('click', {});
+function endTurn(S){
+  S.dom.find('#cgEnd').fire('click', {});
 }
-/* Klikker paa et brettelement via data-sti, slik brukeren ville gjort. */
-function klikkSti(S, sti){
-  S.dom.finn('#screen-battle').fyr('click', {
-    target:{ closest: sel => sel === '[data-sti]' ? { dataset:{ sti } } : null },
+/* Clicks a board element through data-path, the way the user would. */
+function clickPath(S, p){
+  S.dom.find('#screen-battle').fire('click', {
+    target:{ closest: sel => sel === '[data-path]' ? { dataset:{ path:p } } : null },
   });
 }
-/* Peker paa det forste lovlige malet naar malvelgeren staar aapen. */
-function svarMalvalg(S){
-  const mv = S.KS.malvalg;
-  if(!mv || !mv.lovlige.length) return false;
-  const u = mv.lovlige[0];
-  const i = u.sted === 'art' ? S.KS.p[u.side].arter.indexOf(u) : 0;
-  klikkSti(S, ['e', u.side, u.sted, i].join(':'));
+/* Points at the first legal target while the target picker is open. */
+function answerTargetPick(S){
+  const tp = S.CG.targetPick;
+  if(!tp || !tp.legal.length) return false;
+  const u = tp.legal[0];
+  const i = u.spot === 'species' ? S.CG.p[u.side].species.indexOf(u) : 0;
+  clickPath(S, ['u', u.side, u.spot, i].join(':'));
   return true;
 }
-function trykkArk(S, i){
-  S.dom.finn('#ksArkKnapper').fyr('click', {
-    target:{ closest: sel => sel === '[data-ark]' ? { dataset:{ ark:String(i) } } : null },
+function pressSheet(S, i){
+  S.dom.find('#cgSheetButtons').fire('click', {
+    target:{ closest: sel => sel === '[data-sheet]' ? { dataset:{ sheet:String(i) } } : null },
   });
 }
 
-/* ---------------------------------------------------------- oppsett */
+/* ---------------------------------------------------------- setup */
 (async () => {
-  const vert  = lagSide('vert');
-  const gjest = lagSide('gjest');
-  vert.motpart = gjest; gjest.motpart = vert;
+  const host  = makeSide('host');
+  const guest = makeSide('guest');
+  host.opponent = guest; guest.opponent = host;
 
-  vert.KS.minLeder  = 'ld_bjorn';
-  gjest.KS.minLeder = 'ld_gaupe';
+  host.CG.myLeader  = 'ld_bear';
+  guest.CG.myLeader = 'ld_lynx';
 
-  /* To ulike plener, begge over minstemaalet, og begge med et eksemplar som
-     er dratt opp et nivaa. Verten regner ut hele kampen, saa gjestens stokk
-     maa komme dit over kanalen for at kortene skal stemme. */
-  const gjenta = (liste, n) => Array.from({length:n}, (_, i) => liste[i % liste.length]);
-  vert.stokk  = gjenta(['rev', 'ekorn', 'gran', 'bjorn@3', 'fluesopp'], 24);
-  gjest.stokk = gjenta(['hare', 'gaupe@2', 'jerv', 'blaveis'], 22);
+  /* Two different lawns, both above the minimum, and both with a specimen
+     dragged up a level. The host computes the whole battle, so the guest's
+     deck has to reach it over the channel for the cards to match. */
+  const repeat = (list, n) => Array.from({length:n}, (_, i) => list[i % list.length]);
+  host.deck  = repeat(['fox', 'squirrel', 'spruce', 'bear@3', 'flyagaric'], 24);
+  guest.deck = repeat(['hare', 'lynx@2', 'wolverine', 'hepatica'], 22);
 
-  vert.spill.startVert('k1');
-  gjest.spill.startGjest('k1');
-  await ro();
+  host.game.startHost('b1');
+  guest.game.startGuest('b1');
+  await settle();
 
-  /* mulligan: begge beholder handa */
+  /* mulligan: both keep their hand */
   for(let i=0;i<6;i++){
-    svarDialog(vert, 0); svarDialog(gjest, 0);
-    await ro(10);
+    answerDialog(host, 0); answerDialog(guest, 0);
+    await settle(10);
   }
-  await ro();
+  await settle();
 
-  sjekk(!!vert.KS.p[0], 'verten har ikke startet spillet');
-  sjekk(!!gjest.KS.p[0], 'gjesten har ikke faatt noen tilstand');
-  if(!vert.KS.p[0] || !gjest.KS.p[0]){ console.log('avbryter'); process.exit(1); }
+  check(!!host.CG.p[0], 'the host never started the game');
+  check(!!guest.CG.p[0], 'the guest never got any state');
+  if(!host.CG.p[0] || !guest.CG.p[0]){ console.log('aborting'); process.exit(1); }
 
-  /* ---- dekkene ---- */
-  /* Alt av kort en spiller eier ligger i stokken, handa eller livskortene. */
-  const alleKort = p => [...p.stokk, ...p.hand, ...p.liv].sort().join(',');
-  sjekk(alleKort(vert.KS.p[0]) === vert.stokk.slice().sort().join(','),
-    'verten spiller med sin egen plen');
-  sjekk(alleKort(vert.KS.p[1]) === gjest.stokk.slice().sort().join(','),
-    'gjestens plen kom fram til verten');
-  sjekk(vert.sendt.length >= 0 && gjest.sendt.some(m => m.t === 'klar' && Array.isArray(m.stokk)),
-    'gjesten sender stokken sin med klarmeldingen');
-  sjekk(vert.KS.p[1].liv.length === 4,
-    'gjestens leder deler ut sine egne livskort, fikk ' + vert.KS.p[1].liv.length);
+  /* ---- the decks ---- */
+  /* Every card a player owns sits in the deck, the hand or the life cards. */
+  const allCards = p => [...p.deck, ...p.hand, ...p.life].sort().join(',');
+  check(allCards(host.CG.p[0]) === host.deck.slice().sort().join(','),
+    'the host plays with its own lawn');
+  check(allCards(host.CG.p[1]) === guest.deck.slice().sort().join(','),
+    'the guest\'s lawn reached the host');
+  check(host.sent.length >= 0 && guest.sent.some(m => m.t === 'ready' && Array.isArray(m.deck)),
+    'the guest sends its deck with the ready message');
+  check(host.CG.p[1].life.length === 4,
+    'the guest\'s leader deals out its own life cards, got ' + host.CG.p[1].life.length);
 
-  /* Nivaakortene maa kunne slaas opp hos begge, uten at noe er sendt om dem. */
-  const kortHos = (S, id) => vm.runInContext('KORTSPILL', ctxAv(S)) && vm.runInContext(
-    'kortAv(' + JSON.stringify(id) + ')', ctxAv(S));
-  sjekk(kortHos(vert, 'gaupe@2') && kortHos(vert, 'gaupe@2').niva === 2,
-    'verten kan bygge gjestens nivaakort selv');
-  sjekk(kortHos(gjest, 'bjorn@3').kraft >= kortHos(gjest, 'bjorn').kraft,
-    'et nivaakort er aldri svakere enn det samme kortet paa nivaa 1');
+  /* The level cards must be resolvable on both sides, without anything being
+     sent about them. */
+  const cardAt = (S, id) => vm.runInContext('CARDGAME', ctxOf(S)) && vm.runInContext(
+    'cardById(' + JSON.stringify(id) + ')', ctxOf(S));
+  check(cardAt(host, 'lynx@2') && cardAt(host, 'lynx@2').level === 2,
+    'the host can build the guest\'s level card itself');
+  check(cardAt(guest, 'bear@3').power >= cardAt(guest, 'bear').power,
+    'a level card is never weaker than the same card at level 1');
 
-  /* ---- speiling ---- */
-  sjekk(gjest.KS.p[0].leder.kort.id === 'ld_gaupe',
-    'gjestens egen leder skal ligge paa plass 0, fikk ' + gjest.KS.p[0].leder.kort.id);
-  sjekk(gjest.KS.p[1].leder.kort.id === 'ld_bjorn',
-    'vertens leder skal ligge paa plass 1 hos gjesten, fikk ' + gjest.KS.p[1].leder.kort.id);
-  sjekk(vert.KS.tur !== gjest.KS.tur || vert.KS.slutt,
-    'turen skal vaere speilvendt: vert=' + vert.KS.tur + ' gjest=' + gjest.KS.tur);
+  /* ---- mirroring ---- */
+  check(guest.CG.p[0].leader.card.id === 'ld_lynx',
+    'the guest\'s own leader must sit in slot 0, got ' + guest.CG.p[0].leader.card.id);
+  check(guest.CG.p[1].leader.card.id === 'ld_bear',
+    'the host\'s leader must sit in slot 1 on the guest, got ' + guest.CG.p[1].leader.card.id);
+  check(host.CG.turn !== guest.CG.turn || host.CG.over,
+    'the turn must be mirrored: host=' + host.CG.turn + ' guest=' + guest.CG.turn);
 
-  /* ---- sladding ---- */
-  const vertsHand = vert.KS.p[0].hand;
-  sjekk(gjest.KS.p[1].hand.every(x => x === '?'),
-    'gjesten skal ikke se vertens kort, fikk ' + JSON.stringify(gjest.KS.p[1].hand.slice(0,3)));
-  sjekk(gjest.KS.p[1].hand.length === vertsHand.length,
-    'gjesten skal se riktig antall kort hos verten');
-  sjekk(gjest.KS.p[0].hand.join() === vert.KS.p[1].hand.join(),
-    'gjesten skal se sin egen hand i klartekst');
-  const lekk = vert.sendt
-    .filter(m => m.t === 'tilstand')
-    .flatMap(m => vertsHand.filter(id => JSON.stringify(m.d.p[1]).includes('"' + id + '"')));
-  sjekk(lekk.length === 0, 'vertens hand lekker til gjesten: ' + lekk.join(','));
-  sjekk(typeof vert.sendt.find(m => m.t === 'tilstand').d.p[1].hand === 'number',
-    'vertens hand skal sendes som antall, ikke som kort');
+  /* ---- hidden information ---- */
+  const hostHand = host.CG.p[0].hand;
+  check(guest.CG.p[1].hand.every(x => x === '?'),
+    'the guest must not see the host\'s cards, got ' + JSON.stringify(guest.CG.p[1].hand.slice(0,3)));
+  check(guest.CG.p[1].hand.length === hostHand.length,
+    'the guest must see the right number of cards on the host');
+  check(guest.CG.p[0].hand.join() === host.CG.p[1].hand.join(),
+    'the guest must see its own hand in the clear');
+  const leak = host.sent
+    .filter(m => m.t === 'state')
+    .flatMap(m => hostHand.filter(id => JSON.stringify(m.d.p[1]).includes('"' + id + '"')));
+  check(leak.length === 0, 'the host\'s hand leaks to the guest: ' + leak.join(','));
+  check(typeof host.sent.find(m => m.t === 'state').d.p[1].hand === 'number',
+    'the host\'s hand must be sent as a count, not as cards');
 
-  /* ---- gjesten spiller et kort paa sin tur ---- */
-  /* finn hvem som har turen og la den spille billigste mulige kort */
-  const paaTur = vert.KS.tur === 0 ? vert : gjest;
-  const foer = { arter: paaTur.KS.p[0].arter.length, sol: paaTur.KS.p[0].sol.aktiv };
+  /* ---- the guest plays a card on its turn ---- */
+  /* find whose turn it is and let that side play the cheapest card it can */
+  const onTurn = host.CG.turn === 0 ? host : guest;
+  const before = { species: onTurn.CG.p[0].species.length, sun: onTurn.CG.p[0].sun.active };
 
-  const hand = paaTur.KS.p[0].hand;
-  let spilt = -1;
+  const hand = onTurn.CG.p[0].hand;
+  let played = -1;
   for(let i=0;i<hand.length;i++){
-    const k = paaTur.spill.KS.p[0].hand[i];
-    const kort = vert.KS.p[0].hand ? null : null;   // kortdata hentes under
-    void kort;
-    klikkSti(paaTur, 'h:' + i);
-    const arkAap = !paaTur.dom.finn('#ksArk').hidden;
-    if(!arkAap) continue;
-    trykkArk(paaTur, 0);                 // SPILL
-    await ro(20);
-    svarMalvalg(paaTur); svarMalvalg(paaTur === vert ? gjest : vert);
-    await ro(20);
-    if(paaTur.KS.p[0].arter.length > foer.arter || paaTur.KS.p[0].sol.aktiv < foer.sol){ spilt = i; break; }
+    const k = onTurn.game.CG.p[0].hand[i];
+    clickPath(onTurn, 'h:' + i);
+    const sheetOpen = !onTurn.dom.find('#cgSheet').hidden;
+    if(!sheetOpen) continue;
+    pressSheet(onTurn, 0);               // PLAY
+    await settle(20);
+    answerTargetPick(onTurn); answerTargetPick(onTurn === host ? guest : host);
+    await settle(20);
+    if(onTurn.CG.p[0].species.length > before.species || onTurn.CG.p[0].sun.active < before.sun){ played = i; break; }
     void k;
   }
-  const hadeRaad = hand.some(id => {
-    const k = vm.runInContext('KORTBASE', ctxAv(paaTur))[id];
-    if(!k || k.kost == null || k.kost > foer.sol) return false;
-    return k.kat !== 'hendelse' || k.eff.nar === 'hoved';
+  const couldAfford = hand.some(id => {
+    const k = vm.runInContext('CARD_BASE', ctxOf(onTurn))[id];
+    if(!k || k.cost == null || k.cost > before.sun) return false;
+    return k.kind !== 'event' || k.effect.when === 'main';
   });
-  sjekk(spilt >= 0 || !hadeRaad,
-    'hadde raad til et kort, men fikk ikke spilt det');
+  check(played >= 0 || !couldAfford,
+    'could afford a card, but never got it played');
 
-  const motpart = paaTur === vert ? gjest : vert;
-  await ro(20);
-  sjekk(motpart.KS.p[1].arter.length === paaTur.KS.p[0].arter.length,
-    'motparten ser ikke samme antall arter: ' + motpart.KS.p[1].arter.length
-      + ' mot ' + paaTur.KS.p[0].arter.length);
-  sjekk(motpart.KS.p[1].sol.aktiv === paaTur.KS.p[0].sol.aktiv,
-    'solregnskapet er ulikt hos de to');
+  const other = onTurn === host ? guest : host;
+  await settle(20);
+  check(other.CG.p[1].species.length === onTurn.CG.p[0].species.length,
+    'the opponent does not see the same number of species: ' + other.CG.p[1].species.length
+      + ' against ' + onTurn.CG.p[0].species.length);
+  check(other.CG.p[1].sun.active === onTurn.CG.p[0].sun.active,
+    'the sun accounting differs between the two');
 
-  /* ---- turen gaar videre ---- */
-  const turFoer = vert.KS.turNr;
-  for(let runde=0; runde<6 && !vert.KS.slutt; runde++){
-    const n = vert.KS.tur === 0 ? vert : gjest;
-    avsluttTur(n);
-    await ro(30);
+  /* ---- the turn moves on ---- */
+  const turnBefore = host.CG.turnNo;
+  for(let round=0; round<6 && !host.CG.over; round++){
+    const n = host.CG.turn === 0 ? host : guest;
+    endTurn(n);
+    await settle(30);
     for(let i=0;i<4;i++){
-      svarDialog(vert,0); svarDialog(gjest,0);
-      svarMalvalg(vert); svarMalvalg(gjest);
-      await ro(8);
+      answerDialog(host,0); answerDialog(guest,0);
+      answerTargetPick(host); answerTargetPick(guest);
+      await settle(8);
     }
   }
-  sjekk(vert.KS.turNr > turFoer, 'turtelleren staar stille: ' + vert.KS.turNr
-    + ' (slutt=' + vert.KS.slutt + ' grunn=' + vert.KS.grunn + ')');
-  sjekk(vert.KS.turNr === gjest.KS.turNr,
-    'turtelleren er ulik: vert=' + vert.KS.turNr + ' gjest=' + gjest.KS.turNr);
-  sjekk(vert.KS.p[0].liv.length === gjest.KS.p[1].liv.length,
-    'livtellingen er ulik hos de to');
+  check(host.CG.turnNo > turnBefore, 'the turn counter is stuck: ' + host.CG.turnNo
+    + ' (over=' + host.CG.over + ' reason=' + host.CG.reason + ')');
+  check(host.CG.turnNo === guest.CG.turnNo,
+    'the turn counter differs: host=' + host.CG.turnNo + ' guest=' + guest.CG.turnNo);
+  check(host.CG.p[0].life.length === guest.CG.p[1].life.length,
+    'the life count differs between the two');
 
-  /* ---- gjesten kan ikke handle utenfor sin tur ---- */
-  const utenforTur = vert.KS.tur === 0 ? gjest : vert;
-  const arterFoer = utenforTur.KS.p[0].arter.length;
-  await utenforTur.spill.taImot({ t:'handling', m:{ h:'spill', i:0 } });
-  await ro(10);
-  sjekk(utenforTur.KS.p[0].arter.length === arterFoer,
-    'en handling utenfor egen tur ble utfort');
+  /* ---- the guest cannot act outside its own turn ---- */
+  const offTurn = host.CG.turn === 0 ? guest : host;
+  const speciesBefore = offTurn.CG.p[0].species.length;
+  await offTurn.game.receive({ t:'action', m:{ h:'play', i:0 } });
+  await settle(10);
+  check(offTurn.CG.p[0].species.length === speciesBefore,
+    'an action outside your own turn was carried out');
 
-  /* ---- spill kampen ut ---- */
-  /* Enkel strategi paa begge sider: spill det du har raad til, angrip med alt
-     som kan angripe, si nei til vern og mottrekk, avslutt turen. */
-  function arkKnapp(S, merke){
-    const k = S.KS.arkValg || [];
-    return k.findIndex(b => b.t.startsWith(merke) && !b.av);
+  /* ---- play the battle out ---- */
+  /* A simple strategy on both sides: play what you can afford, attack with
+     everything that can attack, say no to blockers and counters, end the turn. */
+  function sheetButton(S, label){
+    const b = S.CG.sheetButtons || [];
+    return b.findIndex(x => x.t.startsWith(label) && !x.off);
   }
-  async function ryddOpp(){
+  async function tidyUp(){
     for(let i=0;i<5;i++){
-      let noe = false;
-      for(const S of [vert, gjest]){
-        if(svarDialog(S, 0)) noe = true;
-        if(svarMalvalg(S)) noe = true;
+      let something = false;
+      for(const S of [host, guest]){
+        if(answerDialog(S, 0)) something = true;
+        if(answerTargetPick(S)) something = true;
       }
-      await ro(8);
-      if(!noe) break;
+      await settle(8);
+      if(!something) break;
     }
   }
-  async function spillTur(S){
-    for(let runde=0; runde<12; runde++){
-      let spilte = false;
-      for(let i=0; i<S.KS.p[0].hand.length; i++){
-        klikkSti(S, 'h:' + i);
-        if(S.dom.finn('#ksArk').hidden) continue;
-        const j = arkKnapp(S, 'SPILL');
-        if(j < 0){ trykkArk(S, arkKnapp(S, 'LUKK')); continue; }
-        trykkArk(S, j);
-        await ro(15);
-        await ryddOpp();
-        spilte = true;
+  async function playTurn(S){
+    for(let round=0; round<12; round++){
+      let playedOne = false;
+      for(let i=0; i<S.CG.p[0].hand.length; i++){
+        clickPath(S, 'h:' + i);
+        if(S.dom.find('#cgSheet').hidden) continue;
+        const j = sheetButton(S, 'PLAY');
+        if(j < 0){ pressSheet(S, sheetButton(S, 'CLOSE')); continue; }
+        pressSheet(S, j);
+        await settle(15);
+        await tidyUp();
+        playedOne = true;
         break;
       }
-      if(!spilte) break;
+      if(!playedOne) break;
     }
 
-    const mine = [['e','0','leder','0'],
-      ...S.KS.p[0].arter.map((_, i) => ['e','0','art',String(i)])];
-    for(const sti of mine){
-      if(S.KS.slutt || S.KS.tur !== 0) break;
-      klikkSti(S, sti.join(':'));
-      if(S.dom.finn('#ksArk').hidden) continue;
-      const j = arkKnapp(S, 'ANGRIP');
-      if(j < 0){ trykkArk(S, arkKnapp(S, 'LUKK')); continue; }
-      trykkArk(S, j);
-      await ro(15);
-      svarMalvalg(S);
-      await ro(25);
-      await ryddOpp();
+    const mine = [['u','0','leader','0'],
+      ...S.CG.p[0].species.map((_, i) => ['u','0','species',String(i)])];
+    for(const p of mine){
+      if(S.CG.over || S.CG.turn !== 0) break;
+      clickPath(S, p.join(':'));
+      if(S.dom.find('#cgSheet').hidden) continue;
+      const j = sheetButton(S, 'ATTACK');
+      if(j < 0){ pressSheet(S, sheetButton(S, 'CLOSE')); continue; }
+      pressSheet(S, j);
+      await settle(15);
+      answerTargetPick(S);
+      await settle(25);
+      await tidyUp();
     }
-    if(!S.KS.slutt && S.KS.tur === 0) avsluttTur(S);
-    await ro(30);
-    await ryddOpp();
+    if(!S.CG.over && S.CG.turn === 0) endTurn(S);
+    await settle(30);
+    await tidyUp();
   }
 
-  let turer = 0;
-  while(!vert.KS.slutt && turer < 120){
-    await spillTur(vert.KS.tur === 0 ? vert : gjest);
-    turer++;
+  let turns = 0;
+  while(!host.CG.over && turns < 120){
+    await playTurn(host.CG.turn === 0 ? host : guest);
+    turns++;
   }
 
-  sjekk(vert.KS.slutt, 'kampen ble aldri ferdig paa ' + turer + ' turer');
-  sjekk(gjest.KS.slutt, 'gjesten fikk aldri vite at kampen var slutt');
-  sjekk(vert.KS.seier !== gjest.KS.seier,
-    'begge sider mener de vant eller tapte: vert=' + vert.KS.seier + ' gjest=' + gjest.KS.seier);
-  sjekk(vert.KS.grunn === gjest.KS.grunn,
-    'ulik begrunnelse: "' + vert.KS.grunn + '" mot "' + gjest.KS.grunn + '"');
-  sjekk(!vert.dom.finn('#ksResult').hidden && !gjest.dom.finn('#ksResult').hidden,
-    'resultatskjermen kom ikke opp hos begge');
+  check(host.CG.over, 'the battle never finished in ' + turns + ' turns');
+  check(guest.CG.over, 'the guest never learned that the battle was over');
+  check(host.CG.won !== guest.CG.won,
+    'both sides think they won or lost: host=' + host.CG.won + ' guest=' + guest.CG.won);
+  check(host.CG.reason === guest.CG.reason,
+    'different reasons: "' + host.CG.reason + '" against "' + guest.CG.reason + '"');
+  check(!host.dom.find('#cgResult').hidden && !guest.dom.find('#cgResult').hidden,
+    'the result screen did not come up on both sides');
 
-  const lekk2 = vert.sendt
-    .filter(m => m.t === 'tilstand')
+  const leak2 = host.sent
+    .filter(m => m.t === 'state')
     .some(m => typeof m.d.p[1].hand !== 'number');
-  sjekk(!lekk2, 'vertens hand ble sendt som kort et sted i lopet av kampen');
+  check(!leak2, 'the host\'s hand was sent as cards somewhere during the battle');
 
-  /* ---- ett kort paa plenen holder mot maskinen ---- */
+  /* ---- one card on the lawn holds up against the machine ---- */
   {
-    const solo = lagSide('solo');
-    solo.KS.minLeder = 'ld_bjorn';
-    solo.stokk = ['rev'];
-    solo.spill.start();
-    await ro();
-    for(let i=0;i<4;i++){ svarDialog(solo, 0); await ro(10); }
+    const solo = makeSide('solo');
+    solo.CG.myLeader = 'ld_bear';
+    solo.deck = ['fox'];
+    solo.game.start();
+    await settle();
+    for(let i=0;i<4;i++){ answerDialog(solo, 0); await settle(10); }
 
-    const p = solo.KS.p[0];
-    const minst = vm.runInContext('dekkMinst(kortAv("ld_bjorn"))', ctxAv(solo));
-    const alle = p ? [...p.stokk, ...p.hand, ...p.liv] : [];
-    sjekk(!!p, 'enspillerkampen startet ikke med ett kort paa plenen');
-    sjekk(alle.length === minst,
-      'stokken ble ikke fylt opp til minstedekket: ' + alle.length + ' mot ' + minst);
-    sjekk(alle.every(id => id === 'rev'),
-      'det ene kortet paa plenen ble byttet ut med planstokken');
-    sjekk(!solo.KS.slutt, 'enspillerkampen var avgjort med en gang');
+    const p = solo.CG.p[0];
+    const least = vm.runInContext('minDeckSize(cardById("ld_bear"))', ctxOf(solo));
+    const all = p ? [...p.deck, ...p.hand, ...p.life] : [];
+    check(!!p, 'the solo battle did not start with one card on the lawn');
+    check(all.length === least,
+      'the deck was not padded up to the minimum: ' + all.length + ' against ' + least);
+    check(all.every(id => id === 'fox'),
+      'the single card on the lawn was swapped out for the plan deck');
+    check(!solo.CG.over, 'the solo battle was decided straight away');
   }
 
-  console.log(feil ? '\n' + feil + ' feil' : '\nAlle sjekker gikk gjennom');
-  process.exit(feil ? 1 : 0);
-})().catch(e => { console.error('KRASJ:', e); process.exit(2); });
+  console.log(failures ? '\n' + failures + ' failures' : '\nAll checks passed');
+  process.exit(failures ? 1 : 0);
+})().catch(e => { console.error('CRASH:', e); process.exit(2); });

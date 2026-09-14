@@ -1,32 +1,33 @@
-/* Samme flyt som nettleser.test.js, men mot ekte Supabase i stedet for
-   BroadcastChannel. To atskilte Chrome-profiler, siden okta og navn ligger i
-   localStorage: to faner i samme nettleser ville delt identitet.
+/* The same flow as browser.test.js, but against a real Supabase instead of
+   BroadcastChannel. Two separate Chrome profiles, since the session and the
+   name live in localStorage: two tabs in the same browser would share an
+   identity.
 
-   Krever at window.VILLMARK_NETT i index.html har ekte noekler, og at
-   anonym innlogging er slaatt paa i prosjektet. */
+   Requires window.VILLMARK_NET in index.html to hold real keys, and anonymous
+   sign-in to be switched on in the project. */
 const { spawn, execFileSync } = require('child_process');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const ROT = path.join(__dirname, '..');
+const ROOT = path.join(__dirname, '..');
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
-let feil = 0;
-const sjekk = (ok, hva) => { if(!ok){ feil++; console.log('FEIL: ' + hva); } else console.log('ok  - ' + hva); };
+let failures = 0;
+const check = (ok, what) => { if(!ok){ failures++; console.log('FAIL: ' + what); } else console.log('ok  - ' + what); };
 
-const TYPER = { '.html':'text/html', '.js':'text/javascript', '.css':'text/css',
+const TYPES = { '.html':'text/html', '.js':'text/javascript', '.css':'text/css',
   '.json':'application/json', '.png':'image/png' };
 
-function startTjener(){
+function startServer(){
   return new Promise(res => {
     const t = http.createServer((rq, rs) => {
       const rel = decodeURIComponent(rq.url.split('?')[0]);
-      const f = path.join(ROT, rel === '/' ? 'index.html' : rel);
+      const f = path.join(ROOT, rel === '/' ? 'index.html' : rel);
       fs.readFile(f, (e, d) => {
         if(e){ rs.writeHead(404); rs.end(); return; }
-        rs.writeHead(200, { 'content-type': TYPER[path.extname(f)] || 'application/octet-stream' });
+        rs.writeHead(200, { 'content-type': TYPES[path.extname(f)] || 'application/octet-stream' });
         rs.end(d);
       });
     });
@@ -34,238 +35,239 @@ function startTjener(){
   });
 }
 
-/* Alle nettlesere og profiler vi starter, slik at ingenting blir staaende
-   igjen om testen feiler midtveis. */
-const RYDD = { proc:[], mapper:[] };
-function rydd(){
-  for(const p of RYDD.proc){ try { p.kill('SIGKILL'); } catch {} }
-  /* Chrome starter en haug hjelpeprosesser som overlever at hovedprosessen
-     doer. De henger sammen om profilmappa, saa den er noekkelen vi rydder paa. */
-  for(const m of RYDD.mapper){
-    /* Moensteret maa ikke starte med bindestrek: pkill leser det som et flagg. */
-    try { execFileSync('pkill', ['-9', '-f', m]); } catch {}
+/* Every browser and profile we start, so nothing is left running if the test
+   fails halfway through. */
+const CLEANUP = { proc:[], dirs:[] };
+function cleanup(){
+  for(const p of CLEANUP.proc){ try { p.kill('SIGKILL'); } catch {} }
+  /* Chrome starts a pile of helper processes that survive the death of the
+     main process. What they have in common is the profile directory, so that
+     is the key we clean on. */
+  for(const d of CLEANUP.dirs){
+    /* The pattern must not start with a dash: pkill reads it as a flag. */
+    try { execFileSync('pkill', ['-9', '-f', d]); } catch {}
   }
-  for(const m of RYDD.mapper){ try { fs.rmSync(m, { recursive:true, force:true }); } catch {} }
-  RYDD.proc = []; RYDD.mapper = [];
+  for(const d of CLEANUP.dirs){ try { fs.rmSync(d, { recursive:true, force:true }); } catch {} }
+  CLEANUP.proc = []; CLEANUP.dirs = [];
 }
-process.on('exit', rydd);
-for(const sig of ['SIGINT','SIGTERM']) process.on(sig, () => { rydd(); process.exit(1); });
+process.on('exit', cleanup);
+for(const sig of ['SIGINT','SIGTERM']) process.on(sig, () => { cleanup(); process.exit(1); });
 
-function startChrome(profil){
-  RYDD.mapper.push(profil);
+function startChrome(profile){
+  CLEANUP.dirs.push(profile);
   return new Promise((res, rej) => {
     const p = spawn(CHROME, ['--headless=new', '--remote-debugging-port=0',
-      '--user-data-dir=' + profil, '--no-first-run', '--no-default-browser-check',
+      '--user-data-dir=' + profile, '--no-first-run', '--no-default-browser-check',
       '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
       '--mute-audio', 'about:blank']);
     let buf = '';
-    const frist = setTimeout(() => {
+    const deadline = setTimeout(() => {
       p.kill();
-      rej(new Error('Chrome svarte ikke innen fristen'));
+      rej(new Error('Chrome did not answer in time'));
     }, 60000);
-    const paaData = d => {
+    const onData = d => {
       buf += d;
       const m = buf.match(/ws:\/\/[^\s]+/);
       if(m){
-        clearTimeout(frist);
-        p.stderr.off('data', paaData);
+        clearTimeout(deadline);
+        p.stderr.off('data', onData);
         res({ proc:p, ws:m[0] });
       }
     };
-    RYDD.proc.push(p);
-    p.stderr.on('data', paaData);
+    CLEANUP.proc.push(p);
+    p.stderr.on('data', onData);
   });
 }
 
-function kobleTil(url){
+function connect(url){
   const ws = new WebSocket(url);
   let nr = 0;
-  const venter = new Map();
-  const hendelser = [];
-  const klar = new Promise(r => ws.addEventListener('open', r));
+  const waiting = new Map();
+  const events = [];
+  const ready = new Promise(r => ws.addEventListener('open', r));
   ws.addEventListener('message', e => {
     const m = JSON.parse(e.data);
-    if(m.id && venter.has(m.id)){
-      const { res, rej } = venter.get(m.id); venter.delete(m.id);
+    if(m.id && waiting.has(m.id)){
+      const { res, rej } = waiting.get(m.id); waiting.delete(m.id);
       m.error ? rej(new Error(m.error.message)) : res(m.result);
       return;
     }
     if(m.method === 'Runtime.exceptionThrown'){
       const d = m.params.exceptionDetails;
-      hendelser.push(((d.exception && d.exception.description) || d.text) +
+      events.push(((d.exception && d.exception.description) || d.text) +
         ' @ ' + (d.url||'') + ':' + (d.lineNumber+1));
     }
   });
   return {
-    klar, hendelser,
-    kall(metode, params = {}, sessionId){
+    ready, events,
+    call(method, params = {}, sessionId){
       const id = ++nr;
       return new Promise((res, rej) => {
-        venter.set(id, { res, rej });
-        ws.send(JSON.stringify({ id, method:metode, params, sessionId }));
+        waiting.set(id, { res, rej });
+        ws.send(JSON.stringify({ id, method, params, sessionId }));
       });
     },
-    lukk(){ ws.close(); },
+    close(){ ws.close(); },
   };
 }
 
-const sov = ms => new Promise(r => setTimeout(r, ms));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-/* En hel nettleser med en fane i. */
-async function nyNettleser(adr){
-  const profil = fs.mkdtempSync(path.join(os.tmpdir(), 'villmark-sb-'));
-  const { proc, ws } = await startChrome(profil);
-  const cdp = kobleTil(ws);
-  await cdp.klar;
-  const { targetId } = await cdp.kall('Target.createTarget', { url:'about:blank' });
-  const { sessionId } = await cdp.kall('Target.attachToTarget', { targetId, flatten:true });
-  await cdp.kall('Runtime.enable', {}, sessionId);
-  await cdp.kall('Page.enable', {}, sessionId);
-  await cdp.kall('Page.navigate', { url:adr }, sessionId);
+/* A whole browser with one tab in it. */
+async function newBrowser(addr){
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'villmark-sb-'));
+  const { proc, ws } = await startChrome(profile);
+  const cdp = connect(ws);
+  await cdp.ready;
+  const { targetId } = await cdp.call('Target.createTarget', { url:'about:blank' });
+  const { sessionId } = await cdp.call('Target.attachToTarget', { targetId, flatten:true });
+  await cdp.call('Runtime.enable', {}, sessionId);
+  await cdp.call('Page.enable', {}, sessionId);
+  await cdp.call('Page.navigate', { url:addr }, sessionId);
 
   const N = {
     proc, cdp, sessionId,
-    async kjor(uttrykk){
-      const r = await cdp.kall('Runtime.evaluate',
-        { expression:uttrykk, returnByValue:true, awaitPromise:true }, sessionId);
+    async run(expression){
+      const r = await cdp.call('Runtime.evaluate',
+        { expression, returnByValue:true, awaitPromise:true }, sessionId);
       if(r.exceptionDetails){
         const d = r.exceptionDetails;
-        throw new Error(((d.exception && d.exception.description) || d.text) + '  <- ' + uttrykk);
+        throw new Error(((d.exception && d.exception.description) || d.text) + '  <- ' + expression);
       }
       return r.result.value;
     },
-    /* Selve drepingen gjor rydd(), som tar hele prosessgruppa. Dreper vi
-       gruppelederen her, overlever hjelpeprosessene. */
-    lukk(){ cdp.lukk(); },
+    /* cleanup() does the actual killing, and it takes the whole process group.
+       If we kill the group leader here, the helper processes survive. */
+    close(){ cdp.close(); },
   };
   return N;
 }
 
-/* Venter til uttrykket blir sant, eller gir opp. */
-async function vent(N, uttrykk, ms = 20000, navn = uttrykk){
-  const frist = Date.now() + ms;
-  while(Date.now() < frist){
-    if(await N.kjor(uttrykk)) return true;
-    await sov(500);
+/* Waits until the expression becomes true, or gives up. */
+async function waitFor(N, expression, ms = 20000, name = expression){
+  const deadline = Date.now() + ms;
+  while(Date.now() < deadline){
+    if(await N.run(expression)) return true;
+    await sleep(500);
   }
-  console.log('   ga opp aa vente paa: ' + navn);
+  console.log('   gave up waiting for: ' + name);
   return false;
 }
 
 (async () => {
-  const konf = fs.readFileSync(path.join(ROT, 'index.html'), 'utf8');
-  if(/anonKey:\s*''/.test(konf)){
-    console.log('Ingen noekler i index.html - hopper over. Denne testen krever ekte Supabase.');
+  const conf = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  if(/anonKey:\s*''/.test(conf)){
+    console.log('No keys in index.html - skipping. This test needs a real Supabase.');
     process.exit(0);
   }
 
-  const tjener = await startTjener();
-  const adr = 'http://127.0.0.1:' + tjener.address().port + '/';
+  const server = await startServer();
+  const addr = 'http://127.0.0.1:' + server.address().port + '/';
 
-  const A = await nyNettleser(adr);
-  const B = await nyNettleser(adr);
+  const A = await newBrowser(addr);
+  const B = await newBrowser(addr);
 
-  for(const [navn, N] of [['A', A], ['B', B]]){
-    sjekk(await vent(N, 'typeof NETT === "object" && typeof VM === "object"', 30000,
-      'skriptene i ' + navn), 'nettleser ' + navn + ' lastet skriptene');
-    sjekk(await N.kjor('NETT.LOKAL_MODUS') === false,
-      'nettleser ' + navn + ' bruker ekte Supabase, ikke testmodus');
-    await N.kjor('VM.gaTil("lobby")');
+  for(const [name, N] of [['A', A], ['B', B]]){
+    check(await waitFor(N, 'typeof NET === "object" && typeof VM === "object"', 30000,
+      'the scripts in ' + name), 'browser ' + name + ' loaded the scripts');
+    check(await N.run('NET.LOCAL_MODE') === false,
+      'browser ' + name + ' uses the real Supabase, not test mode');
+    await N.run('VM.goTo("lobby")');
   }
 
-  /* innlogging */
-  sjekk(await vent(A, 'NETT.meg.id !== null', 25000, 'innlogging A'), 'nettleser A logget inn');
-  sjekk(await vent(B, 'NETT.meg.id !== null', 25000, 'innlogging B'), 'nettleser B logget inn');
-  const idA = await A.kjor('NETT.meg.id'), idB = await B.kjor('NETT.meg.id');
-  sjekk(idA && idB && idA !== idB, 'de to fikk hver sin bruker-id');
-  sjekk(await vent(A, 'NETT.tilstand() === "paanett"', 25000, 'A registrert'),
-    'nettleser A er registrert hos serveren, ikke bare tilkoblet');
-  sjekk(await vent(B, 'NETT.tilstand() === "paanett"', 25000, 'B registrert'),
-    'nettleser B er registrert hos serveren, ikke bare tilkoblet');
+  /* sign-in */
+  check(await waitFor(A, 'NET.me.id !== null', 25000, 'sign-in A'), 'browser A signed in');
+  check(await waitFor(B, 'NET.me.id !== null', 25000, 'sign-in B'), 'browser B signed in');
+  const idA = await A.run('NET.me.id'), idB = await B.run('NET.me.id');
+  check(idA && idB && idA !== idB, 'the two got a user id each');
+  check(await waitFor(A, 'NET.state() === "online"', 25000, 'A registered'),
+    'browser A is registered with the server, not merely connected');
+  check(await waitFor(B, 'NET.state() === "online"', 25000, 'B registered'),
+    'browser B is registered with the server, not merely connected');
 
-  await A.kjor('NETT.settNavn("ALFA")');
-  await B.kjor('NETT.settNavn("BETA")');
+  await A.run('NET.setName("ALFA")');
+  await B.run('NET.setName("BETA")');
 
   /* presence */
-  sjekk(await vent(A, 'document.querySelectorAll("#lobListe .lob-rad").length === 1', 25000,
-    'A ser B i lista'), 'nettleser A ser den andre spilleren');
-  sjekk(await vent(B, 'document.querySelectorAll("#lobListe .lob-rad").length === 1', 25000,
-    'B ser A i lista'), 'nettleser B ser den andre spilleren');
-  /* Asymmetri er den farlige feilen: den ene ser den andre, men ikke omvendt. */
-  sjekk(await A.kjor('NETT.spillere().length') === 1
-     && await B.kjor('NETT.spillere().length') === 1,
-    'begge ser hverandre, ingen asymmetri');
-  /* Et navnebytte naar de andre via presence, men ikke oyeblikkelig. */
-  sjekk(await vent(A, 'document.querySelector("#lobListe .lob-rad-navn").textContent === "BETA"',
-    20000, 'navnet BETA'), 'navnet foelger med over presence');
+  check(await waitFor(A, 'document.querySelectorAll("#lobbyList .lobby-row").length === 1', 25000,
+    'A sees B in the list'), 'browser A sees the other player');
+  check(await waitFor(B, 'document.querySelectorAll("#lobbyList .lobby-row").length === 1', 25000,
+    'B sees A in the list'), 'browser B sees the other player');
+  /* Asymmetry is the dangerous failure: one sees the other, but not the other way round. */
+  check(await A.run('NET.players().length') === 1
+     && await B.run('NET.players().length') === 1,
+    'both see each other, no asymmetry');
+  /* A name change reaches the others over presence, but not instantly. */
+  check(await waitFor(A, 'document.querySelector("#lobbyList .lobby-row-name").textContent === "BETA"',
+    20000, 'the name BETA'), 'the name travels over presence');
 
-  /* utfordring */
-  await A.kjor('document.querySelector("#lobListe .lob-rad").click()');
-  sjekk(await vent(B, 'document.querySelector("#lobListe .lob-rad").classList.contains("utfordrer")',
-    20000, 'utfordringen naar fram'), 'utfordringen naar fram til den andre');
+  /* challenge */
+  await A.run('document.querySelector("#lobbyList .lobby-row").click()');
+  check(await waitFor(B, 'document.querySelector("#lobbyList .lobby-row").classList.contains("challenging")',
+    20000, 'the challenge arrives'), 'the challenge reaches the other side');
 
-  await B.kjor('document.querySelector("#lobListe .lob-rad").click()');
-  await sov(600);
-  sjekk(await B.kjor('!document.querySelector("#lobSpor").hidden'), 'B faar spoersmaal om aa godta');
-  await B.kjor('document.querySelector("#lobGodta").click()');
+  await B.run('document.querySelector("#lobbyList .lobby-row").click()');
+  await sleep(600);
+  check(await B.run('!document.querySelector("#lobbyAsk").hidden'), 'B is asked to accept');
+  await B.run('document.querySelector("#lobbyAccept").click()');
 
-  /* kampen */
-  sjekk(await vent(A, '!!KORTSPILL.KS.p[0]', 30000, 'A faar brett'), 'nettleser A er i kampen');
-  sjekk(await vent(B, '!!KORTSPILL.KS.p[0]', 30000, 'B faar brett'), 'nettleser B er i kampen');
-  sjekk(await A.kjor('KORTSPILL.KS.nett.rolle') === 'vert', 'A er vert');
-  sjekk(await B.kjor('KORTSPILL.KS.nett.rolle') === 'gjest', 'B er gjest');
-  sjekk(await A.kjor('KORTSPILL.KS.tur') !== await B.kjor('KORTSPILL.KS.tur'),
-    'turen er speilvendt mellom de to');
-  sjekk(await B.kjor('KORTSPILL.KS.p[1].hand.every(x => x === "?")'),
-    'gjesten ser ikke vertens kort');
+  /* the battle */
+  check(await waitFor(A, '!!CARDGAME.CG.p[0]', 30000, 'A gets a board'), 'browser A is in the battle');
+  check(await waitFor(B, '!!CARDGAME.CG.p[0]', 30000, 'B gets a board'), 'browser B is in the battle');
+  check(await A.run('CARDGAME.CG.net.role') === 'host', 'A is the host');
+  check(await B.run('CARDGAME.CG.net.role') === 'guest', 'B is the guest');
+  check(await A.run('CARDGAME.CG.turn') !== await B.run('CARDGAME.CG.turn'),
+    'the turn is mirrored between the two');
+  check(await B.run('CARDGAME.CG.p[1].hand.every(x => x === "?")'),
+    'the guest does not see the host\'s cards');
 
-  /* aapningshanda gaar over kanalen */
-  sjekk(await vent(A, '!document.querySelector("#ksDialog").hidden', 15000, 'dialog A'),
-    'A faar spoersmaal om aapningshanda');
-  await A.kjor('document.querySelector("#ksDialogKnapper [data-dlg=\'0\']").click()');
-  sjekk(await vent(B, '!document.querySelector("#ksDialog").hidden', 20000, 'dialog B'),
-    'spoersmaalet om aapningshanda naar gjesten over nettet');
-  await B.kjor('document.querySelector("#ksDialogKnapper [data-dlg=\'0\']").click()');
-  await sov(2500);
+  /* the opening hand goes over the channel */
+  check(await waitFor(A, '!document.querySelector("#cgDialog").hidden', 15000, 'dialog A'),
+    'A is asked about the opening hand');
+  await A.run('document.querySelector("#cgDialogButtons [data-dlg=\'0\']").click()');
+  check(await waitFor(B, '!document.querySelector("#cgDialog").hidden', 20000, 'dialog B'),
+    'the question about the opening hand reaches the guest over the network');
+  await B.run('document.querySelector("#cgDialogButtons [data-dlg=\'0\']").click()');
+  await sleep(2500);
 
-  /* et trekk skal synkes begge veier */
-  const PROVE = `(() => {
-    const KS = KORTSPILL.KS;
-    if(KS.tur !== 0) return 'ikke min tur';
-    for(let i=0;i<KS.p[0].hand.length;i++){
-      const k = document.querySelector('[data-sti="h:' + i + '"]');
+  /* a move must sync both ways */
+  const TRY = `(() => {
+    const CG = CARDGAME.CG;
+    if(CG.turn !== 0) return 'not my turn';
+    for(let i=0;i<CG.p[0].hand.length;i++){
+      const k = document.querySelector('[data-path="h:' + i + '"]');
       if(!k) continue;
       k.click();
-      if(document.querySelector('#ksArk').hidden) continue;
-      const kn = document.querySelector('#ksArkKnapper [data-ark="0"]');
-      if(!kn || kn.disabled){ document.querySelector('#ksArkBak').click(); continue; }
-      kn.click();
-      return 'spilte';
+      if(document.querySelector('#cgSheet').hidden) continue;
+      const btn = document.querySelector('#cgSheetButtons [data-sheet="0"]');
+      if(!btn || btn.disabled){ document.querySelector('#cgSheetBack').click(); continue; }
+      btn.click();
+      return 'played';
     }
-    return 'ingen raad';
+    return 'cannot afford';
   })()`;
 
-  let spilte = false, spiller = null, seer = null;
-  for(let runde = 0; runde < 8 && !spilte; runde++){
-    const aHarTuren = await A.kjor('KORTSPILL.KS.tur === 0');
-    spiller = aHarTuren ? A : B;
-    seer    = aHarTuren ? B : A;
-    if(await spiller.kjor(PROVE) === 'spilte'){ spilte = true; break; }
-    await spiller.kjor('document.querySelector("#ksAvslutt").click()');
-    await sov(2500);
+  let played = false, player = null, watcher = null;
+  for(let round = 0; round < 8 && !played; round++){
+    const aHasTurn = await A.run('CARDGAME.CG.turn === 0');
+    player  = aHasTurn ? A : B;
+    watcher = aHasTurn ? B : A;
+    if(await player.run(TRY) === 'played'){ played = true; break; }
+    await player.run('document.querySelector("#cgEnd").click()');
+    await sleep(2500);
   }
-  sjekk(spilte, 'fikk spilt et kort');
-  if(spilte){
-    await sov(2500);
-    const mine = await spiller.kjor('KORTSPILL.KS.p[0].sol.aktiv');
-    sjekk(await vent(seer, 'KORTSPILL.KS.p[1].sol.aktiv === ' + mine, 15000, 'synk av sol'),
-      'trekket synkes over nettet til motparten');
+  check(played, 'managed to play a card');
+  if(played){
+    await sleep(2500);
+    const mine = await player.run('CARDGAME.CG.p[0].sun.active');
+    check(await waitFor(watcher, 'CARDGAME.CG.p[1].sun.active === ' + mine, 15000, 'sun sync'),
+      'the move syncs over the network to the opponent');
   }
 
-  const utfeil = [...A.cdp.hendelser, ...B.cdp.hendelser];
-  sjekk(utfeil.length === 0, 'ingen skriptfeil: ' + utfeil.join(' | '));
+  const errors = [...A.cdp.events, ...B.cdp.events];
+  check(errors.length === 0, 'no script errors: ' + errors.join(' | '));
 
-  A.lukk(); B.lukk(); tjener.close();
-  console.log(feil ? '\n' + feil + ' feil' : '\nAlle Supabase-sjekker gikk gjennom');
-  process.exit(feil ? 1 : 0);
-})().catch(e => { console.error('KRASJ:', e); process.exit(2); });
+  A.close(); B.close(); server.close();
+  console.log(failures ? '\n' + failures + ' failures' : '\nAll Supabase checks passed');
+  process.exit(failures ? 1 : 0);
+})().catch(e => { console.error('CRASH:', e); process.exit(2); });

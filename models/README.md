@@ -12,38 +12,38 @@ tags:
 library_name: onnx
 ---
 
-# Villmark — artsmodeller for nettleser
+# Villmark — species models for the browser
 
-ONNX-versjoner av to eksisterende modeller, pakket for å kjøre i en nettleser
-med `onnxruntime-web`. Brukt av [Villmark](https://github.com/ffremming), et
-spill som lar deg skanne norske arter med mobilkameraet.
+ONNX versions of two existing models, packaged to run in a browser with
+`onnxruntime-web`. Used by [Villmark](https://github.com/ffremming), a game
+that lets you scan the species of Norway with a phone camera.
 
-**Dette er ikke nye modeller.** Vektene er uendret fra kildene under; de er
-konvertert til ONNX og redusert i presisjon. All treffsikkerhet tilhører de
-opprinnelige forfatterne.
+**These are not new models.** The weights are unchanged from the sources below;
+they have been converted to ONNX and reduced in precision. All the accuracy
+belongs to the original authors.
 
-## Innhold
+## Contents
 
-| fil | størrelse | kilde | endring |
+| file | size | source | change |
 |---|---|---|---|
-| `inat21.onnx` | 44,7 MB | birder `resnet_v2_50_inat21-256px` | PyTorch → ONNX, int8 (percentile-kalibrering) |
-| `inat21.labels.json` | 2,1 MB | iNaturalist 2021-taksonomi | klasseliste med slekt, familie, orden, klasse, rekke |
-| `inat21.meta.json` | — | — | inndataform og normalisering |
-| `speciesnet.onnx` | 112,2 MB | SpeciesNet 4.0.3b (helbilde-klassifikator) | PyTorch → ONNX, fp16 |
-| `speciesnet.labels.json` | 263 kB | SpeciesNet | uendret labelliste, som JSON |
-| `speciesnet.meta.json` | — | — | inndataform og normalisering |
+| `inat21.onnx` | 44.7 MB | birder `resnet_v2_50_inat21-256px` | PyTorch → ONNX, int8 (percentile calibration) |
+| `inat21.labels.json` | 2.1 MB | iNaturalist 2021 taxonomy | class list with genus, family, order, class, phylum |
+| `inat21.meta.json` | — | — | input shape and normalization |
+| `speciesnet.onnx` | 112.2 MB | SpeciesNet 4.0.3b (whole-image classifier) | PyTorch → ONNX, fp16 |
+| `speciesnet.labels.json` | 263 kB | SpeciesNet | unchanged label list, as JSON |
+| `speciesnet.meta.json` | — | — | input shape and normalization |
 
-## Kilder og lisenser
+## Sources and licences
 
 ### SpeciesNet
 
-Copyright 2024 Google LLC. Lisensiert under Apache License 2.0.
+Copyright 2024 Google LLC. Licensed under the Apache License 2.0.
 
-- Kode og modellkort: https://github.com/google/cameratrapai
-- Vekter: https://www.kaggle.com/models/google/speciesnet (`pyTorch/v4.0.3b`)
+- Code and model card: https://github.com/google/cameratrapai
+- Weights: https://www.kaggle.com/models/google/speciesnet (`pyTorch/v4.0.3b`)
 
-Arkitektur: EfficientNet V2 M, trent på over 65 millioner viltkamerabilder,
-2498 labels.
+Architecture: EfficientNet V2 M, trained on more than 65 million camera-trap
+images, 2498 labels.
 
 ```bibtex
 @article{gadot2024crop,
@@ -57,18 +57,18 @@ Arkitektur: EfficientNet V2 M, trent på over 65 millioner viltkamerabilder,
 
 ### birder resnet_v2_50_inat21
 
-Lisensiert under Apache License 2.0.
+Licensed under the Apache License 2.0.
 
-- Modell: https://huggingface.co/birder-project/resnet_v2_50_inat21
-- Prosjekt: https://gitlab.com/birder/birder
+- Model: https://huggingface.co/birder-project/resnet_v2_50_inat21
+- Project: https://gitlab.com/birder/birder
 
-Arkitektur: ResNet v2 50, trent på iNaturalist 2021 med en tilpasset variant av
-ResNet Strikes Back A2. 10 000 arter.
+Architecture: ResNet v2 50, trained on iNaturalist 2021 with an adapted variant
+of ResNet Strikes Back A2. 10 000 species.
 
 ### iNaturalist 2021
 
-Klasselisten i `inat21.labels.json` er taksonomien fra iNat2021-konkurransen —
-artsnavn med slekt, familie, orden, klasse og rekke.
+The class list in `inat21.labels.json` is the taxonomy from the iNat2021
+competition — species names with genus, family, order, class and phylum.
 
 - https://github.com/visipedia/inat_comp/tree/master/2021
 
@@ -83,39 +83,41 @@ artsnavn med slekt, familie, orden, klasse og rekke.
 
 ### MegaDetector
 
-Ikke inkludert her. SpeciesNet-pakken fra Kaggle inneholder MegaDetector v5a,
-men Villmark bruker helbilde-klassifikatoren `4.0.3b`, som ikke trenger en
-detektor. MegaDetector-vektene er derfor ikke lastet opp.
+Not included here. The SpeciesNet package from Kaggle contains MegaDetector
+v5a, but Villmark uses the whole-image classifier `4.0.3b`, which needs no
+detector. The MegaDetector weights have therefore not been uploaded.
 
-## Endringer fra originalene
+## Changes from the originals
 
-Apache-2.0 krever at endringer oppgis. Dette er gjort:
+Apache-2.0 requires that changes be stated. This is what was done:
 
-**Begge modellene**
+**Both models**
 
-1. Eksportert fra PyTorch til ONNX, opset 17, fast batchstørrelse 1.
-2. Redusert presisjon (se under). Vekter og arkitektur er ellers uendret.
-3. Labellistene er skrevet om til JSON. For iNat21 er hver klasse utvidet med
-   slekt, familie, orden, klasse og rekke fra iNat2021-taksonomien, slik at en
-   klient kan falle tilbake på høyere taksonomisk nivå.
+1. Exported from PyTorch to ONNX, opset 17, fixed batch size 1.
+2. Reduced precision (see below). Weights and architecture are otherwise
+   unchanged.
+3. The label lists were rewritten as JSON. For iNat21 every class was extended
+   with genus, family, order, class and phylum from the iNat2021 taxonomy, so
+   a client can fall back on a higher taxonomic level.
 
-**`inat21.onnx`** — statisk int8-kvantisering, QDQ-format, per kanal,
-percentile-kalibrering (99,999) på 45 bilder. Målt mot fp32 på ti testbilder:
-samme topp-1 på alle ti.
+**`inat21.onnx`** — static int8 quantization, QDQ format, per channel,
+percentile calibration (99.999) on 45 images. Measured against fp32 on ten test
+images: the same top-1 on all ten.
 
-**`speciesnet.onnx`** — fp16. Int8 ble forsøkt og forkastet: modellen svarte
-`blank` på nesten alt, også bilder den tar med 99,5 % i fp16. EfficientNetV2
-med SE-blokker tåler ikke per-tensor int8-aktiveringer her.
+**`speciesnet.onnx`** — fp16. int8 was attempted and rejected: the model
+answered `blank` to almost everything, including images it takes at 99.5 % in
+fp16. EfficientNetV2 with SE blocks does not survive per-tensor int8
+activations here.
 
-**Forbehandling avviker bevisst for SpeciesNet.** Originalen beskjærer topp og
-bunn av bildet for å unngå å lære tidsstempelbanner fra viltkameraer. Et
-mobilbilde har ingen slike banner, og beskjæringen ville kuttet motivet.
-Villmark bruker senterkvadrat i stedet. Vektene er uendret; det er kun
-klientens forbehandling som er annerledes.
+**The preprocessing differs deliberately for SpeciesNet.** The original crops
+the top and the bottom of the image to avoid learning the timestamp banners of
+camera traps. A phone photo has no such banners, and the crop would cut the
+subject. Villmark uses the centre square instead. The weights are unchanged; it
+is only the client's preprocessing that differs.
 
-## Bruk
+## Use
 
-`meta.json` bærer alt en klient trenger:
+`meta.json` carries everything a client needs:
 
 ```json
 {
@@ -128,11 +130,11 @@ klientens forbehandling som er annerledes.
 }
 ```
 
-SpeciesNet er **NHWC** i `[0,1]` uten mean/std. iNat21 er **NCHW** med
-normalisering. Utdata er logits; kjør softmax selv.
+SpeciesNet is **NHWC** in `[0,1]` without mean/std. iNat21 is **NCHW** with
+normalization. The output is logits; run softmax yourself.
 
-## Ansvar
+## Responsibility
 
-Modellene bommer. De er trent på viltkamerabilder og feltfotografier, ikke på
-det mobilkameraet ditt peker på. Ikke bruk dem til å avgjøre om en sopp kan
-spises.
+The models get it wrong. They were trained on camera-trap images and field
+photographs, not on whatever your phone camera is pointed at. Do not use them
+to decide whether a mushroom can be eaten.

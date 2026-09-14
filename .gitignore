@@ -2,19 +2,19 @@
 VoxBox/
 .DS_Store
 
-# eksporterte artsmodeller - lastes opp til Hugging Face, ikke til git.
-# Lisens og attribusjon foelger derimot med i repoet, saa de ikke gaar tapt.
-modeller/*
-!modeller/LICENSE
-!modeller/NOTICE
-!modeller/README.md
+# Exported species models - uploaded to Hugging Face, never to git.
+# The licence and the attribution do travel with the repo, so they are not lost.
+models/*
+!models/LICENSE
+!models/NOTICE
+!models/README.md
 .venv/
 __pycache__/
-tools/provebilder/
+tools/sample_images/
 
-# birder cacher vektene her naar tools kjores fra repo-rota
-models/
-tools/kalibrering/
+# birder caches the downloaded weights here (MODELS_DIR is set in tools/common.py)
+birder-cache/
+tools/calibration/
 
-# testskript lagde denne symlinken en gang. Den brekker GitHub Pages-bygget.
+# a test script made this symlink once. It breaks the GitHub Pages build.
 __bilder

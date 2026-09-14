@@ -160,13 +160,29 @@ async function loadModel(name, opt){
        the same rank" - but only at run time, not at creation, so a try/catch
        here catches nothing. int8 models therefore go straight to wasm. */
     const webgpuOk = navigator.gpu && meta.precision !== 'int8' && !wasmOnly.has(name);
-    const ep = webgpuOk ? ['webgpu', 'wasm'] : ['wasm'];
-    let session;
-    try {
+    let session, ep;
+
+    /* ort.env.wasm.proxy = true transfers the model buffer to the worker, and
+       the transfer detaches it. A second attempt on that same buffer then dies
+       with "buffer already detached" instead of the real error. The spare copy
+       is therefore made before the first attempt, and only when a second
+       attempt actually exists - int8 goes straight to wasm, and there is
+       nothing to fall back to there. */
+    if(!webgpuOk){
+      ep = ['wasm'];
       session = await ort.InferenceSession.create(buf, { executionProviders: ep, graphOptimizationLevel:'all' });
-    } catch(e){
-      /* WebGPU also fails silently on a number of Android GPUs. */
-      session = await ort.InferenceSession.create(buf, { executionProviders:['wasm'], graphOptimizationLevel:'all' });
+    } else {
+      const spare = buf.slice(0);
+      try {
+        ep = ['webgpu', 'wasm'];
+        session = await ort.InferenceSession.create(buf, { executionProviders: ep, graphOptimizationLevel:'all' });
+      } catch(e){
+        /* WebGPU also fails silently on a number of Android GPUs. */
+        console.warn('CLASSIFIER: WebGPU is no good for', name, '-', e.message);
+        wasmOnly.add(name);
+        ep = ['wasm'];
+        session = await ort.InferenceSession.create(spare, { executionProviders: ep, graphOptimizationLevel:'all' });
+      }
     }
     const entry = { session, meta, labels, name, ep };
     sessions.set(name, entry);
@@ -292,6 +308,8 @@ async function runRobust(name, entry, source, ort){
   } catch(err){
     const usedGpu = entry.ep && entry.ep.indexOf('webgpu') !== -1;
     if(!usedGpu || wasmOnly.has(name)) throw err;
+    /* The new session is built from a fresh buffer out of the cache. The old
+       one lives in the worker and is detached. */
     console.warn('CLASSIFIER: WebGPU failed for', name, '- switching to wasm:', err.message);
     wasmOnly.add(name);
     release(name);

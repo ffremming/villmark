@@ -1,4 +1,4 @@
-/* Kjorer artsmapping.js utenfor nettleseren mot ekte labelformater. */
+/* Runs speciesmapping.js outside the browser against the real label formats. */
 const fs = require('fs');
 const vm = require('vm');
 const path = require('path').resolve(__dirname, '..') + '/';
@@ -6,132 +6,132 @@ const path = require('path').resolve(__dirname, '..') + '/';
 const ctx = { console, window: {} };
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(path + 'species.js', 'utf8'), ctx, { filename: 'species.js' });
-vm.runInContext(fs.readFileSync(path + 'artsmapping.js', 'utf8'), ctx, { filename: 'artsmapping.js' });
+vm.runInContext(fs.readFileSync(path + 'speciesmapping.js', 'utf8'), ctx, { filename: 'speciesmapping.js' });
 
-const M = vm.runInContext('ARTSMAPPING', ctx);
+const M = vm.runInContext('SPECIESMAPPING', ctx);
 const SPECIES = vm.runInContext('SPECIES', ctx);
-let feil = 0;
-function sjekk(navn, faktisk, ventet) {
-  const ok = JSON.stringify(faktisk) === JSON.stringify(ventet);
-  if (!ok) { feil++; console.log('FEIL ' + navn + ': fikk ' + JSON.stringify(faktisk) + ' ventet ' + JSON.stringify(ventet)); }
-  else console.log('ok   ' + navn + ' -> ' + JSON.stringify(faktisk));
+let failures = 0;
+function check(name, actual, expected) {
+  const ok = JSON.stringify(actual) === JSON.stringify(expected);
+  if (!ok) { failures++; console.log('FAIL ' + name + ': got ' + JSON.stringify(actual) + ' expected ' + JSON.stringify(expected)); }
+  else console.log('ok   ' + name + ' -> ' + JSON.stringify(actual));
 }
 
-/* --- SpeciesNet-format: uuid;class;order;family;genus;species;common name --- */
+/* --- SpeciesNet format: uuid;class;order;family;genus;species;common name --- */
 const sn = (s) => [{ label: s, p: 0.9 }];
 
-sjekk('rev eksakt',
-  pick(M.beste(sn('abc;mammalia;carnivora;canidae;vulpes;vulpes;red fox'), 'speciesnet')),
-  ['rev', 0]);
+check('fox exact',
+  pick(M.best(sn('abc;mammalia;carnivora;canidae;vulpes;vulpes;red fox'), 'speciesnet')),
+  ['fox', 0]);
 
-sjekk('fjellrev eksakt',
-  pick(M.beste(sn('abc;mammalia;carnivora;canidae;vulpes;lagopus;arctic fox'), 'speciesnet')),
-  ['fjellrev', 0]);
+check('arctic fox exact',
+  pick(M.best(sn('abc;mammalia;carnivora;canidae;vulpes;lagopus;arctic fox'), 'speciesnet')),
+  ['arcticfox', 0]);
 
-sjekk('ukjent vulpes -> slekt',
-  pick(M.beste(sn('abc;mammalia;carnivora;canidae;vulpes;zerda;fennec fox'), 'speciesnet')),
-  ['rev', 1]);
+check('unknown vulpes -> genus',
+  pick(M.best(sn('abc;mammalia;carnivora;canidae;vulpes;zerda;fennec fox'), 'speciesnet')),
+  ['fox', 1]);
 
-sjekk('ukjent canidae -> familie',
-  pick(M.beste(sn('abc;mammalia;carnivora;canidae;nyctereutes;procyonoides;raccoon dog'), 'speciesnet')),
-  ['rev', 2]);
+check('unknown canidae -> family',
+  pick(M.best(sn('abc;mammalia;carnivora;canidae;nyctereutes;procyonoides;raccoon dog'), 'speciesnet')),
+  ['fox', 2]);
 
-sjekk('blank -> ukjent',
-  pick(M.beste(sn(';;;;;;blank'), 'speciesnet')),
+check('blank -> unknown',
+  pick(M.best(sn(';;;;;;blank'), 'speciesnet')),
   [null, 3]);
 
-sjekk('human -> ukjent',
-  pick(M.beste(sn(';;;;;;human'), 'speciesnet')),
+check('human -> unknown',
+  pick(M.best(sn(';;;;;;human'), 'speciesnet')),
   [null, 3]);
 
-sjekk('familieniva uten art',
-  pick(M.beste(sn('abc;mammalia;carnivora;ursidae;;;bear family'), 'speciesnet')),
-  ['bjorn', 2]);
+check('family level without a species',
+  pick(M.best(sn('abc;mammalia;carnivora;ursidae;;;bear family'), 'speciesnet')),
+  ['bear', 2]);
 
-/* --- iNat21-format: beriket objekt fra export_inat21.py --- */
+/* --- iNat21 format: enriched object from export_inat21.py --- */
 const inat = (name, genus, family, kingdom) =>
   [{ label: { name, genus, family, kingdom: kingdom || 'Plantae' }, p: 0.8 }];
 
-sjekk('gran eksakt', pick(M.beste(inat('Picea abies', 'Picea', 'Pinaceae'), 'inat21')), ['gran', 0]);
-sjekk('fluesopp eksakt', pick(M.beste(inat('Amanita muscaria', 'Amanita', 'Amanitaceae', 'Fungi'), 'inat21')), ['fluesopp', 0]);
-sjekk('kantarell eksakt', pick(M.beste(inat('Cantharellus cibarius', 'Cantharellus', 'Cantharellaceae', 'Fungi'), 'inat21')), ['kantarell', 0]);
-sjekk('molte eksakt', pick(M.beste(inat('Rubus chamaemorus', 'Rubus', 'Rosaceae'), 'inat21')), ['molte', 0]);
-sjekk('annen Picea -> slekt', pick(M.beste(inat('Picea glauca', 'Picea', 'Pinaceae'), 'inat21')), ['gran', 1]);
-sjekk('annen Pinaceae -> familie', pick(M.beste(inat('Abies alba', 'Abies', 'Pinaceae'), 'inat21')), ['gran', 2]);
-sjekk('blaveis-synonym', pick(M.beste(inat('Anemone hepatica', 'Anemone', 'Ranunculaceae'), 'inat21')), ['blaveis', 0]);
-sjekk('helt fremmed', pick(M.beste(inat('Zea mays', 'Zea', 'Poaceae'), 'inat21')), [null, 3]);
+check('spruce exact', pick(M.best(inat('Picea abies', 'Picea', 'Pinaceae'), 'inat21')), ['spruce', 0]);
+check('fly agaric exact', pick(M.best(inat('Amanita muscaria', 'Amanita', 'Amanitaceae', 'Fungi'), 'inat21')), ['flyagaric', 0]);
+check('chanterelle exact', pick(M.best(inat('Cantharellus cibarius', 'Cantharellus', 'Cantharellaceae', 'Fungi'), 'inat21')), ['chanterelle', 0]);
+check('cloudberry exact', pick(M.best(inat('Rubus chamaemorus', 'Rubus', 'Rosaceae'), 'inat21')), ['cloudberry', 0]);
+check('another Picea -> genus', pick(M.best(inat('Picea glauca', 'Picea', 'Pinaceae'), 'inat21')), ['spruce', 1]);
+check('another Pinaceae -> family', pick(M.best(inat('Abies alba', 'Abies', 'Pinaceae'), 'inat21')), ['spruce', 2]);
+check('hepatica synonym', pick(M.best(inat('Anemone hepatica', 'Anemone', 'Ranunculaceae'), 'inat21')), ['hepatica', 0]);
+check('completely foreign', pick(M.best(inat('Zea mays', 'Zea', 'Poaceae'), 'inat21')), [null, 3]);
 
-/* --- autornavn i latinske navn, slik FloraSense og PlantNet skriver dem --- */
-sjekk('autornavn strippes',
-  pick(M.beste([{ label: 'Betula_pubescens_Ehrh_', p: 0.7 }], 'inat21')),
-  ['bjork', 0]);
-sjekk('autornavn med parentes',
-  pick(M.beste([{ label: 'Picea abies (L.) H.Karst.', p: 0.7 }], 'inat21')),
-  ['gran', 0]);
+/* --- author names inside latin names, the way FloraSense and PlantNet write them --- */
+check('author name is stripped',
+  pick(M.best([{ label: 'Betula_pubescens_Ehrh_', p: 0.7 }], 'inat21')),
+  ['birch', 0]);
+check('author name in brackets',
+  pick(M.best([{ label: 'Picea abies (L.) H.Karst.', p: 0.7 }], 'inat21')),
+  ['spruce', 0]);
 
-/* --- topp-5: sikkert treff lenger nede slaar familiegjetning overst --- */
-const blandet = [
+/* --- top 5: a certain hit further down beats a family guess at the top --- */
+const mixed = [
   { label: { name: 'Abies alba', genus: 'Abies', family: 'Pinaceae' }, p: 0.40 },
   { label: { name: 'Betula pendula', genus: 'Betula', family: 'Betulaceae' }, p: 0.30 },
   { label: { name: 'Betula pubescens', genus: 'Betula', family: 'Betulaceae' }, p: 0.20 },
 ];
-sjekk('topp5 velger eksakt treff', pick(M.beste(blandet, 'inat21')), ['bjork', 0]);
+check('top 5 picks the exact hit', pick(M.best(mixed, 'inat21')), ['birch', 0]);
 
-/* --- for lav sannsynlighet skal ignoreres --- */
-sjekk('under minP ignoreres',
-  pick(M.beste([{ label: { name: 'Picea abies', genus: 'Picea', family: 'Pinaceae' }, p: 0.01 }], 'inat21')),
+/* --- too low a probability must be ignored --- */
+check('below minP is ignored',
+  pick(M.best([{ label: { name: 'Picea abies', genus: 'Picea', family: 'Pinaceae' }, p: 0.01 }], 'inat21')),
   [null, 3]);
 
-/* --- sjeldenhet avgjor naar flere arter deler familie --- */
-const ericaceae = SPECIES.filter(s => (M.TAKSONOMI[s.id] || {}).family === 'ericaceae');
-const ventetEricaceae = ericaceae.slice().sort((a, b) => a.sjelden - b.sjelden)[0].id;
-console.log('\nEricaceae-kandidater:', ericaceae.map(s => s.id + ':' + s.sjelden).join(' '));
-sjekk('Ericaceae -> minst sjeldne av dem som finnes',
-  pick(M.beste(inat('Erica carnea', 'Erica', 'Ericaceae'), 'inat21')),
-  [ventetEricaceae, 2]);
+/* --- rarity decides when several species share a family --- */
+const ericaceae = SPECIES.filter(s => (M.TAXONOMY[s.id] || {}).family === 'ericaceae');
+const expectedEricaceae = ericaceae.slice().sort((a, b) => a.rarity - b.rarity)[0].id;
+console.log('\nEricaceae candidates:', ericaceae.map(s => s.id + ':' + s.rarity).join(' '));
+check('Ericaceae -> the least rare of the ones that exist',
+  pick(M.best(inat('Erica carnea', 'Erica', 'Ericaceae'), 'inat21')),
+  [expectedEricaceae, 2]);
 
 
-/* --- gruppebro: arter ingen modell dekker --- */
-const medRang = (name, felt) => [{ label: Object.assign({ name }, felt), p: 0.6 }];
+/* --- group bridge: species no model covers --- */
+const withRank = (name, fields) => [{ label: Object.assign({ name }, fields), p: 0.6 }];
 
-sjekk('ukjent fisk -> gadide (USIKKER)',
-  pick(M.beste(medRang('Perca fluviatilis', { genus: 'Perca', family: 'Percidae', class: 'Actinopterygii' }), 'inat21')),
-  ['sei', 2]);
+check('unknown fish -> gadid (UNCERTAIN)',
+  pick(M.best(withRank('Perca fluviatilis', { genus: 'Perca', family: 'Percidae', class: 'Actinopterygii' }), 'inat21')),
+  ['saithe', 2]);
 
-sjekk('laks treffer eksakt, ikke broen',
-  pick(M.beste(medRang('Salmo salar', { genus: 'Salmo', family: 'Salmonidae', class: 'Actinopterygii' }), 'inat21')),
-  ['laks', 0]);
+check('salmon hits exactly, not the bridge',
+  pick(M.best(withRank('Salmo salar', { genus: 'Salmo', family: 'Salmonidae', class: 'Actinopterygii' }), 'inat21')),
+  ['salmon', 0]);
 
-sjekk('annen salmonide -> familie, ikke broen',
-  pick(M.beste(medRang('Oncorhynchus mykiss', { genus: 'Oncorhynchus', family: 'Salmonidae', class: 'Actinopterygii' }), 'inat21')),
-  ['orret', 2]);
+check('another salmonid -> family, not the bridge',
+  pick(M.best(withRank('Oncorhynchus mykiss', { genus: 'Oncorhynchus', family: 'Salmonidae', class: 'Actinopterygii' }), 'inat21')),
+  ['trout', 2]);
 
-sjekk('rodalge -> tang og tare (USIKKER)',
-  pick(M.beste(medRang('Chondrus crispus', { genus: 'Chondrus', family: 'Gigartinaceae', phylum: 'Rhodophyta' }), 'inat21')),
-  ['sukkertare', 2]);
+check('red alga -> kelp and wrack (UNCERTAIN)',
+  pick(M.best(withRank('Chondrus crispus', { genus: 'Chondrus', family: 'Gigartinaceae', phylum: 'Rhodophyta' }), 'inat21')),
+  ['sugarkelp', 2]);
 
-sjekk('gronnalge -> tang og tare',
-  pick(M.beste(medRang('Ulva lactuca', { genus: 'Ulva', family: 'Ulvaceae', phylum: 'Chlorophyta' }), 'inat21')),
-  ['sukkertare', 2]);
+check('green alga -> kelp and wrack',
+  pick(M.best(withRank('Ulva lactuca', { genus: 'Ulva', family: 'Ulvaceae', phylum: 'Chlorophyta' }), 'inat21')),
+  ['sugarkelp', 2]);
 
-/* --- samlingen bryter uavgjort: fjellrev naas bare naar rev er tatt --- */
-sjekk('Vulpes uten rev i samlingen -> rev',
-  pick(M.beste(medRang('Vulpes zerda', { genus: 'Vulpes', family: 'Canidae' }), 'inat21', { funnet: new Set() })),
-  ['rev', 1]);
+/* --- the collection breaks the tie: arctic fox is only reached once fox is taken --- */
+check('Vulpes without fox in the collection -> fox',
+  pick(M.best(withRank('Vulpes zerda', { genus: 'Vulpes', family: 'Canidae' }), 'inat21', { found: new Set() })),
+  ['fox', 1]);
 
-sjekk('Vulpes med rev alt tatt -> fjellrev',
-  pick(M.beste(medRang('Vulpes zerda', { genus: 'Vulpes', family: 'Canidae' }), 'inat21', { funnet: new Set(['rev']) })),
-  ['fjellrev', 1]);
+check('Vulpes with fox already taken -> arctic fox',
+  pick(M.best(withRank('Vulpes zerda', { genus: 'Vulpes', family: 'Canidae' }), 'inat21', { found: new Set(['fox']) })),
+  ['arcticfox', 1]);
 
-/* --- havorn: SpeciesNet naar bare slekt, iNat21 treffer eksakt --- */
-sjekk('SpeciesNet havorn bare paa slekt',
-  pick(M.beste(sn('abc;aves;accipitriformes;accipitridae;haliaeetus;leucocephalus;bald eagle'), 'speciesnet')),
-  ['havorn', 1]);
-sjekk('iNat21 havorn eksakt',
-  pick(M.beste(medRang('Haliaeetus albicilla', { genus: 'Haliaeetus', family: 'Accipitridae' }), 'inat21')),
-  ['havorn', 0]);
+/* --- white-tailed eagle: SpeciesNet reaches only genus, iNat21 hits exactly --- */
+check('SpeciesNet sea eagle only at genus level',
+  pick(M.best(sn('abc;aves;accipitriformes;accipitridae;haliaeetus;leucocephalus;bald eagle'), 'speciesnet')),
+  ['seaeagle', 1]);
+check('iNat21 sea eagle exact',
+  pick(M.best(withRank('Haliaeetus albicilla', { genus: 'Haliaeetus', family: 'Accipitridae' }), 'inat21')),
+  ['seaeagle', 0]);
 
-function pick(r) { return [r.id, r.niva]; }
+function pick(r) { return [r.id, r.level]; }
 
-console.log(feil ? '\n' + feil + ' FEIL' : '\nalle tester bestatt');
-process.exit(feil ? 1 : 0);
+console.log(failures ? '\n' + failures + ' FAILURES' : '\nall tests passed');
+process.exit(failures ? 1 : 0);

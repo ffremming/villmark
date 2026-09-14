@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>VILLMARK — diagnostics</title>
+<style>
+  body{ margin:0; padding:16px; background:#0b120d; color:#e9e2c8;
+        font:14px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace; }
+  h1{ font-size:15px; letter-spacing:.08em; color:#f5c342; margin:0 0 4px; }
+  p.sub{ color:#9fa891; margin:0 0 16px; font-size:12px; }
+  .step{ border-left:3px solid #2f5836; padding:8px 0 8px 10px; margin-bottom:8px;
+         word-break:break-word; }
+  .ok{ border-color:#3f8a4b; }
+  .fail{ border-color:#c9453a; }
+  .running{ border-color:#f5c342; }
+  .name{ color:#9fa891; font-size:12px; }
+  .value{ white-space:pre-wrap; }
+  .fail .value{ color:#ff9c92; }
+  button{ font:inherit; background:#25412b; color:#e9e2c8; border:2px solid #4e8a55;
+          padding:12px 18px; margin:14px 0; width:100%; }
+  textarea{ width:100%; height:130px; background:#101a13; color:#9fa891;
+            border:2px solid #2f5836; padding:8px; font:12px/1.5 ui-monospace,monospace; }
+</style>
+</head>
+<body>
+
+<h1>VILLMARK — DIAGNOSTICS</h1>
+<p class="sub">Runs every link in the scan chain and shows where it breaks.</p>
+
+<div id="out"></div>
+<button id="copy">COPY THE WHOLE REPORT</button>
+<textarea id="report" readonly></textarea>
+
+<script src="species.js"></script>
+<script src="speciesmapping.js"></script>
+<script src="classify.js"></script>
+<script src="modelconfig.js"></script>
+<script>
+const OUT = document.getElementById('out');
+const lines = [];
+
+function step(name){
+  const d = document.createElement('div');
+  d.className = 'step running';
+  d.innerHTML = '<div class="name">' + name + '</div><div class="value">running …</div>';
+  OUT.appendChild(d);
+  return {
+    ok(v){ d.className = 'step ok'; d.lastChild.textContent = String(v); lines.push('OK   ' + name + ': ' + v); },
+    fail(e){
+      const m = e && e.stack ? e.stack : String(e);
+      d.className = 'step fail'; d.lastChild.textContent = m;
+      lines.push('FAIL ' + name + ': ' + m);
+    },
+    /* progress only updates the screen. It must stay out of the report -
+       otherwise it drowns in a hundred "loading 36 %" lines. */
+    progress(v){ d.lastChild.textContent = String(v); },
+  };
+}
+
+/* Makes a test image without needing a camera: a green field with a darker
+   blob. The point is not to hit a species, but to get the whole chain to run. */
+function testImage(){
+  const c = document.createElement('canvas');
+  c.width = c.height = 512;
+  const g = c.getContext('2d');
+  g.fillStyle = '#4a7a3a'; g.fillRect(0, 0, 512, 512);
+  g.fillStyle = '#6b4a2a'; g.beginPath(); g.arc(256, 256, 120, 0, 7); g.fill();
+  return c;
+}
+
+(async () => {
+  step('browser').ok(navigator.userAgent);
+  step('secure context').ok(window.isSecureContext + '  (the Cache API needs true)');
+  step('crossOriginIsolated').ok(String(window.crossOriginIsolated) +
+    '  (false is expected on GitHub Pages)');
+  step('deviceMemory').ok((navigator.deviceMemory || 'unknown') + ' GB');
+  step('WebGPU').ok(navigator.gpu ? 'present' : 'missing — using wasm');
+  step('Cache API').ok(typeof caches !== 'undefined' ? 'present' : 'MISSING');
+
+  const s0 = step('CLASSIFIER loaded');
+  if (!window.CLASSIFIER) { s0.fail(new Error('classify.js did not run')); return; }
+  s0.ok('yes, base = ' + CLASSIFIER.base);
+
+  const s1 = step('SPECIESMAPPING loaded');
+  if (!window.SPECIESMAPPING) { s1.fail(new Error('speciesmapping.js did not run')); return; }
+  s1.ok('yes, ' + (typeof SPECIES !== 'undefined' ? SPECIES.length : '?') + ' species');
+
+  const s2 = step('status');
+  try { s2.ok(JSON.stringify(await CLASSIFIER.status())); } catch (e) { s2.fail(e); }
+
+  for (const name of ['inat21', 'speciesnet']) {
+    const s = step('HEAD ' + name + '.onnx');
+    try {
+      const r = await fetch(CLASSIFIER.base + name + '.onnx', { method: 'HEAD' });
+      s.ok(r.status + '  ' + Math.round(Number(r.headers.get('content-length')) / 1e6) + ' MB');
+    } catch (e) { s.fail(e); }
+
+    const sm = step('GET ' + name + '.meta.json');
+    try {
+      const r = await fetch(CLASSIFIER.base + name + '.meta.json');
+      sm.ok(r.status + '  ' + JSON.stringify(await r.json()));
+    } catch (e) { sm.fail(e); }
+  }
+
+  const s4 = step('THE WHOLE CHAIN on a synthetic image');
+  try {
+    const t = performance.now();
+    const answer = await CLASSIFIER.classify(testImage(), {
+      confirmDownload: async () => true,
+      found: new Set(),
+      onPhase: (phase, fraction) => s4.progress(phase + ' ' + Math.round(fraction * 100) + ' %'),
+    });
+    s4.ok(Math.round(performance.now() - t) + ' ms\n' + JSON.stringify(answer, null, 1));
+  } catch (e) {
+    s4.fail(e);
+  }
+
+  const s5 = step('ort after the run');
+  s5.ok(window.ort ? ('version ' + (ort.env.versions ? ort.env.versions.common : '?') +
+    ', numThreads ' + ort.env.wasm.numThreads + ', proxy ' + ort.env.wasm.proxy)
+    : 'ort was never loaded');
+
+  document.getElementById('report').value = lines.join('\n');
+})();
+
+document.getElementById('copy').onclick = async () => {
+  const t = document.getElementById('report');
+  t.select();
+  try { await navigator.clipboard.writeText(t.value); alert('copied'); }
+  catch (_) { document.execCommand('copy'); }
+};
+</script>
+</body>
+</html>
