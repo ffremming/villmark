@@ -1,3 +1,8 @@
 # Unity source assets, not used by the web build
 VoxBox/
 .DS_Store
+
+# eksporterte artsmodeller - lastes opp til Hugging Face, ikke til git
+modeller/
+.venv/
+__pycache__/

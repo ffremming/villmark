@@ -24,7 +24,15 @@ const KS = {
   valgt:null,           // enhet eller handkort som er apnet i arket
   malvalg:null,         // {filter, tekst, res}
   logg:[],
+  nett:null,            // {rolle:'vert'|'gjest', kampId, navn} - null i enspillerkamp
 };
+
+/* Hver spiller styres av en av tre ting. Enspillerkampen bruker
+   'lokal' mot 'ai'; nettkampen bruker 'lokal' mot 'fjern'. */
+const erAi    = p => p.styring === 'ai';
+const erFjern = p => p.styring === 'fjern';
+const erVert  = () => !!KS.nett && KS.nett.rolle === 'vert';
+const erGjest = () => !!KS.nett && KS.nett.rolle === 'gjest';
 
 /* ============================================================ smating */
 const rndi  = (a,b) => Math.floor(a + Math.random()*(b-a+1));
@@ -33,24 +41,94 @@ const stokkOm = a => { for(let i=a.length-1;i>0;i--){ const j=rndi(0,i); [a[i],a
 const vent  = ms => new Promise(r => setTimeout(r, ms));
 const kraft = u => (u.kort.kraft || 0) + u.sol*REGLER.solKraft + u.buff + u.kbuff;
 
-function logg(t){
-  KS.logg.push(t);
+/* Loggteksten leses av begge sider, men "Du" betyr ulike ting hos dem.
+   Derfor lagres hvem som handlet, og %s / %S settes inn ved visning. */
+function logg(t, side){
+  const post = { t, s:(side == null ? null : side) };
+  KS.logg.push(post);
   if(KS.logg.length > 40) KS.logg.shift();
   const el = $('#ksLogg');
-  if(el){ el.textContent = t; }
+  if(el){ el.textContent = loggTekst(post, 0); }
+}
+function loggTekst(l, meg){
+  if(!l) return '';
+  if(l.s == null) return l.t;
+  const min = l.s === meg;
+  return l.t.replace('%S', min ? 'DIN' : 'MOTSTANDERENS')
+            .replace('%s', min ? 'Du' : 'Motstanderen');
 }
 
 /* lofter som ma kunne brytes nar spillet plutselig er over */
 function nyttLofte(){
   return new Promise((res, rej) => KS.ventende.push({res, rej}));
 }
+/* Loser det siste loftet som venter paa denne skjermen. Lofter som venter paa
+   svar fra motparten er merket 'fjern' og loses av nettmeldingen i stedet. */
 function losLofte(verdi){
-  const l = KS.ventende.pop();
-  if(l) l.res(verdi);
+  for(let i = KS.ventende.length - 1; i >= 0; i--){
+    if(KS.ventende[i].fjern) continue;
+    const l = KS.ventende.splice(i, 1)[0];
+    l.res(verdi);
+    return;
+  }
 }
 function brytAlleLofter(){
   const k = KS.ventende.splice(0);
+  fjernSvar.clear();
   for(const l of k) l.rej(SLUTT_SIGNAL);
+}
+
+/* ============================================================ fjernstyring */
+/* Verten eier motoren. Naar motoren trenger et valg fra gjesten, sendes
+   spoersmalet over kanalen og loftet blir staaende til svaret kommer. */
+const fjernSvar = new Map();   // spoersmalsid -> lofte
+let nesteSpm = 1;
+
+/* Alt som skal ut gaar gjennom en ko, saa rekkefolgen holder og vi ikke
+   sprenger takgrensa for kringkasting. Bare den siste tilstanden er
+   interessant, saa to paa rad slaas sammen. */
+const utKo = [];
+let utTimer = null;
+const UT_GAP = () => NETT.LOKAL_MODUS ? 0 : 120;
+
+function nettSend(m){
+  if(!KS.nett) return;
+  const siste = utKo[utKo.length - 1];
+  if(m.t === 'tilstand' && siste && siste.t === 'tilstand') utKo[utKo.length - 1] = m;
+  else utKo.push(m);
+  skyvKo();
+}
+function skyvKo(){
+  if(utTimer || !utKo.length || !KS.nett) return;
+  NETT.send(utKo.shift());
+  utTimer = setTimeout(() => { utTimer = null; skyvKo(); }, UT_GAP());
+}
+function tomKo(){ utKo.length = 0; clearTimeout(utTimer); utTimer = null; }
+
+function fjernLofte(id){
+  return new Promise((res, rej) => {
+    const l = { res, rej, fjern:true, id };
+    fjernSvar.set(id, l);
+    KS.ventende.push(l);
+  });
+}
+function losFjernLofte(id, verdi){
+  const l = fjernSvar.get(id);
+  if(!l) return;
+  fjernSvar.delete(id);
+  const i = KS.ventende.indexOf(l);
+  if(i >= 0) KS.ventende.splice(i, 1);
+  l.res(verdi);
+}
+
+/* Samme spoersmal, uansett hvem som skal svare. */
+function spor(side, tekst, kort, valg){
+  if(erFjern(KS.p[side])){
+    const id = nesteSpm++;
+    nettSend({ t:'spor', id, tekst, kort:(kort||[]).map(k => k.id), valg });
+    return fjernLofte(id);
+  }
+  return sporsmal(tekst, kort, valg);
 }
 
 function avsluttSpill(seier, grunn){
@@ -76,9 +154,9 @@ function nyEnhet(kort, side, sted){
 function enheter(p){ return [p.leder, ...p.arter]; }
 function alleEnheter(){ return [...enheter(KS.p[0]), ...enheter(KS.p[1])]; }
 
-function nySpiller(lederKort, ai){
+function nySpiller(lederKort, styring){
   const p = {
-    ai, stokk: stokkOm(byggStokk(lederKort).slice()),
+    styring, stokk: stokkOm(byggStokk(lederKort).slice()),
     hand:[], kompost:[], liv:[], arter:[], biotop:null,
     sol:{ total:0, aktiv:0, stokk:REGLER.solStokk },
     lederBrukt:false,
@@ -152,7 +230,15 @@ async function utfoerEff(side, e, kilde){
 async function velgMal(side, filter, tekst){
   const lovlige = alleEnheter().filter(filter);
   if(!lovlige.length) return null;
-  if(KS.p[side].ai) return aiVelgMal(side, lovlige, tekst);
+  if(erAi(KS.p[side])) return aiVelgMal(side, lovlige, tekst);
+
+  if(erFjern(KS.p[side])){
+    const id = nesteSpm++;
+    nettSend({ t:'malvalg', id, tekst, lovlige:lovlige.map(stiAv).filter(Boolean) });
+    const sti = await fjernLofte(id);
+    const valgt = sti ? enhetFraSti(speilSti(sti)) : null;
+    return lovlige.includes(valgt) ? valgt : null;
+  }
 
   KS.malvalg = { lovlige, tekst };
   tegn();
@@ -168,12 +254,12 @@ function aiVelgMal(side, lovlige, tekst){
 }
 
 /* ============================================================ oppsett */
-function nyttSpill(minLederId){
+function nyttSpill(minLederId, motLederId, motStyring){
   KS.minLeder = minLederId;
   const minL = KORTBASE[minLederId];
-  const foeL = pick(LEDERE.filter(l => l.id !== minLederId));
-  KS.p[0] = nySpiller(minL, false);
-  KS.p[1] = nySpiller(foeL, true);
+  const foeL = KORTBASE[motLederId] || pick(LEDERE.filter(l => l.id !== minLederId));
+  KS.p[0] = nySpiller(minL, 'lokal');
+  KS.p[1] = nySpiller(foeL, motStyring || 'ai');
   KS.p[0].leder.side = 0;
   KS.p[1].leder.side = 1;
   for(let s=0;s<2;s++){
@@ -189,29 +275,29 @@ function nyttSpill(minLederId){
 }
 
 /* apningshanda kan byttes en gang */
+function nyHand(p){
+  p.stokk.push(...p.hand.splice(0));
+  stokkOm(p.stokk);
+  for(let i=0;i<REGLER.apningshand;i++) p.hand.push(p.stokk.shift());
+}
 async function mulligan(){
-  const p = KS.p[1];
-  if(p.hand.filter(id => KORTBASE[id].kost <= 3).length < 2){
-    p.stokk.push(...p.hand.splice(0));
-    stokkOm(p.stokk);
-    for(let i=0;i<REGLER.apningshand;i++) p.hand.push(p.stokk.shift());
-  }
-  const svar = await sporsmal('BYTTE ÅPNINGSHÅND?',
-    KS.p[0].hand.map(id => KORTBASE[id]), ['BEHOLD', 'BYTT']);
-  if(svar === 1){
-    const q = KS.p[0];
-    q.stokk.push(...q.hand.splice(0));
-    stokkOm(q.stokk);
-    for(let i=0;i<REGLER.apningshand;i++) q.hand.push(q.stokk.shift());
-    logg('Ny apningshand.');
+  for(let s=0;s<2;s++){
+    const p = KS.p[s];
+    if(erAi(p)){
+      if(p.hand.filter(id => KORTBASE[id].kost <= 3).length < 2) nyHand(p);
+      continue;
+    }
+    const svar = await spor(s, 'BYTTE ÅPNINGSHÅND?',
+      p.hand.map(id => KORTBASE[id]), ['BEHOLD', 'BYTT']);
+    if(svar === 1){ nyHand(p); logg('Ny apningshand.'); tegn(); }
   }
 }
 
 /* ============================================================ turlokke */
-async function kjorSpill(minLederId){
+async function kjorSpill(minLederId, motLederId, motStyring){
   const g = ++KS.gen;
   try {
-    nyttSpill(minLederId);
+    nyttSpill(minLederId, motLederId, motStyring);
     tegn();
     await mulligan();
     if(KS.gen !== g) return;
@@ -246,11 +332,12 @@ async function turen(){
   const n = Math.min(gi, p.sol.stokk, REGLER.solStokk - p.sol.total);
   p.sol.stokk -= n; p.sol.total += n; p.sol.aktiv += n;
 
-  logg((p.ai ? 'MOTSTANDEREN' : 'DIN') + ' TUR ' + KS.turNr + ' — +' + n + ' SOL');
+  logg('%S TUR ' + KS.turNr + ' — +' + n + ' SOL', KS.tur);
   tegn();
 
-  /* 4 hovedfase */
-  if(p.ai){ await vent(650); await aiTur(); }
+  /* 4 hovedfase. Fjernspilleren venter paa samme loftet som den lokale:
+     handlingene dens kommer inn over kanalen og loser det. */
+  if(erAi(p)){ await vent(650); await aiTur(KS.tur); }
   else await menneskeTur();
 
   /* 5 sluttfase - kraft "denne turen" faller bort */
@@ -281,9 +368,9 @@ async function spillKort(side, handIndeks){
   /* artsomradet rommer fem. Skal en sjette inn, ma en av dine egne vekk. */
   if(kort.kat === 'art' && p.arter.length >= REGLER.maksArter){
     let offer;
-    if(p.ai) offer = p.arter.slice().sort((a,b) => a.kort.kost - b.kort.kost)[0];
+    if(erAi(p)) offer = p.arter.slice().sort((a,b) => a.kort.kost - b.kort.kost)[0];
     else {
-      const svar = await sporsmal('ARTSOMRÅDET ER FULLT — HVILKEN SKAL I KOMPOSTEN?',
+      const svar = await spor(side, 'ARTSOMRÅDET ER FULLT — HVILKEN SKAL I KOMPOSTEN?',
         p.arter.map(a => a.kort), ['AVBRYT', ...p.arter.map(a => a.kort.navn)]);
       if(svar === 0) return;
       offer = p.arter[svar-1];
@@ -298,16 +385,16 @@ async function spillKort(side, handIndeks){
   if(kort.kat === 'art'){
     const u = nyEnhet(kort, side, 'art');
     p.arter.push(u);
-    logg((side ? 'Motstanderen' : 'Du') + ' spiller ' + kort.navn + '.');
+    logg('%s spiller ' + kort.navn + '.', side);
     tegn();
     if(kort.eff && kort.eff.nar === 'ved_spill') await utfoerEff(side, kort.eff, u);
   } else if(kort.kat === 'biotop'){
     if(p.biotop) p.kompost.push(p.biotop.kort.id);
     p.biotop = nyEnhet(kort, side, 'biotop');
     p.biotop.brukt = false;
-    logg((side ? 'Motstanderen' : 'Du') + ' legger ut ' + kort.navn + '.');
+    logg('%s legger ut ' + kort.navn + '.', side);
   } else {
-    logg((side ? 'Motstanderen' : 'Du') + ' bruker ' + kort.navn + '.');
+    logg('%s bruker ' + kort.navn + '.', side);
     tegn();
     await utfoerEff(side, kort.eff, p.leder);
     p.kompost.push(id);
@@ -382,9 +469,9 @@ async function blokkSteg(){
   if(!vern.length) return;
 
   let valgt = null;
-  if(fp.ai) valgt = aiVelgVern(vern);
+  if(erAi(fp)) valgt = aiVelgVern(vern);
   else {
-    const svar = await sporsmal('BRUKE VERN?', vern.map(v => v.kort),
+    const svar = await spor(k.forsvS, 'BRUKE VERN?', vern.map(v => v.kort),
       ['LA DET STÅ', ...vern.map(v => v.kort.navn)]);
     if(svar > 0) valgt = vern[svar-1];
   }
@@ -400,7 +487,7 @@ async function blokkSteg(){
 async function mottrekkSteg(){
   const k = KS.kamp;
   const fp = KS.p[k.forsvS];
-  if(fp.ai){ aiMottrekk(); return; }
+  if(erAi(fp)){ aiMottrekk(); return; }
 
   while(true){
     const kort = fp.hand.map((id,i) => ({ kort:KORTBASE[id], i }))
@@ -409,7 +496,7 @@ async function mottrekkSteg(){
     if(!kort.length) return;
     const merker = kort.map(o => o.kort.kat === 'hendelse' && o.kort.eff.nar === 'mottrekk'
       ? o.kort.navn + ' (HENDELSE)' : o.kort.navn + ' +' + o.kort.mot);
-    const svar = await sporsmal(
+    const svar = await spor(k.forsvS,
       'MOTTREKK — ' + kraft(k.ang) + ' MOT ' + kraft(k.mal),
       kort.map(o => o.kort), ['LA DET STÅ', ...merker]);
     if(svar === 0) return;
@@ -462,8 +549,8 @@ async function treffLeder(side, antall, fortaer){
       continue;
     }
     if(kort.utloser){
-      const bruk = p.ai ? true
-        : (await sporsmal('UTLØSER: ' + kort.navn, [kort], ['LA DET LIGGE','BRUK UTLØSER'])) === 1;
+      const bruk = erAi(p) ? true
+        : (await spor(side, 'UTLØSER: ' + kort.navn, [kort], ['LA DET LIGGE','BRUK UTLØSER'])) === 1;
       if(bruk){
         p.kompost.push(id);
         logg('UTLØSER: ' + effTekst(kort.utloser));
@@ -472,15 +559,15 @@ async function treffLeder(side, antall, fortaer){
       }
     }
     p.hand.push(id);
-    logg((side ? 'Motstanderen' : 'Du') + ' tar 1 skade — livskortet gar til handa.');
+    logg('%s tar 1 skade — livskortet gar til handa.', side);
     tegn();
   }
-  if(!p.liv.length) logg((side ? 'Motstanderen' : 'Du') + ' har ingen liv igjen!');
+  if(!p.liv.length) logg('%s har ingen liv igjen!', side);
 }
 
 /* ============================================================ maskinspiller */
-async function aiTur(){
-  const p = KS.p[1], mp = KS.p[0];
+async function aiTur(side){
+  const p = KS.p[side], mp = KS.p[1-side];
 
   /* spill kort, dyreste forst */
   let spilte = true;
@@ -488,28 +575,27 @@ async function aiTur(){
     spilte = false;
     const valg = p.hand
       .map((id,i) => ({ k:KORTBASE[id], i }))
-      .filter(o => kanSpille(1, o.k) && aiVilSpille(o.k))
+      .filter(o => kanSpille(side, o.k) && aiVilSpille(side, o.k))
       .sort((a,b) => b.k.kost - a.k.kost);
-    if(valg.length){ await spillKort(1, valg[0].i); await vent(330); spilte = true; }
+    if(valg.length){ await spillKort(side, valg[0].i); await vent(330); spilte = true; }
   }
 
   /* aktivert effekt */
   if(p.leder.kort.eff && p.leder.kort.eff.nar === 'aktiver'){
-    await aktiver(1, p.leder); await vent(260);
+    await aktiver(side, p.leder); await vent(260);
   }
   if(p.biotop && p.biotop.kort.eff.nar === 'aktiver'){
-    await aktiver(1, p.biotop); await vent(260);
+    await aktiver(side, p.biotop); await vent(260);
   }
 
   /* angrep */
-  let angripere = enheter(p).filter(kanAngripe);
-  for(const a of angripere){
+  for(const a of enheter(p).slice()){
     if(KS.slutt) return;
     if(!kanAngripe(a)) continue;
     const mal = aiVelgAngrepsmal(a, mp);
     if(!mal) continue;
     /* gi SOL hvis det avgjor angrepet */
-    while(p.sol.aktiv > 0 && kraft(a) < kraft(mal.u)) giSol(1, a);
+    while(p.sol.aktiv > 0 && kraft(a) < kraft(mal.u)) giSol(side, a);
     if(kraft(a) < kraft(mal.u) && mal.u.sted === 'art') continue;
     await angrip(a, mal.u);
     await vent(400);
@@ -517,8 +603,8 @@ async function aiTur(){
   await vent(350);
 }
 
-function aiVilSpille(k){
-  const p = KS.p[1];
+function aiVilSpille(side, k){
+  const p = KS.p[side], mp = KS.p[1-side];
   if(k.kat === 'art'){
     if(p.arter.length < REGLER.maksArter) return true;
     /* bytter bare ut en svakere art */
@@ -526,7 +612,7 @@ function aiVilSpille(k){
   }
   if(k.kat === 'biotop') return !p.biotop;
   if(k.eff.gjor === 'ko' || k.eff.gjor === 'hvil')
-    return KS.p[0].arter.some(a => a.kort.kost <= k.eff.maks && (k.eff.gjor === 'ko' || !a.hvilt));
+    return mp.arter.some(a => a.kort.kost <= k.eff.maks && (k.eff.gjor === 'ko' || !a.hvilt));
   if(k.eff.gjor === 'kraft') return false;   // spares til kamp
   return true;
 }
@@ -571,9 +657,26 @@ function aiMottrekk(){
   tegn();
 }
 
-/* ============================================================ kortgrafikk */
+/* ============================================================ kortgrafikk
+   Modellbildene er store data-URLer. De legges derfor i et eget stilark,
+   en regel per art, slik at brettet kan tegnes om uten a dra med seg
+   flere hundre kilobyte HTML hver gang. */
+let kunstArk = null;
+const kunstLagt = new Set();
 function kunst(kort){
-  try { return VM().lagMini(kort.artId, null); } catch(e){ return ''; }
+  const id = kort.artId, kl = 'kunst-' + id;
+  if(kunstLagt.has(id)) return kl;
+  try {
+    if(!kunstArk){
+      const s = document.createElement('style');
+      document.head.appendChild(s);
+      kunstArk = s.sheet;
+    }
+    kunstArk.insertRule(`.${kl}{background-image:url(${VM().lagMini(id, null)})}`,
+      kunstArk.cssRules.length);
+    kunstLagt.add(id);
+  } catch(e){ return ''; }
+  return kl;
 }
 function fargeStil(kort){
   const f = KORTFARGER[kort.farger[0]];
@@ -597,7 +700,7 @@ function kortStorHTML(kort){
       <span class="kg-navn">${kort.navn}</span>
       ${kort.attributt ? `<span class="kg-attr">${kort.attributt}</span>` : ''}
     </div>
-    <div class="kg-kunst" style="background-image:url(${kunst(kort)})">
+    <div class="kg-kunst ${kunst(kort)}">
       ${kort.mot ? `<span class="kg-mot"><i>MOT</i>${kort.mot}</span>` : ''}
       <span class="kg-kat">${katMerke(kort)}</span>
     </div>
@@ -624,7 +727,7 @@ function kortMiniHTML(kort, o={}){
   const sol = o.sol ? `<span class="kk-sol">${'●'.repeat(Math.min(5,o.sol))}</span>` : '';
   return `<div class="${kl.join(' ')}" style="${fargeStil(kort)}" ${o.data||''}>
     <span class="kk-kost">${kort.kat === 'leder' ? kort.liv : kort.kost}</span>
-    <span class="kk-kunst" style="background-image:url(${kunst(kort)})"></span>
+    <span class="kk-kunst ${kunst(kort)}"></span>
     <span class="kk-navn">${kort.navn}</span>
     ${kr != null ? `<span class="kk-kraft">${kr}</span>` : ''}
     ${kort.nokler.length ? `<span class="kk-nok">${NOKKEL_VIS[kort.nokler[0]][0]}</span>` : ''}
@@ -688,6 +791,9 @@ function tegn(){
   $('#ksBanner').hidden = !KS.malvalg;
   if(KS.malvalg) $('#ksBannerTxt').textContent = KS.malvalg.tekst;
   document.body.classList.toggle('ks-velger', !!KS.malvalg);
+
+  /* Verten er sannheten: hver gang brettet endrer seg, far gjesten det. */
+  if(erVert()) nettSend({ t:'tilstand', d:lagTilstand(1) });
 }
 
 /* ============================================================ ark og dialog */
@@ -713,6 +819,8 @@ function sporsmal(tekst, kort, valg){
 }
 
 function visResultat(){
+  vistResultat = true;
+  if(erVert()) nettSend({ t:'tilstand', d:lagTilstand(1) });
   $('#ksResultTxt').textContent = KS.seier ? 'SEIER!' : 'TAP';
   $('#ksResultTxt').classList.toggle('tap', !KS.seier);
   $('#ksResultGrunn').textContent = KS.grunn;
@@ -728,11 +836,25 @@ function sti(el){
   return d ? d.dataset.sti.split(':') : null;
 }
 function enhetFraSti(s){
+  if(!s) return null;
   const p = KS.p[+s[1]];
+  if(!p) return null;
   if(s[2] === 'leder')  return p.leder;
   if(s[2] === 'biotop') return p.biotop;
-  return p.arter[+s[3]];
+  return p.arter[+s[3]] || null;
 }
+/* Motsatt vei: fra enhet til sti. Stien er trebokstavsspraaket vi sender
+   over nettet, og det samme som ligger i data-sti paa brettet. */
+function stiAv(u){
+  if(!u) return null;
+  if(u.sted === 'leder')  return ['e', String(u.side), 'leder', '0'];
+  if(u.sted === 'biotop') return ['e', String(u.side), 'biotop', '0'];
+  const i = KS.p[u.side].arter.indexOf(u);
+  return i < 0 ? null : ['e', String(u.side), 'art', String(i)];
+}
+/* Speiler en sti mellom de to perspektivene. Operasjonen er sin egen invers.
+   Stier paa nettet staar alltid i avsenderens perspektiv; mottakeren speiler. */
+function speilSti(s){ return s ? ['e', s[1] === '0' ? '1' : '0', s[2], s[3]] : null; }
 
 const brettKlikk = trygg(async e => {
   const s = sti(e.target);
@@ -754,7 +876,7 @@ const brettKlikk = trygg(async e => {
     const kort = KORTBASE[KS.p[0].hand[i]];
     apneArk(kort, [
       { t:'SPILL · ' + kort.kost + ' SOL', pri:true, av:!kanSpille(0,kort),
-        gjor: async () => { lukkArk(); await spillKort(0, i); } },
+        gjor: async () => { lukkArk(); await handling({ h:'spill', i }); } },
       { t:'LUKK', gjor: lukkArk },
     ]);
     return;
@@ -770,27 +892,266 @@ const brettKlikk = trygg(async e => {
     knapper.push({ t:'ANGRIP', pri:true, gjor: async () => {
       lukkArk();
       const mal = await velgMal(0, x => lovligeMal(1).includes(x), 'VELG MÅL FOR ANGREPET');
-      if(mal) await angrip(u, mal);
+      const til = stiAv(mal);
+      if(til) await handling({ h:'angrip', fra:s, til });
     }});
   }
   if(u.side === 0 && u.sted !== 'biotop' && KS.p[0].sol.aktiv > 0){
-    knapper.push({ t:'GI SOL', gjor: () => { giSol(0, u); lukkArk(); } });
+    knapper.push({ t:'GI SOL', gjor: async () => { lukkArk(); await handling({ h:'sol', sti:s }); } });
   }
   if(u.side === 0 && u.kort.eff && u.kort.eff.nar === 'aktiver'){
     const brukt = u.sted === 'leder' ? KS.p[0].lederBrukt : u.brukt;
-    knapper.push({ t:'AKTIVER', av:brukt, gjor: async () => { lukkArk(); await aktiver(0, u); } });
+    knapper.push({ t:'AKTIVER', av:brukt, gjor: async () => { lukkArk(); await handling({ h:'aktiver', sti:s }); } });
   }
   knapper.push({ t:'LUKK', gjor: lukkArk });
   apneArk(u.kort, knapper);
   tegn();
 });
 
+/* ============================================================ nettkamp */
+/* Verten eier motoren og er alltid side 0 i sin egen KS. Gjesten kjorer ikke
+   motoren i det hele tatt: den far speilvendte oyeblikksbilder der den selv
+   ligger paa plass 0, og kan derfor bruke tegn() og brettKlikk uendret. */
+
+let vistResultat = false;
+let vertIGang = false;
+
+/* -------- handlinger -------- */
+/* De fem tingene en spiller faktisk kan gjore. Gjesten sender dem over
+   kanalen i stedet for a utfore dem; verten utforer dem for begge. */
+async function handling(m){
+  if(erGjest()){ nettSend({ t:'handling', m }); return; }
+  await utforHandling(0, m);
+}
+
+async function utforHandling(side, m){
+  if(KS.slutt || KS.tur !== side) return;
+  switch(m.h){
+    case 'spill':
+      await spillKort(side, +m.i);
+      break;
+    case 'angrip': {
+      const a = enhetFraSti(m.fra), b = enhetFraSti(m.til);
+      if(!a || !b || a.side !== side) return;
+      if(!kanAngripe(a) || !lovligeMal(1 - side).includes(b)) return;
+      await angrip(a, b);
+      break; }
+    case 'sol': {
+      const u = enhetFraSti(m.sti);
+      if(u && u.side === side && u.sted !== 'biotop') giSol(side, u);
+      break; }
+    case 'aktiver': {
+      const u = enhetFraSti(m.sti);
+      if(u && u.side === side) await aktiver(side, u);
+      break; }
+    case 'avslutt': {
+      if(KS.kamp || KS.malvalg) return;
+      const f = KS.turFerdig; KS.turFerdig = null;
+      if(f) f();
+      break; }
+  }
+}
+
+function speilHandling(m){
+  const r = { ...m };
+  if(r.fra) r.fra = speilSti(r.fra);
+  if(r.til) r.til = speilSti(r.til);
+  if(r.sti) r.sti = speilSti(r.sti);
+  return r;
+}
+
+/* -------- oyeblikksbilde -------- */
+function serEnhet(u, meg){
+  if(!u) return null;
+  return { k:u.kort.id, side:(u.side === meg ? 0 : 1), sted:u.sted,
+           hvilt:u.hvilt, ny:u.ny, sol:u.sol, buff:u.buff, kbuff:u.kbuff, brukt:u.brukt };
+}
+/* aapen = mottakerens egen side. Motpartens hand og stokk sendes som antall,
+   saa kortene aldri forlater verten. */
+function serSpiller(p, meg, aapen){
+  return {
+    hand: aapen ? p.hand.slice() : p.hand.length,
+    stokk: p.stokk.length, kompost: p.kompost.length, liv: p.liv.length,
+    sol: { ...p.sol }, lederBrukt: p.lederBrukt,
+    leder: serEnhet(p.leder, meg),
+    biotop: serEnhet(p.biotop, meg),
+    arter: p.arter.map(a => serEnhet(a, meg)),
+  };
+}
+function lagTilstand(forSide){
+  const sisteLogg = KS.logg[KS.logg.length - 1];
+  return {
+    p: [ serSpiller(KS.p[forSide], forSide, true),
+         serSpiller(KS.p[1 - forSide], forSide, false) ],
+    tur:    KS.tur    === forSide ? 0 : 1,
+    forste: KS.forste === forSide ? 0 : 1,
+    turNr: KS.turNr, slutt: KS.slutt, grunn: KS.grunn,
+    seier: forSide === 0 ? KS.seier : !KS.seier,
+    kamp: !!KS.kamp,
+    logg: sisteLogg
+      ? { t:sisteLogg.t, s:(sisteLogg.s == null ? null : (sisteLogg.s === forSide ? 0 : 1)) }
+      : null,
+  };
+}
+
+function deEnhet(e){
+  if(!e) return null;
+  return { kort:KORTBASE[e.k], side:e.side, sted:e.sted, hvilt:e.hvilt, ny:e.ny,
+           sol:e.sol, buff:e.buff, kbuff:e.kbuff, brukt:e.brukt };
+}
+/* Kortrygger vi bare teller. Da virker livRadHTML og stokketellingen uendret. */
+const fyll = n => new Array(n).fill('?');
+
+function deSpiller(d, styring){
+  const p = {
+    styring,
+    hand: Array.isArray(d.hand) ? d.hand.slice() : fyll(d.hand),
+    stokk: fyll(d.stokk), kompost: fyll(d.kompost), liv: fyll(d.liv),
+    sol: { ...d.sol }, lederBrukt: d.lederBrukt,
+    arter: d.arter.map(deEnhet),
+    biotop: deEnhet(d.biotop),
+  };
+  p.leder = deEnhet(d.leder);
+  return p;
+}
+
+function lesTilstand(d){
+  clearInterval(klarPuls); klarPuls = null;
+  KS.p[0] = deSpiller(d.p[0], 'lokal');
+  KS.p[1] = deSpiller(d.p[1], 'fjern');
+  KS.tur = d.tur; KS.forste = d.forste; KS.turNr = d.turNr;
+  KS.slutt = d.slutt; KS.seier = d.seier; KS.grunn = d.grunn;
+  KS.kamp = d.kamp ? {} : null;
+  KS.valgt = null;
+  /* Enhetene er nye objekter naa, saa et paagaende malvalg maa peke paa nytt. */
+  if(KS.malvalg && KS.malvalg.stier){
+    KS.malvalg.lovlige = KS.malvalg.stier.map(enhetFraSti).filter(Boolean);
+  }
+  if(d.logg){
+    KS.logg.push(d.logg);
+    if(KS.logg.length > 40) KS.logg.shift();
+  }
+  tegn();
+  if(d.logg){ const el = $('#ksLogg'); if(el) el.textContent = loggTekst(d.logg, 0); }
+  if(KS.slutt && !vistResultat){ vistResultat = true; visResultat(); }
+}
+
+/* -------- gjestens svar paa vertens spoersmal -------- */
+async function gjestSpor(m){
+  const kort = (m.kort || []).map(id => KORTBASE[id]).filter(Boolean);
+  let v;
+  try { v = await sporsmal(m.tekst, kort, m.valg); }
+  catch(e){ return; }
+  nettSend({ t:'svar', id:m.id, verdi:v });
+}
+
+async function gjestMalvalg(m){
+  const lovlige = (m.lovlige || []).map(s => enhetFraSti(speilSti(s))).filter(Boolean);
+  if(!lovlige.length){ nettSend({ t:'svar', id:m.id, verdi:null }); return; }
+  const stier = lovlige.map(stiAv).filter(Boolean);
+  KS.malvalg = { lovlige, tekst:m.tekst, stier };
+  tegn();
+  let u = null;
+  try { u = await nyttLofte(); }
+  catch(e){ return; }
+  KS.malvalg = null;
+  tegn();
+  nettSend({ t:'svar', id:m.id, verdi: u ? stiAv(u) : null });
+}
+
+/* -------- innkommende meldinger -------- */
+const taImot = trygg(async m => {
+  if(!m || !KS.nett) return;
+  if(m.t === 'farvel'){ avbrytNettkamp('MOTSTANDEREN FORLOT KAMPEN'); return; }
+
+  if(erVert()){
+    if(m.t === 'klar'){ vertStart(m.leder); return; }
+    if(m.t === 'handling'){ await utforHandling(1, speilHandling(m.m)); return; }
+    if(m.t === 'svar'){ losFjernLofte(m.id, m.verdi); return; }
+    return;
+  }
+  switch(m.t){
+    case 'tilstand': lesTilstand(m.d); break;
+    case 'spor':     await gjestSpor(m); break;
+    case 'malvalg':  await gjestMalvalg(m); break;
+  }
+});
+
+/* -------- start og slutt -------- */
+function tomtBrett(tekst){
+  for(const id of ['foeLiv','myLiv','foeSol','mySol','foeLeder','myLeder',
+                   'foeBiotop','myBiotop','foeArter','myArter','myHand']){
+    const el = $('#' + id); if(el) el.innerHTML = '';
+  }
+  $('#foeTall').textContent = ''; $('#myTall').textContent = '';
+  $('#ksTur').textContent = tekst;
+  $('#ksLogg').textContent = ' ';
+  $('#ksAvslutt').disabled = true;
+}
+
+function startVert(kampId){
+  KS.nett = { rolle:'vert', kampId };
+  KS.p[0] = KS.p[1] = null;
+  vertIGang = false;
+  nullstill();
+  tomtBrett('VENTER PÅ MOTSTANDEREN');
+}
+
+/* Gjesten vet ikke naar verten har abonnert paa kanalen, saa den gjentar
+   meldingen til det forste oyeblikksbildet kommer tilbake. */
+let klarPuls = null;
+function startGjest(kampId){
+  KS.nett = { rolle:'gjest', kampId };
+  KS.p[0] = KS.p[1] = null;
+  nullstill();
+  tomtBrett('VENTER PÅ MOTSTANDEREN');
+  const si = () => nettSend({ t:'klar', leder:KS.minLeder });
+  si();
+  clearInterval(klarPuls);
+  klarPuls = setInterval(() => { if(erGjest()) si(); else clearInterval(klarPuls); }, 1000);
+}
+
+/* Verten venter til gjesten melder seg, saa den vet hvilken leder
+   motparten stiller med. */
+function vertStart(motLeder){
+  if(vertIGang || !erVert()) return;
+  vertIGang = true;
+  vistResultat = false;
+  kjorSpill(KS.minLeder, motLeder, 'fjern');
+}
+
+function avbrytNettkamp(grunn){
+  if(!KS.nett) return;
+  KS.nett = null;
+  clearInterval(klarPuls); klarPuls = null;
+  KS.gen++;                       // gamle motorlokker gir seg
+  brytAlleLofter();
+  if(KS.turFerdig){ const f = KS.turFerdig; KS.turFerdig = null; f(); }
+  tomKo();
+  NETT.kampUt();
+  VM().toast(grunn);
+  VM().gaTil('lobby');
+}
+
+/* Kalles naar spilleren gaar ut av dystskjermen. */
+function forlat(){
+  if(!KS.nett) return;
+  KS.nett = null;
+  clearInterval(klarPuls); klarPuls = null;
+  KS.gen++;
+  brytAlleLofter();
+  if(KS.turFerdig){ const f = KS.turFerdig; KS.turFerdig = null; f(); }
+  NETT.send({ t:'farvel' });
+  tomKo();
+  NETT.kampUt();
+}
+
 /* ============================================================ oppstart */
 let kablet = false;
 function kable(){
   if(kablet) return;
   kablet = true;
-  $('#ksBrett').addEventListener('click', brettKlikk);
+  $('#screen-battle').addEventListener('click', brettKlikk);  // dekker brett og hand
 
   $('#ksArkKnapper').addEventListener('click', trygg(async e => {
     const b = e.target.closest('[data-ark]');
@@ -804,35 +1165,56 @@ function kable(){
     if(b) losLofte(+b.dataset.dlg);
   });
 
-  $('#ksAvslutt').addEventListener('click', () => {
+  $('#ksAvslutt').addEventListener('click', trygg(async () => {
     if(KS.tur !== 0 || KS.kamp || KS.malvalg || KS.slutt) return;
     VM().LYD.klikk();
-    const f = KS.turFerdig; KS.turFerdig = null;
-    if(f) f();
-  });
+    await handling({ h:'avslutt' });
+  }));
 
   $('#ksAvbryt').addEventListener('click', () => {
     if(KS.malvalg) losLofte(null);
   });
 
+  /* Lederbytte hoerer til enspillerkampen. I nettkamp velges lederen i lobbyen. */
   $('#ksBytt').addEventListener('click', () => {
+    if(KS.nett){ VM().toast('LEDEREN VELGES I LOBBYEN'); return; }
     const i = LEDERE.findIndex(l => l.id === KS.minLeder);
     KS.minLeder = LEDERE[(i+1) % LEDERE.length].id;
     start();
   });
 
-  $('#ksIgjen').addEventListener('click', () => start());
+  $('#ksIgjen').addEventListener('click', () => {
+    if(KS.nett){ forlat(); VM().gaTil('lobby'); return; }
+    start();
+  });
 }
 
-function start(){
+/* Felles opprydding for alle tre oppstartene. */
+function nullstill(){
   kable();
   $('#ksResult').hidden = true;
   $('#ksDialog').hidden = true;
   $('#ksArk').hidden = true;
+  $('#ksBanner').hidden = true;
+  document.body.classList.remove('ks-velger');
   KS.turFerdig = null;
+  KS.malvalg = null;
+  KS.valgt = null;
+  KS.logg = [];
+  vistResultat = false;
   brytAlleLofter();
+  tomKo();
+}
+
+function start(){
+  KS.nett = null;
+  nullstill();
   kjorSpill(KS.minLeder);
 }
 
-return { start, KS };
+return {
+  start, startVert, startGjest, forlat, taImot,
+  motpartBorte: () => avbrytNettkamp('MOTSTANDEREN MISTET FORBINDELSEN'),
+  KS,
+};
 })();

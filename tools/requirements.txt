@@ -1,0 +1,15 @@
+# Byggesteg for artsmodellene. Kjores en gang lokalt, ikke av spillet.
+# Python 3.10-3.12.
+torch>=2.4
+torchvision>=0.19
+onnx>=1.16
+onnxruntime>=1.19
+onnxconverter-common>=1.14     # fp16-konvertering
+pillow>=10.0
+numpy>=1.26
+
+# dyremodellen
+speciesnet>=5.0
+
+# plantemodellen
+birder>=0.7

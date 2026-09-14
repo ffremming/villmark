@@ -57,10 +57,14 @@ function sesongFraDato(d = new Date()){
 const STATE = {
   funnet: new Set(),
   varianter: {},          // artsid -> variantnoekkel
-  mynt: 120,
+  mynt: 500,             // startkapital - mynt tjener du bare paa dyster
   niva: 3,
-  kjopt: new Set(),      // hageting fra butikken
+  pynt: [],              // kjopte hageting: {uid, id, x, z, rotY}. x=null = ikke satt ut enda
+  nestePyntUid: 1,
+  eksemplarer: [],       // hvert skann gir ett eksemplar: {uid, art, niva, variant, x, z}
+  nesteUid: 1,
   sistLagt: null,        // art som skal vokse fram paa plenen
+  kartMal: null,        // art valgt fra kartet - overstyrer tilfeldig skann
   malArt: null,
   malVariant: null,
   sesong: sesongFraDato(),
@@ -76,6 +80,33 @@ function trekkVariant(){
   return null;
 }
 function variantAv(id){ return STATE.varianter[id] || null; }
+
+/* ---------- eksemplarer og nivaa ----------
+   Samme art kan staa flere ganger paa plenen. To eksemplarer av samme art
+   paa samme nivaa kan dras sammen til ett eksemplar ett nivaa hoyere. */
+const NIVA_STEG = 0.15;          // +15 % paa alle stats per nivaa
+
+function nyttEksemplar(art, variant){
+  const e = { uid: STATE.nesteUid++, art, niva:1, variant: variant || null, x:null, z:null };
+  STATE.eksemplarer.push(e);
+  STATE.funnet.add(art);
+  if(variant) STATE.varianter[art] = variant;
+  return e;
+}
+function eksemplarerAv(art){ return STATE.eksemplarer.filter(e => e.art === art); }
+function toppNiva(art){
+  const liste = eksemplarerAv(art);
+  return liste.length ? Math.max.apply(null, liste.map(e => e.niva)) : 1;
+}
+function statPaaNiva(sp, niva){
+  const f = 1 + NIVA_STEG*(niva-1);
+  return {
+    hp:      Math.round(sp.hp * f),
+    angrep:  Math.round(sp.angrep * f),
+    forsvar: Math.round(sp.forsvar * f),
+    fart:    Math.round(sp.fart * f),
+  };
+}
 function visningsNavn(id){
   const v = variantAv(id);
   return v ? VARIANTER[v].navn + ' ' + SPECIES_BY_ID[id].navn : SPECIES_BY_ID[id].navn;
@@ -159,12 +190,21 @@ function sesongPalett(farger){
   return fx ? farger.map(fx) : farger;
 }
 
-function bakke(bredde, farger, kant){
+function bakke(bredde, farger, kant, hull){
   const v = new Vox();
   const h = Math.floor(bredde/2);
+  const groper = hull || [];
   for(let x=-h;x<h;x++) for(let z=-h;z<h;z++){
     const r = Math.hypot(x,z);
     if(kant && r > h-0.5) continue;
+    /* er ruta inne i en dam? da ligger gressflata ett hakk lavere,
+       med mudderbunn - ellers hadde vannspeilet havnet under graset */
+    let iGrop = false;
+    for(const g of groper) if(Math.hypot(x - g.x, z - g.z) <= g.r){ iGrop = true; break; }
+    if(iGrop){
+      v.set(x,-1,z, 0x6b5a3e);
+      continue;
+    }
     v.set(x,0,z, pick(farger));
     if(kant && r > h-2.5) v.set(x,-1,z, 0x5a4a34);
   }
@@ -230,15 +270,15 @@ function nyScene(clear, alpha=1, hfov=55){
 // ------------------------------------------------ PLENEN (FELT)
 /* Plenen er stor. Du flytter deg ikke selv - du drar kameraet over graset
    med fingeren, kniper for aa zoome, og trykker paa en art for aa se kortet. */
-const PLEN_R     = 48;      // halve plenen i voxelruter
+const PLEN_R     = 62;      // halve plenen i voxelruter
 const PLEN_SKALA = 1.55;    // artene staar litt storre enn kortformatet
 const PROP_SKALA = 0.3;     // hageting er bygget i finere voxelrutenett
-const DAM_MIDT   = { x:-13, z:9, r:6 };
-const AKVATISK   = { torsk:1, tare:1, steinkobbe:1, oter:1 };
+const DAM_R      = 6;       // radius paa en dam
+const DAM_VANN   = 0.75;    // vannspeilet: gropa har bunn i y=0, graset ligger i y=1
 
 const FELT = (() => {
   const S = nyScene(0x9ed0ef, 1, 56);
-  S.scene.fog = new THREE.Fog(0x9ed0ef, 60, 150);
+  S.scene.fog = new THREE.Fog(0x9ed0ef, 42, 104);
   standardLys(S.scene, {skygge:46});
 
   const rot = new THREE.Group();
@@ -246,7 +286,9 @@ const FELT = (() => {
 
   const arter = [];         // {grp, art, base, fase, r, plante, baseY, vokse}
   const plukkbare = [];
-  let dam = null;
+  const pynt = [];          // {grp, p, pynt:true, baseY}
+  const pyntPlukkbare = [];
+  const dammer = [];
   const kam = { x:0, z:0, avstand:26, vinkel:0.62 };
   const mal = { x:0, z:0, avstand:26 };
   let t0 = 0;
@@ -258,7 +300,8 @@ const FELT = (() => {
     kam.z       += (mal.z - kam.z) * k;
     kam.avstand += (mal.avstand - kam.avstand) * k;
     const d = kam.avstand;
-    S.cam.position.set(kam.x + Math.sin(kam.vinkel)*d, d*0.62, kam.z + Math.cos(kam.vinkel)*d);
+    // mer ovenfra: hoyere kamera, kortere vannrett avstand (ca 51 grader)
+    S.cam.position.set(kam.x + Math.sin(kam.vinkel)*d*0.78, d*0.96, kam.z + Math.cos(kam.vinkel)*d*0.78);
     S.cam.lookAt(kam.x, 1, kam.z);
 
     for(const o of arter){
@@ -267,20 +310,20 @@ const FELT = (() => {
         const e = 1 - Math.pow(1-o.vokse, 3);
         o.grp.scale.setScalar(e * (1 + Math.sin(o.vokse*Math.PI)*0.14));
       }
-      if(o.plante) continue;
+      if(o.dras || o.plante) continue;
       o.fase += dt * (0.22 + SPECIES_BY_ID[o.art].fart/150);
       o.grp.position.x = o.base.x + Math.cos(o.fase)*o.r;
       o.grp.position.z = o.base.z + Math.sin(o.fase)*o.r;
       o.grp.rotation.y = -o.fase + Math.PI/2;
       o.grp.position.y = o.baseY + Math.abs(Math.sin(o.fase*6))*0.12;
     }
-    if(dam) dam.position.y = 0.96 + Math.sin(t0*1.2)*0.035;
+    for(const d of dammer) d.position.y = DAM_VANN + Math.sin(t0*1.2)*0.03;
   };
 
   SCENES.field = S;
   return {
-    S, rot, arter, plukkbare, kam,
-    settDam: m => dam = m,
+    S, rot, arter, plukkbare, pynt, pyntPlukkbare, kam,
+    settDam: liste => { dammer.length = 0; if(liste) dammer.push.apply(dammer, liste); },
     /** dra: flytt kameraet langs bakken i skjermens retning */
     panorer: (dx, dy) => {
       const f = kam.avstand * 0.0023;
@@ -293,6 +336,16 @@ const FELT = (() => {
     tilPunkt: (x, z) => { mal.x = clamp(x, -PLEN_R+8, PLEN_R-8); mal.z = clamp(z, -PLEN_R+8, PLEN_R-8); },
   };
 })();
+
+/** demo- og testhjelp: still opp alt som ikke er satt ut for haand */
+function stillOppAlle(){
+  let i = 0;
+  for(const ex of STATE.eksemplarer){
+    if(ex.x !== null) { i++; continue; }
+    const p = feltPlass(i++);
+    ex.x = p.x; ex.z = p.z;
+  }
+}
 
 /** gylden vinkel: artene brer seg utover plenen etter hvert som du samler */
 function feltPlass(i){
@@ -308,6 +361,30 @@ function engPalett(sesong){
   if(!fx) return gress;
   if(sesong === 'vinter') return gress.map(fx);
   return gress.map((c,i) => i % 2 ? fx(c) : c);
+}
+
+/** staar punktet i en dam? da ligger arten lavere */
+function iDammen(x, z){
+  for(const p of STATE.pynt)
+    if(p.id === 'dam' && p.x !== null && Math.hypot(x - p.x, z - p.z) < DAM_R - 0.8) return true;
+  return false;
+}
+function artHoyde(id, x, z){
+  if(!iDammen(x, z)) return 1;
+  /* gropa har bunn i y=0 og vannspeil i DAM_VANN: arten staar paa bunnen
+     med foettene under vann, tara stikker bare toppen opp */
+  return id === 'tare' ? 0.15 : 0.4;
+}
+
+/** vannspeilet i en dam - egen flate, ikke voxel */
+function damMesh(x, z, sesong){
+  const m = new THREE.Mesh(
+    new THREE.CircleGeometry(DAM_R + 0.6, 44),   // litt bredere enn gropa saa kanten gjemmes under graset
+    new THREE.MeshLambertMaterial({
+      color: sesong==='vinter' ? 0x8fb6c8 : 0x2f86b4, transparent:true, opacity:0.82 }));
+  m.rotation.x = -Math.PI/2;
+  m.position.set(x, DAM_VANN, z);
+  return m;
 }
 
 function propMesh(id, x, z, rotY, skala){
@@ -326,101 +403,80 @@ function byggFelt(){
 
   const sesong = STATE.sesong;
   const funn = SPECIES.filter(s => STATE.funnet.has(s.id));
-  const har = id => STATE.kjopt.has(id);
 
-  // --------- selve plenen
-  rot.add(bakke(PLEN_R*2, engPalett(sesong), true));
+  // --------- selve plenen, med grop under hver dam
+  const groper = STATE.pynt
+    .filter(p => p.id === 'dam' && p.x !== null)
+    .map(p => ({ x:p.x, z:p.z, r:DAM_R }));
+  rot.add(bakke(PLEN_R*2, engPalett(sesong), true, groper));
 
-  // --------- kjopte hageting
-  const ytre = funn.length ? feltPlass(funn.length-1).r : 9;
+  // --------- kjopte hageting: hver ting staar der du satte den
+  FELT.pynt.length = 0; FELT.pyntPlukkbare.length = 0;
+  const dammer = [];
+  for(const p of STATE.pynt){
+    if(p.x === null || p.z === null) continue;     // ikke satt ut enda
+    const vare = BUTIKK_BY_ID[p.id];
+    if(!vare) continue;
 
-  if(har('dam')){
-    const skive = new THREE.Mesh(
-      new THREE.CircleGeometry(DAM_MIDT.r, 44),
-      new THREE.MeshLambertMaterial({
-        color: sesong==='vinter' ? 0x8fb6c8 : 0x2f86b4, transparent:true, opacity:0.82 }));
-    skive.rotation.x = -Math.PI/2;
-    skive.position.set(DAM_MIDT.x, 0.96, DAM_MIDT.z);
-    rot.add(skive);
-    FELT.settDam(skive);
-    for(let i=0;i<22;i++){                       // steinkant
-      const a = i/22*6.28;
-      rot.add(propMesh('_helle', DAM_MIDT.x + Math.cos(a)*(DAM_MIDT.r+0.7),
-                                 DAM_MIDT.z + Math.sin(a)*(DAM_MIDT.r+0.7), a, 0.7));
+    if(p.id === 'dam'){
+      const skive = damMesh(p.x, p.z, sesong);
+      skive.userData.pyntUid = p.uid;
+      rot.add(skive);
+      dammer.push(skive);
+      for(let i=0;i<22;i++){                       // steinkant
+        const a = i/22*6.28;
+        rot.add(propMesh('_helle', p.x + Math.cos(a)*(DAM_R+0.7),
+                                   p.z + Math.sin(a)*(DAM_R+0.7), a, 0.7));
+      }
+      FELT.pynt.push({ grp:skive, p, pynt:true, baseY:0.96 });
+      FELT.pyntPlukkbare.push(skive);
+      continue;
     }
-  }
 
-  if(har('sti')){
-    for(let i=-14;i<=14;i++){
-      rot.add(propMesh('_helle', i*1.5, 0, 0));
-      if(i % 2 === 0) rot.add(propMesh('_helle', i*1.5, 1.4, 0, 0.8));
-    }
+    const m = propMesh(vare.vox, p.x, p.z, p.rotY, vare.skala);
+    m.userData.pyntUid = p.uid;
+    rot.add(m);
+    FELT.pynt.push({ grp:m, p, pynt:true, baseY:1 });
+    FELT.pyntPlukkbare.push(m);
   }
+  FELT.settDam(dammer);
 
-  if(har('benk')){
-    rot.add(propMesh('_benk', 4.5, 3.4, Math.PI, 1));
-    rot.add(propMesh('_benk', -6.5, -3.2, 0, 1));
-  }
-
-  if(har('lykt')){
-    for(let i=0;i<6;i++){
-      const x = (i-2.5)*7;
-      rot.add(propMesh('_lykt', x, i%2 ? 3.2 : -3.2, 0));
-    }
-  }
-
-  if(har('bed')){
-    const r = ytre*0.55 + 3;
-    for(let i=0;i<18;i++){
-      const a = i/18*6.28;
-      rot.add(propMesh('_blomst', Math.cos(a)*r, Math.sin(a)*r, a));
-    }
-  }
-
-  if(har('gjerde')){
-    const r = ytre + 6;
-    const fag = Math.max(16, Math.round(2*Math.PI*r / 2.4));
-    for(let i=0;i<fag;i++){
-      const a = i/fag*6.28;
-      rot.add(propMesh('_gjerde', Math.cos(a)*r, Math.sin(a)*r, -a + Math.PI/2));
-    }
-  }
-
-  // --------- artene: lave innerst, hoye ytterst
-  const sortert = funn.slice().sort((x,y) => (x.hoyde||1.6) - (y.hoyde||1.6));
-  let i = 0;
-  for(const sp of sortert){
-    const vari = variantAv(sp.id);
+  // --------- eksemplarene: lave innerst, hoye ytterst
+  const sortert = STATE.eksemplarer.slice().sort((p, q) => {
+    const hp = SPECIES_BY_ID[p.art].hoyde || 1.6;
+    const hq = SPECIES_BY_ID[q.art].hoyde || 1.6;
+    return hp - hq || p.uid - q.uid;
+  });
+  for(const ex of sortert){
+    if(ex.x === null || ex.z === null) continue;   // venter paa aa bli satt ut for haand
+    const sp = SPECIES_BY_ID[ex.art];
     const plante = sp.kind === 'plante';
-    const grp = modellSkalert(sp.id, (sp.hoyde || 1.6) * PLEN_SKALA,
-      plante ? { sesong, variant:vari } : { variant:vari });
+    const grp = modellSkalert(ex.art,
+      (sp.hoyde || 1.6) * PLEN_SKALA * (1 + 0.07*(ex.niva-1)),
+      plante ? { sesong, variant:ex.variant } : { variant:ex.variant });
 
-    let x, z, baseY = 1, vandre = 0;
-    if(har('dam') && AKVATISK[sp.id]){
-      const a = rnd(0, 6.28), r = rnd(1, DAM_MIDT.r - 1.6);
-      x = DAM_MIDT.x + Math.cos(a)*r;
-      z = DAM_MIDT.z + Math.sin(a)*r;
-      baseY = sp.id==='tare' ? 0.35 : 0.62;
-      vandre = sp.id==='tare' ? 0 : 0.7;
-    } else {
-      const p = feltPlass(i++);
-      x = p.x; z = p.z;
-      vandre = plante ? 0 : rnd(0.9, 2.1);
-    }
+    let vandre = plante ? 0 : rnd(0.9, 2.1);
+    const x = ex.x, z = ex.z;
+
+    if(ex.art === 'tare') vandre = 0;
+    if(iDammen(x, z) && vandre) vandre = Math.min(vandre, 0.7);
+    const baseY = artHoyde(ex.art, x, z);
+    const ny = STATE.sistLagt === ex.uid;
 
     grp.position.set(x, baseY, z);
     grp.rotation.y = rnd(0, 6.28);
-    grp.scale.setScalar(STATE.sistLagt === sp.id ? 0.01 : 1);
+    grp.scale.setScalar(ny ? 0.01 : 1);
     rot.add(grp);
 
-    grp.userData.inner.userData.art = sp.id;
+    grp.userData.inner.userData.uid = ex.uid;
+    grp.userData.inner.userData.art = ex.art;
     plukkbare.push(grp.userData.inner);
     arter.push({
-      grp, art:sp.id, base:{x,z}, baseY, r:vandre, fase:rnd(0,6.28),
+      grp, ex, uid:ex.uid, art:ex.art, base:{x,z}, baseY, r:vandre, fase:rnd(0,6.28),
       plante: plante || vandre === 0,
-      vokse: STATE.sistLagt === sp.id ? 0 : 1,
+      vokse: ny ? 0 : 1,
     });
-    if(STATE.sistLagt === sp.id) FELT.tilPunkt(x, z);   // panorer til det nye funnet
+    if(ny) FELT.tilPunkt(x, z);   // panorer til det nye funnet
   }
   STATE.sistLagt = null;
 
@@ -430,9 +486,16 @@ function byggFelt(){
 
   $('#feltCount').textContent = funn.length;
   $('#feltTotal').textContent = SPECIES.length;
-  $('#feltTom').hidden = funn.length > 0;
+  $('#feltTom').hidden = funn.length > 0 || STATE.pynt.length > 0;
   const chip = $('#fieldSesong');
   if(chip) chip.textContent = SESONG_NAVN[sesong];
+  if(valgtPynt){
+    const uid = valgtPynt.p.uid;
+    valgtPynt = FELT.pynt.find(o => o.p.uid === uid) || null;
+    if(valgtPynt) visMarkor(valgtPynt.grp.position.x, valgtPynt.baseY + 0.06, valgtPynt.grp.position.z);
+  }
+  PLASS.synk();
+  visVriPanel();
 }
 
 // ------------------------------------------------ SKANN (3D over kamera)
@@ -463,6 +526,12 @@ const SKANN = (() => {
     materialisering = 0;
   };
   S.setProgresjon = p => { materialisering = p; };
+  /* Ved ekte skanning vet vi ikke arten for modellen har svart. Da skal
+     ingenting ligge i ruta og roepe fasiten. */
+  S.tomArt = () => {
+    if(grp) S.scene.remove(grp);
+    grp = null; materialisering = 0;
+  };
   SCENES.scan = S;
   return S;
 })();
@@ -503,7 +572,11 @@ SCENES.collection = null;   // ren HTML
 
 // ============================================================ ruting
 let aktiv = 'splash';
+let forSkann = 'field';   // fanen skanneren ble aapnet fra, saa krysset gaar tilbake dit
 function gaTil(navn){
+  if(navn === 'scan' && aktiv !== 'scan' && aktiv !== 'splash') forSkann = aktiv;
+  /* Gaar vi ut av dysten mens en nettkamp loper, maa motparten faa beskjed. */
+  if(aktiv === 'battle' && navn !== 'battle') KORTSPILL.forlat();
   const forrige = SCENES[aktiv];
   if(forrige && forrige.exit) forrige.exit();
   $$('.screen').forEach(s => s.classList.toggle('active', s.id === 'screen-'+navn));
@@ -513,10 +586,12 @@ function gaTil(navn){
   canvas.style.opacity = S ? 1 : 0;
   $('#camLayer').hidden = navn !== 'scan';
   if(S && S.enter) S.enter();
+  if(navn !== 'field') velgPynt(null);
   if(navn === 'field')      byggFelt();
   if(navn === 'shop')       byggButikk();
   if(navn === 'collection') byggSamling();
   if(navn === 'battle')     startDyst();
+  if(navn === 'lobby')      LOBBY.aapne();
   if(navn === 'scan')       startSkann();
 }
 document.addEventListener('click', e => {
@@ -542,18 +617,43 @@ function loop(now){
 /* En finger drar plenen, to fingre kniper for zoom, kort trykk aapner kortet. */
 (() => {
   const pekere = new Map();
-  let flyttet = 0, startAvstand = 0;
+  let flyttet = 0, startAvstand = 0, holdUr = null, knip = false;
+  let midt = { x:0, y:0 };
 
   function tofinger(){
     const p = [...pekere.values()];
     return Math.hypot(p[0].x-p[1].x, p[0].y-p[1].y);
   }
+  function tofingerMidt(){
+    const p = [...pekere.values()];
+    return { x:(p[0].x+p[1].x)/2, y:(p[0].y+p[1].y)/2 };
+  }
+  function stoppHold(){ clearTimeout(holdUr); holdUr = null; }
+
   function ned(e){
     if(aktiv !== 'field') return;
-    if(e.target.closest('.tabbar, .topbar, .scan-fab')) return;
+    if(e.target && e.target.closest && e.target.closest('.tabbar, .topbar, .felt-vri')) return;
     pekere.set(e.pointerId, { x:e.clientX, y:e.clientY });
     flyttet = 0;
-    if(pekere.size === 2) startAvstand = tofinger();
+    if(pekere.size === 2){
+      startAvstand = tofinger();
+      midt = tofingerMidt();
+      knip = true;
+      stoppHold();
+      slippFlytting();          // to fingre = zoom og panorering, ikke flytting
+      return;
+    }
+    const px = e.clientX, py = e.clientY;
+    stoppHold();
+    if(PLASS.aktiv()){          // ny ting ventes satt ut: fingeren styrer den
+      PLASS.pek(px, py);
+      return;
+    }
+    holdUr = setTimeout(() => {   // trykk og hold plukker opp tingen
+      holdUr = null;
+      const o = artUnder(px, py) || pyntUnder(px, py);
+      if(o) startFlytting(o);
+    }, 260);
   }
   function flytt(e){
     const p = pekere.get(e.pointerId);
@@ -561,17 +661,28 @@ function loop(now){
     const dx = e.clientX - p.x, dy = e.clientY - p.y;
     p.x = e.clientX; p.y = e.clientY;
     flyttet += Math.abs(dx) + Math.abs(dy);
+    if(holdUr && flyttet > 12) stoppHold();     // dette ble en panorering
     if(pekere.size === 2){
       const na = tofinger();
       FELT.zoom((startAvstand - na) * 0.06);
       startAvstand = na;
-    } else {
-      FELT.panorer(dx, dy);
+      const nm = tofingerMidt();
+      FELT.panorer(nm.x - midt.x, nm.y - midt.y);   // to fingre panorerer ogsaa
+      midt = nm;
+      return;
     }
+    if(dras){ flyttTil(e.clientX, e.clientY); return; }
+    if(PLASS.aktiv()){ PLASS.pek(e.clientX, e.clientY); return; }
+    FELT.panorer(dx, dy);
   }
   function opp(e){
     if(!pekere.has(e.pointerId)) return;
     pekere.delete(e.pointerId);
+    stoppHold();
+    if(pekere.size > 0) return;            // resten av knipet holder fortsatt
+    if(knip){ knip = false; return; }
+    if(dras){ slippFlytting(); return; }
+    if(PLASS.aktiv()){ PLASS.slipp(); return; }
     if(flyttet < 9 && aktiv === 'field') plukkArt(e.clientX, e.clientY);
   }
   addEventListener('pointerdown', ned);
@@ -581,21 +692,372 @@ function loop(now){
   addEventListener('wheel', e => { if(aktiv === 'field') FELT.zoom(e.deltaY*0.02); }, {passive:true});
 })();
 
-/** trykk paa en modell paa plenen -> aapne kortet */
-const _ray = new THREE.Raycaster();
-const _nd  = new THREE.Vector2();
-function plukkArt(px, py){
+/* ---------- plukke opp og flytte artene ---------- */
+const _ray   = new THREE.Raycaster();
+const _nd    = new THREE.Vector2();
+const _plan  = new THREE.Plane(new THREE.Vector3(0,1,0), -1);
+const _punkt = new THREE.Vector3();
+
+function pekerTilRay(px, py){
   const boks = canvas.getBoundingClientRect();
   _nd.x =  ((px - boks.left) / boks.width)  * 2 - 1;
   _nd.y = -((py - boks.top)  / boks.height) * 2 + 1;
   _ray.setFromCamera(_nd, FELT.S.cam);
-  const treff = _ray.intersectObjects(FELT.plukkbare, false);
-  if(!treff.length) return;
-  LYD.klikk(); dirr(12);
-  visDetalj(treff[0].object.userData.art);
 }
 
-$('#scanFab').addEventListener('click', () => gaTil('scan'));
+/** hvilken art ligger under fingeren? */
+function artUnder(px, py){
+  pekerTilRay(px, py);
+  const treff = _ray.intersectObjects(FELT.plukkbare, false);
+  if(!treff.length) return null;
+  const uid = treff[0].object.userData.uid;
+  return FELT.arter.find(o => o.uid === uid) || null;
+}
+
+/** hvor paa plenen peker fingeren? */
+function bakkePunkt(px, py){
+  pekerTilRay(px, py);
+  if(!_ray.ray.intersectPlane(_plan, _punkt)) return null;
+  return {
+    x: clamp(_punkt.x, -PLEN_R+3, PLEN_R-3),
+    z: clamp(_punkt.z, -PLEN_R+3, PLEN_R-3),
+  };
+}
+
+/** hvilken hageting ligger under fingeren? */
+function pyntUnder(px, py){
+  pekerTilRay(px, py);
+  const treff = _ray.intersectObjects(FELT.pyntPlukkbare, false);
+  if(!treff.length) return null;
+  const uid = treff[0].object.userData.pyntUid;
+  return FELT.pynt.find(o => o.p.uid === uid) || null;
+}
+
+function plukkArt(px, py){
+  const o = artUnder(px, py);
+  if(o){
+    velgPynt(null);
+    LYD.klikk(); dirr(12);
+    visDetalj(o.art, o.ex);
+    return;
+  }
+  velgPynt(pyntUnder(px, py));   // trykk paa hageting = vri den, trykk paa graset = velg bort
+}
+
+/* ---------- vriing ----------
+   Hageting kan snus etter at den er satt ut: trykk paa den, bruk pilene.
+   Samme knapper vrir forhaandsvisningen mens du plasserer noe nytt. */
+let valgtPynt = null;
+
+function velgPynt(o){
+  valgtPynt = o || null;
+  if(valgtPynt){
+    visMarkor(valgtPynt.grp.position.x, valgtPynt.baseY + 0.06, valgtPynt.grp.position.z);
+    LYD.klikk(); dirr(10);
+  } else if(!dras && !PLASS.aktiv()){
+    skjulMarkor();
+  }
+  visVriPanel();
+}
+
+/** panelet vises naar noe kan vris: en valgt ting eller en forhaandsvisning */
+function visVriPanel(){
+  const panel = $('#feltVri');
+  if(!panel) return;
+  /* dammen er rund - den har ingenting aa vri */
+  const id = PLASS.aktiv() ? PLASS.varenId() : valgtPynt ? valgtPynt.p.id : null;
+  const navn = id && id !== 'dam'
+             ? (PLASS.aktiv() ? PLASS.navn() : BUTIKK_BY_ID[id].navn)
+             : null;
+  panel.hidden = !navn;
+  if(navn) $('#feltVriNavn').textContent = navn;
+}
+
+/** vri det som er aktivt: forhaandsvisning foerst, ellers valgt ting */
+function vriAktiv(retning){
+  if(PLASS.aktiv()){ PLASS.vri(retning * VRI_STEG); LYD.klikk(); dirr(8); return; }
+  if(!valgtPynt) return;
+  valgtPynt.p.rotY = (valgtPynt.p.rotY || 0) + retning * VRI_STEG;
+  valgtPynt.grp.rotation.y = valgtPynt.p.rotY;
+  LYD.klikk(); dirr(8);
+}
+
+$('#feltVri').addEventListener('click', e => {
+  const k = e.target.closest('[data-vri]');
+  if(!k) return;
+  e.stopPropagation();
+  vriAktiv(parseInt(k.dataset.vri, 10));
+});
+
+const VRI_STEG = Math.PI/12;   // 15 grader per trykk
+
+/** vinkel som vender tingen mot midten av plenen */
+function vriMot(vare, x, z){
+  return vare.vri === 'senter' ? Math.atan2(-x, -z) : rnd(0, 6.28);
+}
+
+// ---------- draing ----------
+let dras = null, markor = null;
+
+/** den gule ringen som viser hvor tingen havner */
+function visMarkor(x, y, z){
+  if(!markor){
+    markor = new THREE.Mesh(
+      new THREE.RingGeometry(0.75, 1.05, 28),
+      new THREE.MeshBasicMaterial({ color:0xe8b93c, transparent:true, opacity:0.85,
+                                    side:THREE.DoubleSide }));
+    markor.rotation.x = -Math.PI/2;
+  }
+  markor.position.set(x, y, z);
+  if(markor.parent !== FELT.rot) FELT.rot.add(markor);
+}
+function skjulMarkor(){
+  if(markor && markor.parent) markor.parent.remove(markor);
+}
+
+/** hoyden en ting hviler i - arter synker i dammen, dammen ligger i graset */
+function hvileHoyde(o){
+  if(!o.pynt) return artHoyde(o.art, o.grp.position.x, o.grp.position.z);
+  return o.p.id === 'dam' ? DAM_VANN : 1;
+}
+
+function startFlytting(o){
+  if(o.pynt) velgPynt(null);
+  dras = o;
+  o.dras = true;
+  o.baseSkala = o.grp.scale.x;
+  o.grp.scale.setScalar(o.baseSkala * 1.1);
+  visMarkor(o.grp.position.x, 1.06, o.grp.position.z);
+  $('#feltFlytt').textContent = 'FLYTTER ' +
+    (o.pynt ? BUTIKK_BY_ID[o.p.id].navn : visningsNavn(o.art));
+  $('#feltFlytt').hidden = false;
+  LYD.naer(); dirr(20);
+}
+
+function flyttTil(px, py){
+  if(!dras) return;
+  const p = bakkePunkt(px, py);
+  if(!p) return;
+  const y = dras.pynt ? (dras.p.id === 'dam' ? DAM_VANN : 1)
+                      : artHoyde(dras.art, p.x, p.z);
+  dras.grp.position.set(p.x, y + 1.1, p.z);
+  visMarkor(p.x, y + 0.06, p.z);
+}
+
+/** finnes et eksemplar av samme art og samme nivaa rett under dette? */
+function finnMakker(o){
+  return FELT.arter.find(t =>
+    t !== o && t.art === o.art && t.ex.niva === o.ex.niva && !t.dras &&
+    Math.hypot(t.grp.position.x - o.grp.position.x,
+               t.grp.position.z - o.grp.position.z) < 2.4) || null;
+}
+
+function slippFlytting(){
+  if(!dras) return;
+  const o = dras;
+  const x = o.grp.position.x, z = o.grp.position.z;
+  o.grp.scale.setScalar(o.baseSkala || 1);
+  o.dras = false;
+  skjulMarkor();
+  $('#feltFlytt').hidden = true;
+  dras = null;
+
+  if(o.pynt){                       // hageting: lagre og bygg plenen paa nytt
+    o.p.x = x; o.p.z = z;             // vinkelen beholdes - den vrir du med knappene
+    LYD.steg(); dirr(28);
+    byggFelt();
+    return;
+  }
+
+  o.base = { x, z };
+  o.baseY = artHoyde(o.art, x, z);
+  o.grp.position.set(x, o.baseY, z);
+  if(iDammen(x, z) && o.r > 0.7) o.r = 0.7;
+  o.ex.x = x; o.ex.z = z;
+
+  const makker = finnMakker(o);
+  if(makker) visNivaDialog(o, makker);
+  else { LYD.steg(); dirr(28); }
+}
+
+// ---------- plassering for haand ----------
+/* Alt du kjoper eller skanner ligger med x=null til du setter det ut selv.
+   Bare en ting venter om gangen - butikken er laast til den staar paa plenen. */
+function venterPlassering(){
+  const p = STATE.pynt.find(p => p.x === null);
+  if(p) return { slag:'pynt', o:p };
+  const e = STATE.eksemplarer.find(e => e.x === null);
+  if(e) return { slag:'art', o:e };
+  return null;
+}
+
+const PLASS = (() => {
+  let na = null;          // {slag, o, grp, x, z, rotY}
+
+  function lagGrp(slag, o){
+    if(slag === 'pynt'){
+      const vare = BUTIKK_BY_ID[o.id];
+      return vare.id === 'dam' ? damMesh(0, 0, STATE.sesong)
+                               : propMesh(vare.vox, 0, 0, 0, vare.skala);
+    }
+    const sp = SPECIES_BY_ID[o.art];
+    return modellSkalert(o.art, (sp.hoyde || 1.6) * PLEN_SKALA,
+      sp.kind === 'plante' ? { sesong:STATE.sesong, variant:o.variant }
+                           : { variant:o.variant });
+  }
+
+  function navn(){
+    return na.slag === 'pynt' ? BUTIKK_BY_ID[na.o.id].navn : visningsNavn(na.o.art);
+  }
+
+  /** flytt forhaandsvisningen til et punkt paa plenen */
+  function sett(x, z){
+    if(!na) return;
+    x = clamp(x, -PLEN_R+3, PLEN_R-3);
+    z = clamp(z, -PLEN_R+3, PLEN_R-3);
+    na.x = x; na.z = z;
+    const y = na.slag === 'pynt' ? (na.o.id === 'dam' ? DAM_VANN : 1)
+                                 : artHoyde(na.o.art, x, z);
+    const loft = na.o.id === 'dam' ? 0.35 : 0.9;   // dammen har ingen grop foer den er satt: vis den over graset
+    /* 'senter'-ting foelger midten av plenen til du vrir dem selv */
+    if(na.slag === 'pynt' && !na.vridd && BUTIKK_BY_ID[na.o.id].vri === 'senter')
+      na.rotY = vriMot(BUTIKK_BY_ID[na.o.id], x, z);
+    na.grp.rotation.y = na.rotY || 0;
+    na.grp.position.set(x, y + loft, z);
+    visMarkor(x, y + 0.06, z);
+  }
+
+  function pek(px, py){
+    const p = bakkePunkt(px, py);
+    if(p) sett(p.x, p.z);
+  }
+
+  /** vri forhaandsvisningen - da slutter den aa snu seg selv */
+  function vri(d){
+    if(!na) return;
+    na.vridd = true;
+    na.rotY = (na.rotY || 0) + d;
+    na.grp.rotation.y = na.rotY;
+  }
+
+  /** sett tingen ned for godt */
+  function slipp(){
+    if(!na || na.x == null) return;
+    const { slag, o, x, z } = na;
+    if(slag === 'pynt'){
+      o.x = x; o.z = z; o.rotY = na.rotY || 0;
+      LYD.funn(); dirr([20,40,20]);
+      toast(BUTIKK_BY_ID[o.id].navn + ' satt ut p\u00e5 plenen');
+      rydd();
+      byggFelt();
+      return;
+    }
+    o.x = x; o.z = z;
+    STATE.sistLagt = o.uid;
+    rydd();
+    byggFelt();
+    byggSamling();
+    const ny = FELT.arter.find(a => a.uid === o.uid);
+    const makker = ny && finnMakker(ny);
+    if(makker) visNivaDialog(ny, makker);
+    else { LYD.steg(); dirr(28); }
+  }
+
+  function rydd(){
+    if(na && na.grp && na.grp.parent) na.grp.parent.remove(na.grp);
+    na = null;
+    if(!dras && !valgtPynt) skjulMarkor();
+    $('#feltPlasser').hidden = true;
+    visVriPanel();
+  }
+
+  /** kalles hver gang plenen bygges - plenen tommes, saa visningen maa settes opp igjen */
+  function synk(){
+    const vent = venterPlassering();
+    if(!vent){ rydd(); return; }
+    const forrige = na && na.o === vent.o ? { x:na.x, z:na.z, rotY:na.rotY, vridd:na.vridd } : null;
+    if(na && na.grp && na.grp.parent) na.grp.parent.remove(na.grp);
+    const grp = lagGrp(vent.slag, vent.o);
+    na = { slag:vent.slag, o:vent.o, grp, x:null, z:null, rotY:0, vridd:false };
+    /* tilfeldig vinkel trekkes en gang, ellers ville tingen snurret
+       hver gang du flyttet fingeren */
+    if(vent.slag === 'pynt' && BUTIKK_BY_ID[vent.o.id].vri !== 'senter') na.rotY = rnd(0, 6.28);
+    FELT.rot.add(grp);
+    if(forrige && forrige.x != null){
+      na.rotY = forrige.rotY; na.vridd = forrige.vridd;
+      sett(forrige.x, forrige.z);
+    } else sett(FELT.kam.x, FELT.kam.z);
+    $('#feltPlasser').textContent = 'TRYKK P\u00c5 PLENEN FOR \u00c5 SETTE ' + navn();
+    $('#feltPlasser').hidden = false;
+    visVriPanel();
+  }
+
+  return { synk, pek, slipp, vri, navn, aktiv: () => !!na,
+           varenId: () => na && na.slag === 'pynt' ? na.o.id : null };
+})();
+
+// ---------- sammenslaaing til hoyere nivaa ----------
+let venterMerge = null;
+
+function visNivaDialog(fra, til){
+  const sp = SPECIES_BY_ID[til.art];
+  const gammelt = til.ex.niva, nytt = gammelt + 1;
+  const f = statPaaNiva(sp, gammelt), n = statPaaNiva(sp, nytt);
+  venterMerge = { fra, til };
+
+  $('#mergeArt').textContent = visningsNavn(til.art);
+  $('#mergeFra').textContent = 'Nv ' + gammelt;
+  $('#mergeTil').textContent = 'Nv ' + nytt;
+  $('#mergeStats').innerHTML = [
+    ['HP', f.hp, n.hp], ['ANGREP', f.angrep, n.angrep],
+    ['FORSVAR', f.forsvar, n.forsvar], ['FART', f.fart, n.fart],
+  ].map(rad => `<div class="merge-rad">
+      <span class="merge-n">${rad[0]}</span>
+      <span class="merge-fra">${rad[1]}</span>
+      <span class="merge-pil">&#8594;</span>
+      <span class="merge-til">${rad[2]}</span>
+      <span class="merge-delta">+${rad[2]-rad[1]}</span>
+    </div>`).join('');
+  $('#mergeBoks').hidden = false;
+  LYD.naer(); dirr(30);
+}
+
+function lukkNivaDialog(){
+  $('#mergeBoks').hidden = true;
+  venterMerge = null;
+}
+
+function godtaNiva(){
+  if(!venterMerge) return;
+  const { fra, til } = venterMerge;
+  til.ex.niva += 1;
+  STATE.eksemplarer = STATE.eksemplarer.filter(e => e.uid !== fra.ex.uid);
+  STATE.sistLagt = til.ex.uid;
+  lukkNivaDialog();
+  byggFelt();
+  byggSamling();
+  LYD.sjelden(); dirr([30,60,30,60,90]);
+  toast(SPECIES_BY_ID[til.art].navn + ' er n\u00e5 niv\u00e5 ' + til.ex.niva);
+}
+
+function avbrytNiva(){
+  if(!venterMerge) return;
+  const { fra } = venterMerge;
+  const p = fra.forrige;
+  if(p){                         // legg den tilbake der den stod
+    fra.base = { x:p.x, z:p.z };
+    fra.baseY = artHoyde(fra.art, p.x, p.z);
+    fra.grp.position.set(p.x, fra.baseY, p.z);
+    fra.ex.x = p.x; fra.ex.z = p.z;
+  }
+  lukkNivaDialog();
+  LYD.klikk();
+}
+
+$('#scanLukk').addEventListener('click', () => { LYD.klikk(); dirr(12); gaTil(forSkann); });
+
+$('#mergeJa').addEventListener('click', godtaNiva);
+$('#mergeNei').addEventListener('click', avbrytNiva);
 
 // ============================================================ skanning
 let kamStrom = null;
@@ -611,15 +1073,35 @@ function tilfeldigArt(){
   return basseng[basseng.length-1].id;
 }
 
-async function startSkann(){
-  const art = tilfeldigArt();
+/** setter arten skanneruta skal materialisere, med variant etter vanlige regler */
+function settMal(art){
   STATE.malArt = art;
   STATE.malVariant = STATE.funnet.has(art) ? variantAv(art) : trekkVariant();
   SKANN.setArt(art, { variant: STATE.malVariant });
+}
+
+/* Ekte skann krever tre ting: modellene er konfigurert, kameraet gir bilde,
+   og det er ikke et oppsatt mote fra kartet. Ellers kjorer det simulerte,
+   som er akkurat slik spillet oppforte seg for. */
+let ekteSkann = false;
+
+async function startSkann(){
+  /* typeof-sjekken gjor at et feilslaatt klassifiser.js ikke tar skanneren
+     med seg i fallet - da kjorer spillet bare simulert som for. */
+  ekteSkann = typeof KLASSIFISER !== 'undefined' && KLASSIFISER.konfigurert() && !STATE.kartMal;
+  if(ekteSkann){
+    STATE.malArt = null;
+    STATE.malVariant = null;
+    SKANN.tomArt();
+  } else {
+    const art = STATE.kartMal || tilfeldigArt();
+    STATE.kartMal = null;
+    settMal(art);
+  }
   $('#scanCoords').textContent = geoTekst();
   SKANN.setProgresjon(0);
   $('#scanReadout').textContent = 'RETT KAMERAET MOT ARTEN';
-  $('#scanReadout').classList.remove('treff');
+  $('#scanReadout').classList.remove('treff','bom');
   $('#scanMeterFill').style.width = '0%';
   $('#scanGo').disabled = false;
   $('#scanBeam').classList.remove('kjor');
@@ -634,6 +1116,7 @@ async function startSkann(){
     } catch(err){
       $('#camFallback').style.display = 'block';
       video.style.display = 'none';
+      ekteSkann = false;   /* uten kamera finnes det ikke noe aa klassifisere */
     }
   }
 }
@@ -643,12 +1126,11 @@ function stoppSkann(){
 }
 SCENES.scan.exit = stoppSkann;
 
-$('#scanGo').addEventListener('click', () => {
-  const knapp = $('#scanGo');
-  if(knapp.disabled) return;
-  knapp.disabled = true;
-  LYD.skann(); dirr(25);
-  $('#scanBeam').classList.add('kjor');
+/* ---------- simulert skann: uendret oppforsel, brukes naar modellene
+   ikke er tilgjengelige, naar kartet har satt opp et mote, og som
+   fallback hvis noe ryker underveis ---------- */
+function simulertSkann(){
+  if(!STATE.malArt) settMal(tilfeldigArt());
   const linjer = ['ANALYSERER FORM…','SAMMENLIGNER MED ARTSBANK…','MÅLER FARGEPROFIL…','BEKREFTER ART…'];
   let p = 0, i = 0;
   const id = setInterval(() => {
@@ -670,6 +1152,113 @@ $('#scanGo').addEventListener('click', () => {
       setTimeout(() => visFunn(STATE.malArt), 460);
     }
   }, 55);
+}
+
+/* ---------- ekte skann ---------- */
+
+/** materialiserer voxelmodellen fra 0 til 1 og kaller ferdig() etterpaa */
+function materialiser(ferdig){
+  const t0 = performance.now(), varighet = 520;
+  const steg = () => {
+    const a = Math.min(1, (performance.now() - t0) / varighet);
+    SKANN.setProgresjon(a);
+    if(a < 1) requestAnimationFrame(steg); else ferdig();
+  };
+  requestAnimationFrame(steg);
+}
+
+/** ja/nei-dialog for nedlasting av en modell. Returnerer Promise<bool>. */
+let nektetModell = new Set();
+function sporOmNedlasting(info){
+  if(nektetModell.has(info.navn)) return Promise.resolve(false);
+  return new Promise(ok => {
+    const boks  = $('#modellDialog');
+    const tekst = $('#modellDialogTxt');
+    tekst.innerHTML = info.tittel + ' MÅ LASTES NED<br><b>CA. ' + info.mb +
+      ' MB</b> · ÉN GANG PER ENHET<br>LAGRES OFFLINE ETTERPÅ';
+    boks.hidden = false;
+    const svar = ja => {
+      boks.hidden = true;
+      $('#modellJa').onclick = null;
+      $('#modellNei').onclick = null;
+      if(!ja) nektetModell.add(info.navn);
+      ok(ja);
+    };
+    $('#modellJa').onclick  = () => { LYD.klikk(); svar(true); };
+    $('#modellNei').onclick = () => { LYD.klikk(); svar(false); };
+  });
+}
+
+function visSkannResultat(svar){
+  const prosent = Math.round((svar.p || 0) * 100);
+  const raa = (svar.latin || svar.felles || 'INGEN MATCH').toUpperCase();
+
+  if(!svar.id){
+    $('#scanReadout').textContent = 'UKJENT ART · ' + raa + ' ' + prosent + ' %';
+    $('#scanReadout').classList.add('bom');
+    $('#scanMeterFill').style.width = '100%';
+    LYD.klikk(); dirr(12);
+    $('#scanGo').disabled = false;
+    $('#scanBeam').classList.remove('kjor');
+    return;
+  }
+
+  settMal(svar.id);
+  const sp = SPECIES_BY_ID[svar.id];
+  const vari = STATE.malVariant;
+  $('#scanReadout').textContent = raa + ' ' + prosent + ' % → ' +
+    (vari ? VARIANTER[vari].navn + ' ' : '') + sp.navn +
+    (vari ? ' — AVVIKENDE FARGE!' : ' — ' + svar.nivaTekst);
+  $('#scanReadout').classList.add('treff');
+  $('#scanMeterFill').style.width = '100%';
+
+  materialiser(() => {
+    blitz();
+    if(vari){ LYD.sjelden(); dirr([30,60,30,60,90]); }
+    else    { LYD.funn();    dirr(60); }
+    setTimeout(() => visFunn(svar.id), 460);
+  });
+}
+
+function skannFase(fase, andel){
+  if(fase === 'laster'){
+    $('#scanReadout').textContent = 'LASTER ARTSMODELL ' + Math.round(andel*100) + ' %';
+    $('#scanMeterFill').style.width = Math.round(andel*100) + '%';
+  } else {
+    $('#scanReadout').textContent = andel < 0.5 ? 'ANALYSERER BILDE…' : 'SAMMENLIGNER MED ARTSBANK…';
+    $('#scanMeterFill').style.width = Math.round(50 + andel*50) + '%';
+  }
+}
+
+$('#scanGo').addEventListener('click', async () => {
+  const knapp = $('#scanGo');
+  if(knapp.disabled) return;
+  knapp.disabled = true;
+  LYD.skann(); dirr(25);
+  $('#scanBeam').classList.add('kjor');
+  $('#scanReadout').classList.remove('treff','bom');
+
+  const video = $('#camFeed');
+  const harBilde = !!kamStrom && video.readyState >= 2 && video.videoWidth > 0;
+  if(!ekteSkann || !harBilde){ simulertSkann(); return; }
+
+  try {
+    const svar = await KLASSIFISER.klassifiser(video, {
+      onFase: skannFase,
+      bekreftNedlasting: sporOmNedlasting,
+    });
+    visSkannResultat(svar);
+  } catch(err){
+    if(err.navn === 'NedlastingKreves'){
+      /* Spilleren sa nei. Spillet skal fortsatt kunne spilles. */
+      toast('SKANNER UTEN MODELL');
+    } else {
+      console.warn('skann feilet:', err);
+      toast('MODELLEN SVIKTET – SIMULERT SKANN');
+    }
+    ekteSkann = false;
+    simulertSkann();
+  }
 });
 
 // ============================================================ funn
@@ -680,25 +1269,19 @@ function visFunn(id, variant){
   const mult = variant ? VARIANTER[variant].bonus : 1;
   $('#revealKicker').textContent = variant
     ? VARIANTER[variant].navn + ' VARIANT!'
-    : (ny ? 'NY ART REGISTRERT' : 'ALLEREDE I SAMLINGA');
+    : (ny ? 'NY ART REGISTRERT' : 'DUPLIKAT REGISTRERT');
   $('#revealKicker').classList.toggle('variant', !!variant);
-  const xp   = Math.round((ny ? 60 + sp.sjelden*25 : 10) * mult);
-  const mynt = Math.round((ny ? 25 + sp.sjelden*15 : 5) * mult);
-  $('#revealXp').textContent   = xp;
-  $('#revealCoin').textContent = mynt;
+  const xp = Math.round((ny ? 60 + sp.sjelden*25 : 10) * mult);
+  $('#revealXp').textContent = xp;
   $('#revealCard').innerHTML = kortRamme(sp, true, variant);
   SCENES.reveal.setArt(id, 3.0, {variant});
   SCENES.reveal.baseY = -0.9;
   gaTil('reveal');
-  $('#revealOk').textContent = ny ? 'PLANT I SLETTA' : 'TILBAKE TIL SLETTA';
+  $('#revealOk').textContent = ny ? 'PLANT P\u00c5 PLENEN' : 'SETT UT P\u00c5 PLENEN';
   $('#revealOk').onclick = () => {
-    if(ny) STATE.sistLagt = id;
-    STATE.funnet.add(id);
-    if(variant) STATE.varianter[id] = variant;
-    STATE.mynt += mynt;
-    oppdaterHud();
-    toast(ny ? visningsNavn(id) + ' plantet p\u00e5 plenen' : 'XP mottatt');
-    gaTil('field');   // bygger plenen og lar den nye arten vokse fram
+    nyttEksemplar(id, variant);   // duplikater er meningen: to like kan slaas sammen
+    toast('TRYKK P\u00c5 PLENEN FOR \u00c5 SETTE ' + visningsNavn(id));
+    gaTil('field');   // plenen aapner i plasseringsmodus - du velger plassen selv
   };
 }
 
@@ -757,6 +1340,20 @@ const lagMini = (() => {
   };
 })();
 
+// ============================================================ bro til battle.js
+/* Kortspillet ligger i sin egen fil og trenger noen faa ting herfra. */
+window.VM = { STATE, LYD, dirr, toast, lagMini, oppdaterHud, gaTil, visningsNavn };
+
+
+/** "Nv 2 x3" under miniatyren */
+function nivaMerke(art){
+  const liste = eksemplarerAv(art);
+  if(!liste.length) return '';
+  const niva = toppNiva(art);
+  return (niva > 1 ? 'Nv ' + niva : '\u2605'.repeat(SPECIES_BY_ID[art].sjelden)) +
+         (liste.length > 1 ? '  \u00d7' + liste.length : '');
+}
+
 function byggSamling(){
   const filter = $('.pill.active')?.dataset.filter || 'alle';
   const liste = SPECIES.filter(s => filter==='alle' || s.kind===filter);
@@ -771,7 +1368,7 @@ function byggSamling(){
         ? `<img src="${lagMini(sp.id, vari)}" alt="${sp.navn}">`
         : `<span class="mini-q">?</span>`}</div>
       <span class="mini-navn">${har ? sp.navn : '— — —'}</span>
-      <span class="mini-sjelden">${'★'.repeat(sp.sjelden)}</span>
+      <span class="mini-sjelden">${har ? nivaMerke(sp.id) : '★'.repeat(sp.sjelden)}</span>
     </button>`;
   }).join('');
 }
@@ -787,15 +1384,18 @@ $('#cardGrid').addEventListener('click', e => {
   visDetalj(b.dataset.art);
 });
 
-function visDetalj(id){
+function visDetalj(id, ex){
   const sp = SPECIES_BY_ID[id];
-  const vari = variantAv(id);
+  const vari = ex ? ex.variant : variantAv(id);
+  const niva = ex ? ex.niva : toppNiva(id);
+  const st = statPaaNiva(sp, niva);
   $('.detail-close').dataset.go = (aktiv === 'field') ? 'field' : 'collection';
   $('#detailName').textContent = visningsNavn(id);
   $('#detailSci').textContent  = sp.sci;
   $('#detailFact').textContent = sp.fakta;
+  $('#detailName').textContent += niva > 1 ? '  Nv ' + niva : '';
   $('#detailStats').innerHTML = [
-    ['HP',sp.hp,110],['ANGREP',sp.angrep,40],['FORSVAR',sp.forsvar,40],['FART',sp.fart,40]
+    ['HP',st.hp,140],['ANGREP',st.angrep,50],['FORSVAR',st.forsvar,50],['FART',st.fart,50]
   ].map(([n,v,m]) =>
     `<div class="stat"><span class="stat-n">${n}</span>
       <div class="stat-bar"><i style="width:${Math.min(100,v/m*100)}%"></i></div>
@@ -808,17 +1408,22 @@ function visDetalj(id){
 // ============================================================ butikk
 function byggButikk(){
   $('#shopCoins').textContent = STATE.mynt;
+  const venter = !!venterPlassering();
+  const intro = $('.shop-intro');
+  if(intro) intro.textContent = venter
+    ? 'SETT UT DET DU ALLEREDE HAR KJ\u00d8PT F\u00d8R DU KJ\u00d8PER MER.'
+    : 'EN TING OM GANGEN. DU SETTER DEN UT SELV. MYNT F\u00c5R DU AV \u00c5 VINNE DYSTER.';
   $('#shopGrid').innerHTML = BUTIKK.map(b => {
-    const eid = STATE.kjopt.has(b.id);
+    const antall = STATE.pynt.filter(p => p.id === b.id).length;
     const raad = STATE.mynt >= b.pris;
-    return `<article class="vare${eid?' eid':''}">
+    return `<article class="vare${antall?' eid':''}">
       <span class="vare-ikon">${b.ikon}</span>
       <div class="vare-tekst">
-        <span class="vare-navn">${b.navn}</span>
+        <span class="vare-navn">${b.navn}${antall ? ` <i class="vare-ant">&times;${antall}</i>` : ''}</span>
         <span class="vare-desc">${b.desc}</span>
       </div>
-      <button class="vare-kjop${eid?' ferdig':''}" data-vare="${b.id}"
-        ${eid || !raad ? 'disabled' : ''}>${eid ? 'KJ&Oslash;PT' : b.pris + ' &#9679;'}</button>
+      <button class="vare-kjop" data-vare="${b.id}"
+        ${!raad || venter ? 'disabled' : ''}>${b.pris} &#9679;</button>
     </article>`;
   }).join('');
 }
@@ -826,19 +1431,20 @@ $('#shopGrid').addEventListener('click', e => {
   const k = e.target.closest('.vare-kjop');
   if(!k || k.disabled) return;
   const vare = BUTIKK_BY_ID[k.dataset.vare];
-  if(STATE.mynt < vare.pris) return;
+  if(STATE.mynt < vare.pris || venterPlassering()) return;
   STATE.mynt -= vare.pris;
-  STATE.kjopt.add(vare.id);
+  STATE.pynt.push({ uid: STATE.nestePyntUid++, id:vare.id, x:null, z:null, rotY:0 });
   LYD.funn(); dirr([20,40,20]);
   oppdaterHud();
-  byggButikk();
-  byggFelt();
-  toast(vare.navn + ' satt ut p\u00e5 plenen');
+  gaTil('field');                 // plenen aapner i plasseringsmodus
+  toast('TRYKK P\u00c5 PLENEN FOR \u00c5 SETTE ' + vare.navn);
 });
 
 // ============================================================ dyst
 /* Hele kortspillet ligger i battle.js. Her er bare inngangen og broen. */
-function startDyst(){ KORTSPILL.start(); }
+/* En nettkamp er allerede satt opp av lobbyen naar vi kommer hit.
+   Ellers er det maskinen vi skal spille mot. */
+function startDyst(){ if(!KORTSPILL.KS.nett) KORTSPILL.start(); }
 
 // ============================================================ småting
 function oppdaterHud(){
@@ -862,10 +1468,21 @@ function blitz(){
 (function demoLenke(){
   const q = new URLSearchParams(location.hash.slice(1));
   if(SESONGER.includes(q.get('sesong'))) STATE.sesong = q.get('sesong');
-  if(q.get('alle')) SPECIES.forEach(s => STATE.funnet.add(s.id));
+  if(q.get('alle')) SPECIES.forEach(s => nyttEksemplar(s.id));
+  stillOppAlle();
+  const dupl = parseInt(q.get('dupl'), 10);
+  if(dupl > 0) SPECIES.slice(0, dupl).forEach(s => nyttEksemplar(s.id));
+  stillOppAlle();
+  if(q.get('kjop')) BUTIKK.forEach((b, i) => {
+    const p = feltPlass(i + 3);
+    STATE.pynt.push({ uid: STATE.nestePyntUid++, id:b.id, x:p.x, z:p.z, rotY:vriMot(b, p.x, p.z) });
+  });
+  if(q.get('mynt')) STATE.mynt = parseInt(q.get('mynt'), 10) || STATE.mynt;
   const antall = parseInt(q.get('n'), 10);
-  if(antall > 0) SPECIES.slice(0, antall).forEach(s => STATE.funnet.add(s.id));
+  if(antall > 0) SPECIES.slice(0, antall).forEach(s => nyttEksemplar(s.id));
+  stillOppAlle();
   if(q.get('variant')) SPECIES.forEach((s,i) => { if(i%4===0) STATE.varianter[s.id] = Object.keys(VARIANTER)[i%3]; });
+
   const skjerm = q.get('skjerm');
   const art = q.get('art');
   if(q.get('auto')){
@@ -875,7 +1492,7 @@ function blitz(){
   }
   setTimeout(() => {
     if(skjerm === 'reveal') visFunn(art || tilfeldigArt(), q.get('var') || null);
-    else if(skjerm === 'detail' && art){ STATE.funnet.add(art); byggFelt(); visDetalj(art); }
+    else if(skjerm === 'detail' && art){ nyttEksemplar(art); stillOppAlle(); byggFelt(); visDetalj(art); }
     else if(skjerm) gaTil(skjerm);
   }, 60);
 })();
@@ -905,30 +1522,34 @@ function byttSesong(){
 }
 
 // ---------- lyd av/på ----------
+const LYD_IKON = {
+  paa:'<svg class="ico ico-s" viewBox="0 0 9 9" aria-hidden="true"><rect x="1" y="3" width="2" height="3"/><rect x="3" y="2" width="1" height="5"/><rect x="4" y="1" width="1" height="7"/><rect x="6" y="3" width="1" height="3"/><rect x="8" y="2" width="1" height="5"/></svg>',
+  av:'<svg class="ico ico-s" viewBox="0 0 9 9" aria-hidden="true"><rect x="1" y="3" width="2" height="3"/><rect x="3" y="2" width="1" height="5"/><rect x="4" y="1" width="1" height="7"/><rect x="6" y="2" width="1" height="1"/><rect x="7" y="3" width="1" height="1"/><rect x="8" y="4" width="1" height="1"/><rect x="8" y="2" width="1" height="1"/><rect x="6" y="4" width="1" height="1"/></svg>'
+};
 const lydKnapp = $('#lydBtn');
 if(lydKnapp) lydKnapp.onclick = () => {
   const av = LYD.demp();
-  lydKnapp.textContent = av ? '\u266b\u0338' : '\u266b';
+  lydKnapp.innerHTML = av ? LYD_IKON.av : LYD_IKON.paa;
   lydKnapp.classList.toggle('av', av);
   toast(av ? 'Lyd av' : 'Lyd på');
 };
 
 // demo-snarveier under filming: tastene 1-8
 addEventListener('keydown', e => {
-  const kart = { '1':'splash','2':'shop','3':'field','4':'scan','5':'reveal','6':'collection','7':'battle' };
+  const kart = { '1':'splash','2':'shop','3':'field','4':'scan','5':'reveal','6':'collection','7':'lobby','8':'battle' };
   if(kart[e.key]){
     if(e.key==='5') visFunn(tilfeldigArt(), trekkVariant());
     else gaTil(kart[e.key]);
   }
-  if(e.key==='a'){ SPECIES.forEach(s => STATE.funnet.add(s.id)); byggFelt(); byggSamling(); toast('Alle arter låst opp'); }
+  if(e.key==='a'){ SPECIES.forEach(s => nyttEksemplar(s.id)); stillOppAlle(); byggFelt(); byggSamling(); toast('Alle arter låst opp'); }
   if(e.key==='s'){ byttSesong(); }
-  if(e.key==='v'){ const id = pick(SPECIES).id; STATE.varianter[id] = pick(Object.keys(VARIANTER)); STATE.funnet.add(id); byggFelt(); byggSamling(); toast(visningsNavn(id)); }
-  if(e.key==='t'){ STATE.funnet.clear(); STATE.varianter = {}; STATE.kjopt.clear(); byggFelt(); toast('Plenen tømt'); }
+  if(e.key==='v'){ const id = pick(SPECIES).id; nyttEksemplar(id, pick(Object.keys(VARIANTER))); stillOppAlle(); byggFelt(); byggSamling(); toast(visningsNavn(id)); }
+  if(e.key==='d'){ const id = pick([...STATE.funnet]); if(id){ nyttEksemplar(id); stillOppAlle(); byggFelt(); toast('Duplikat: ' + SPECIES_BY_ID[id].navn); } }
+  if(e.key==='t'){ STATE.funnet.clear(); STATE.varianter = {}; STATE.pynt = []; STATE.eksemplarer = []; byggFelt(); toast('Plenen tømt'); }
+  if(e.key==='r'){ STATE.eksemplarer.forEach((ex, i) => { const p = feltPlass(i); ex.x = p.x; ex.z = p.z; }); byggFelt(); toast('Artene stilt opp i spiral'); }
   if(e.key==='k'){ STATE.mynt += 500; oppdaterHud(); byggButikk(); toast('+500 mynt'); }
+  if(aktiv === 'field' && (e.key === 'ArrowLeft'  || e.key === 'q')) vriAktiv(-1);
+  if(aktiv === 'field' && (e.key === 'ArrowRight' || e.key === 'e')) vriAktiv(1);
 });
-
-// ============================================================ bro til battle.js
-/* Kortspillet ligger i sin egen fil og trenger noen faa ting herfra. */
-window.VM = { STATE, LYD, dirr, toast, lagMini, oppdaterHud, gaTil, visningsNavn };
 
 })();

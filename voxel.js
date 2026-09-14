@@ -437,18 +437,162 @@ function byggLykt(){
   return v;
 }
 
-/** blomstertust til bedet */
+/** blomstertust til bedet: mold i bunn, hoye stilker med tydelig blomst */
 function byggBlomsttust(){
   const v=new Vox();
-  v.disc(0,0,0,2.2,PROP.jord);
-  const farge = PROP.blomst[rndInt(0,3)];
-  for(let i=0;i<5;i++){
-    const x=rndInt(-2,2), z=rndInt(-2,2);
-    v.box(x,1,z,1,2,1,0x3f7f3f);
-    v.set(x,3,z,farge);
+  v.disc(0,0,0,1.8,PROP.jord);
+  const plasser = [[0,0],[1,1],[-1,1],[1,-1],[-1,-1],[2,0],[0,2],[-2,0]];
+  for(let i=0;i<plasser.length;i++){
+    const x = plasser[i][0], z = plasser[i][1];
+    const h = 3 + (i % 3);
+    v.box(x, 1, z, 1, h, 1, 0x3f7f3f);
+    const farge = PROP.blomst[i % PROP.blomst.length];
+    v.set(x, 1+h, z, farge);
+    v.set(x+1, h, z, farge);
+    v.set(x, h, z+1, farge);
   }
   return v;
 }
+
+/** kampestein */
+function byggStein(){
+  const v=new Vox();
+  v.disc(0,0,0,3.2,PROP.stein);
+  v.disc(0,1,0,2.9,PROP.stein2);
+  v.disc(0,2,0,2.2,PROP.stein);
+  v.disc(0,3,0,1.3,PROP.stein2);
+  v.set(1,4,0,PROP.stein);
+  return v;
+}
+
+/** trestubbe med lys snittflate */
+function byggStubbe(){
+  const v=new Vox();
+  v.disc(0,0,0,2.7,PROP.tre2);
+  v.disc(0,1,0,2.3,PROP.tre2);
+  v.disc(0,2,0,2.1,PROP.tre2);
+  v.disc(0,3,0,2.0,0xb99a63);
+  v.set(0,3,0,PROP.tre2);
+  v.set(3,0,0,PROP.tre2); v.set(-3,0,1,PROP.tre2); v.set(0,0,3,PROP.tre2);
+  return v;
+}
+
+/** lav busk */
+function byggBusk(){
+  const v=new Vox();
+  v.box(0,0,0,1,2,1,PROP.tre2);
+  v.disc(0,2,0,2.6,0x3f7f3f);
+  v.disc(0,3,0,3.0,0x4a8c46);
+  v.disc(0,4,0,2.5,0x3f7f3f);
+  v.disc(0,5,0,1.5,0x4a8c46);
+  return v;
+}
+
+/** ett hekkfelt - sett flere i rad for en vegg */
+function byggHekk(){
+  const v=new Vox();
+  v.box(-5,0,-1,10,5,3,0x35703a);
+  v.box(-5,5,-1,10,1,3,0x4a8c46);
+  for(let i=0;i<14;i++) v.set(rndInt(-5,4), 5, rndInt(-1,1), 0x56994f);
+  return v;
+}
+
+/** fuglekasse paa stolpe */
+function byggFuglekasse(){
+  const v=new Vox();
+  v.box(0,0,0,1,12,1,PROP.stolpe);
+  v.box(-2,12,-2,5,6,5,PROP.tre);
+  v.box(-2,18,-2,5,1,5,PROP.tre2);
+  v.del(0,15,-2); v.set(0,15,-1,0x241c18);
+  return v;
+}
+
+/** baalplass: steinring, kubber og flamme */
+function byggBaal(){
+  const v=new Vox();
+  for(let i=0;i<12;i++){
+    const a=i/12*6.28;
+    v.set(Math.round(Math.cos(a)*3), 0, Math.round(Math.sin(a)*3), i%2?PROP.stein:PROP.stein2);
+  }
+  v.box(-2,0,0,5,1,1,PROP.tre2);
+  v.box(0,1,-2,1,1,5,PROP.tre2);
+  v.box(-1,2,-1,3,1,3,0xe8862c);
+  v.box(0,3,0,1,2,1,0xf2d24a);
+  v.set(0,5,0,0xe8862c);
+  return v;
+}
+
+/** skilt med stolpe */
+function byggSkilt(){
+  const v=new Vox();
+  v.box(0,0,0,1,10,1,PROP.tre2);
+  v.box(-3,7,0,7,4,1,PROP.tre);
+  v.box(-3,7,0,7,1,1,PROP.tre2);
+  v.box(-3,10,0,7,1,1,PROP.tre2);
+  v.box(-2,9,-1,5,1,1,0x2a1f08);
+  v.box(-2,8,-1,3,1,1,0x2a1f08);
+  return v;
+}
+
+/** vedstabel */
+function byggVedstabel(){
+  const v=new Vox();
+  for(let y=0;y<4;y++){
+    const w = 8 - y*2;
+    for(let z=0;z<3;z++) v.box(-Math.floor(w/2), y, z-1, w, 1, 1, (y+z)%2 ? PROP.tre : PROP.tre2);
+  }
+  for(let y=0;y<4;y++){
+    const w = 8 - y*2, x = -Math.floor(w/2);
+    for(let z=0;z<3;z++){ v.set(x, y, z-1, 0xb99a63); v.set(x+w-1, y, z-1, 0xb99a63); }
+  }
+  return v;
+}
+
+/** fuglebad med vannspeil */
+function byggFuglebad(){
+  const v=new Vox();
+  v.disc(0,0,0,2.2,PROP.stein2);
+  v.box(-1,1,-1,3,4,3,PROP.stein);
+  v.disc(0,5,0,3.2,PROP.stein2);
+  v.disc(0,6,0,3.2,PROP.stein);
+  v.disc(0,6,0,2.3,0x2f86b4);
+  return v;
+}
+
+/** telt med aapning framover */
+function byggTelt(){
+  const v=new Vox();
+  const duk=0xd8cdb4, duk2=0xbfb195;
+  for(let y=0;y<=6;y++){
+    const w = 7-y;
+    for(let z=-4;z<=4;z++){
+      v.set(-w, y, z, (y+z)%2 ? duk : duk2);
+      v.set( w, y, z, (y+z)%2 ? duk : duk2);
+      for(let x=-w+1;x<w;x++) if(z===4) v.set(x, y, z, duk2);
+    }
+  }
+  v.box(-1,7,-4,3,1,9,PROP.tre2);
+  for(let y=0;y<=3;y++) for(const x of [-(7-y), 7-y]) v.set(x, y, -5, PROP.tre2);
+  return v;
+}
+
+/** flaggstang */
+function byggFlaggstang(){
+  const v=new Vox();
+  v.disc(0,0,0,2.0,PROP.stein2);
+  v.box(0,1,0,1,20,1,0xe6e0d2);
+  v.box(1,15,0,6,5,1,0xc8471f);
+  v.box(1,17,0,6,1,1,0xf4efe2);
+  v.box(3,15,0,1,5,1,0xf4efe2);
+  return v;
+}
+
+const PROP_BYGG = {
+  _gjerde:byggGjerde, _helle:byggHelle, _benk:byggBenk, _lykt:byggLykt,
+  _blomst:byggBlomsttust, _stein:byggStein, _stubbe:byggStubbe, _busk:byggBusk,
+  _hekk:byggHekk, _fuglekasse:byggFuglekasse, _baal:byggBaal, _skilt:byggSkilt,
+  _ved:byggVedstabel, _fuglebad:byggFuglebad, _telt:byggTelt, _flagg:byggFlaggstang,
+};
 
 /** spillerfigur - turgaer med sekk */
 function byggSpiller(){
@@ -557,11 +701,7 @@ const _cacheGeo = new Map();
 function byggVox(id, opt){
   opt = opt || {};
   if(id === '_spiller')  return byggSpiller();
-  if(id === '_gjerde')   return byggGjerde();
-  if(id === '_helle')    return byggHelle();
-  if(id === '_benk')     return byggBenk();
-  if(id === '_lykt')     return byggLykt();
-  if(id === '_blomst')   return byggBlomsttust();
+  if(PROP_BYGG[id])      return PROP_BYGG[id]();
   const sp = SPECIES_BY_ID[id];
   if(!sp) return new Vox();
   const st = SESONG_TYPE[id];

@@ -1,0 +1,175 @@
+/* VILLMARK - mapping fra modellabel til art i biblioteket
+   Begge modellene gir latinske navn. Fire nivaaer:
+     0 eksakt binomial  1 samme slekt  2 samme familie  3 ingen match
+   Ingen trening, ingen nett - bare taksonomi. */
+
+const ARTSMAPPING = (() => {
+'use strict';
+
+/* Slekt og familie for hver art i SPECIES. sci-feltet gir binomialet,
+   men slekt og familie maa staa her fordi modellene rangerer paa dem. */
+const TAKSONOMI = {
+  rev:        { genus:'vulpes',       family:'canidae' },
+  ekorn:      { genus:'sciurus',      family:'sciuridae' },
+  bjorn:      { genus:'ursus',        family:'ursidae' },
+  ulv:        { genus:'canis',        family:'canidae' },
+  hare:       { genus:'lepus',        family:'leporidae' },
+  gaupe:      { genus:'lynx',         family:'felidae' },
+  jerv:       { genus:'gulo',         family:'mustelidae' },
+  elg:        { genus:'alces',        family:'cervidae' },
+  hubro:      { genus:'bubo',         family:'strigidae' },
+  havorn:     { genus:'haliaeetus',   family:'accipitridae' },
+  rein:       { genus:'rangifer',     family:'cervidae' },
+  rype:       { genus:'lagopus',      family:'phasianidae' },
+  fjellrev:   { genus:'vulpes',       family:'canidae' },
+  oter:       { genus:'lutra',        family:'mustelidae' },
+  torsk:      { genus:'gadus',        family:'gadidae' },
+  steinkobbe: { genus:'phoca',        family:'phocidae' },
+
+  gran:       { genus:'picea',        family:'pinaceae' },
+  furu:       { genus:'pinus',        family:'pinaceae' },
+  bjork:      { genus:'betula',       family:'betulaceae' },
+  blaveis:    { genus:'hepatica',     family:'ranunculaceae' },
+  tyttebaer:  { genus:'vaccinium',    family:'ericaceae' },
+  rosslyng:   { genus:'calluna',      family:'ericaceae' },
+  molte:      { genus:'rubus',        family:'rosaceae' },
+  fluesopp:   { genus:'amanita',      family:'amanitaceae' },
+  kantarell:  { genus:'cantharellus', family:'cantharellaceae' },
+  tare:       { genus:'laminaria',    family:'laminariaceae' },
+};
+
+/* Blaaveis het Anemone hepatica for. FloraSense og iNat21 bruker begge
+   navn om hverandre, saa vi godtar begge. */
+const SYNONYMER = {
+  'anemone hepatica': 'hepatica nobilis',
+  'hepatica triloba': 'hepatica nobilis',
+  'betula alba':      'betula pubescens',
+  'cervus tarandus':  'rangifer tarandus',
+};
+
+/* Labels som ikke er arter. SpeciesNet returnerer disse ofte. */
+const IKKE_ART = new Set(['blank','animal','human','vehicle','unknown','no cv result']);
+
+const norm = s => String(s || '')
+  .toLowerCase()
+  .replace(/_/g, ' ')
+  .replace(/[×x]\s+/g, '')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+/* Latinske navn i modellene har ofte autornavn paa slutten:
+   "Picea abies (L.) H.Karst." -> "picea abies".
+   Vi tar de to forste ordene som bare inneholder bokstaver. */
+function binomialAv(navn){
+  const ord = norm(navn).split(' ').filter(o => /^[a-zæøå.-]+$/.test(o));
+  if(ord.length < 2) return ord[0] || '';
+  const bi = ord[0] + ' ' + ord[1].replace(/\.$/, '');
+  return SYNONYMER[bi] || bi;
+}
+
+/* Indekser bygges naar SPECIES finnes. species.js lastes for denne fila. */
+const BINOMIAL = new Map();   // "vulpes vulpes" -> id
+const SLEKT    = new Map();   // "vulpes"        -> [id, ...]
+const FAMILIE  = new Map();   // "canidae"       -> [id, ...]
+
+for(const sp of (typeof SPECIES !== 'undefined' ? SPECIES : [])){
+  const t = TAKSONOMI[sp.id];
+  if(!t){ console.warn('ARTSMAPPING: mangler taksonomi for', sp.id); continue; }
+  BINOMIAL.set(binomialAv(sp.sci), sp.id);
+  if(!SLEKT.has(t.genus))    SLEKT.set(t.genus, []);
+  if(!FAMILIE.has(t.family)) FAMILIE.set(t.family, []);
+  SLEKT.get(t.genus).push(sp.id);
+  FAMILIE.get(t.family).push(sp.id);
+}
+
+/* Naar flere arter deler slekt eller familie (gran/furu, tyttebaer/rosslyng,
+   rev/fjellrev) velger vi den minst sjeldne. En bom paa bjoern naar modellen
+   sa "ursidae" skal ikke dele ut spillets sjeldneste kort. */
+function minstSjeldne(ider){
+  if(ider.length === 1) return ider[0];
+  const tab = typeof SPECIES_BY_ID !== 'undefined' ? SPECIES_BY_ID : {};
+  return ider.slice().sort((a,b) => (tab[a]?.sjelden || 9) - (tab[b]?.sjelden || 9))[0];
+}
+
+/* --- parsing av de to labelformatene ------------------------------------ */
+
+/* SpeciesNet: "uuid;class;order;family;genus;species;common name"
+   Tomme felter betyr hoyere taksonomisk niva eller ikke-dyr. */
+function parseSpeciesNet(label){
+  const f = String(label).split(';');
+  if(f.length < 7) return { felles: norm(label) };
+  const [, klasse, orden, familie, slekt, art, felles] = f.map(norm);
+  return {
+    binomial: slekt && art ? (SYNONYMER[slekt + ' ' + art] || slekt + ' ' + art) : '',
+    genus: slekt, family: familie, order: orden, klasse, felles,
+  };
+}
+
+/* iNat21: eksportskriptet skriver {name, genus, family, kingdom} per klasse.
+   Faller tilbake til ren navnestreng om noen mater inn en enkel liste. */
+function parseInat(label){
+  if(label && typeof label === 'object'){
+    return {
+      binomial: binomialAv(label.name),
+      genus: norm(label.genus) || binomialAv(label.name).split(' ')[0],
+      family: norm(label.family),
+      klasse: norm(label.kingdom),
+      felles: norm(label.common_name || label.name),
+    };
+  }
+  const bi = binomialAv(label);
+  return { binomial: bi, genus: bi.split(' ')[0], family: '', felles: norm(label) };
+}
+
+function parseLabel(label, kilde){
+  return kilde === 'speciesnet' ? parseSpeciesNet(label) : parseInat(label);
+}
+
+/* --- selve oppslaget ----------------------------------------------------- */
+
+const NIVA_TEKST = ['SIKKER', 'NÆRMESTE SLEKTNING', 'USIKKER', 'UKJENT ART'];
+
+/* Returnerer {id, niva, nivaTekst, latin, felles} eller null for ikke-arter. */
+function slaaOpp(label, kilde){
+  const p = parseLabel(label, kilde);
+  if(IKKE_ART.has(p.felles) && !p.binomial) return null;
+
+  const latin = p.binomial || p.family || p.felles;
+  const svar = (id, niva) => ({ id, niva, nivaTekst: NIVA_TEKST[niva], latin, felles: p.felles });
+
+  if(p.binomial && BINOMIAL.has(p.binomial)) return svar(BINOMIAL.get(p.binomial), 0);
+  if(p.genus   && SLEKT.has(p.genus))        return svar(minstSjeldne(SLEKT.get(p.genus)), 1);
+  if(p.family  && FAMILIE.has(p.family))     return svar(minstSjeldne(FAMILIE.get(p.family)), 2);
+  return svar(null, 3);
+}
+
+/* Gaar gjennom topp-5 og tar det beste treffet, ikke bare det forste.
+   En sikker treff-kandidat paa plass 3 slaar en familiegjetning paa plass 1.
+   predikasjoner = [{label, p}, ...] sortert synkende paa p. */
+function beste(predikasjoner, kilde, opt){
+  const minP = (opt && opt.minP) || 0.04;
+  let best = null;
+  for(const pred of predikasjoner){
+    if(pred.p < minP) continue;
+    const treff = slaaOpp(pred.label, kilde);
+    if(!treff || treff.niva === 3) continue;
+    if(!best || treff.niva < best.niva || (treff.niva === best.niva && pred.p > best.p)){
+      best = { ...treff, p: pred.p, kilde };
+    }
+    if(best.niva === 0) break;   // kan ikke bli bedre
+  }
+  if(best) return best;
+
+  /* Ingen treff. Vis likevel hva modellen faktisk trodde. */
+  const topp = predikasjoner[0];
+  const p = topp ? parseLabel(topp.label, kilde) : {};
+  return {
+    id: null, niva: 3, nivaTekst: NIVA_TEKST[3], kilde,
+    latin: p.binomial || p.felles || '', felles: p.felles || '', p: topp ? topp.p : 0,
+  };
+}
+
+return { slaaOpp, beste, parseLabel, binomialAv, TAKSONOMI, NIVA_TEKST, IKKE_ART };
+})();
+
+if(typeof window !== 'undefined') window.ARTSMAPPING = ARTSMAPPING;

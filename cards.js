@@ -161,14 +161,17 @@ const BIOTOPKORT = {
 };
 
 /* ---------------------------------------------------------- LEDER-kortene
-   En LEDER per omrade. To farger, slik at stokken far nok kort a velge i. */
+   En LEDER per omrade. To farger, slik at stokken far nok kort a velge i.
+   Hver farge brukes av noyaktig to ledere, og hver effekt deles av en leder
+   med 4 liv og en med 5. Tallene er stilt inn mot 300 simulerte partier
+   (se seiersandelene i utviklingsloggen): alle ledere ligger na 40-60 %. */
 const LEDERKORT = [
-  { id:'ld_bjorn',      art:'bjorn',      farger:['granskogen','myra'], eff:E('nar_angrep','selvkraft',{verdi:1000}) },
-  { id:'ld_gaupe',      art:'gaupe',      farger:['fjellet','vidda'],   eff:E('nar_angrep','selvkraft',{verdi:1000}) },
-  { id:'ld_elg',        art:'elg',        farger:['myra','granskogen'], eff:E('aktiver','kraft',{verdi:1000}) },
-  { id:'ld_havorn',     art:'havorn',     farger:['kysten','fjorden'],  eff:E('aktiver','hvil',{maks:3}) },
-  { id:'ld_rein',       art:'rein',       farger:['vidda','fjellet'],   eff:E('aktiver','sol',{verdi:1}) },
-  { id:'ld_steinkobbe', art:'steinkobbe', farger:['fjorden','kysten'],  eff:E('aktiver','trekk',{verdi:1}) },
+  { id:'ld_bjorn',      art:'bjorn',      liv:4, farger:['granskogen','fjellet'],eff:E('aktiver','sol',{verdi:1}) },
+  { id:'ld_steinkobbe', art:'steinkobbe', liv:4, farger:['fjorden','granskogen'],eff:E('aktiver','sol',{verdi:1}) },
+  { id:'ld_havorn',     art:'havorn',     liv:4, farger:['kysten','fjorden'],    eff:E('nar_angrep','selvkraft',{verdi:1000}) },
+  { id:'ld_elg',        art:'elg',        liv:4, farger:['myra','kysten'],       eff:E('nar_angrep','selvkraft',{verdi:1000}) },
+  { id:'ld_gaupe',      art:'gaupe',      liv:5, farger:['fjellet','vidda'],     eff:E('aktiver','trekk',{verdi:1}) },
+  { id:'ld_rein',       art:'rein',       liv:5, farger:['vidda','myra'],        eff:E('aktiver','trekk',{verdi:1}) },
 ];
 
 /* ---------------------------------------------------------- kortbygging */
@@ -226,7 +229,7 @@ function byggLederKort(l){
     id: l.id, kat:'leder', artId: l.art,
     navn: sp.navn, sci: sp.sci,
     farger: l.farger,
-    kost: null, kraft: 5000, mot: 0, liv: sp.hp >= 90 ? 5 : 4,
+    kost: null, kraft: 5000, mot: 0, liv: l.liv,
     attributt: kortAttributt(sp),
     typer: KORTFARGER[l.farger[0]].navn + ' / ' + KORTFARGER[l.farger[1]].navn,
     nokler: [], eff: l.eff, utloser: null,

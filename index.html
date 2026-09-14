@@ -6,10 +6,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#0e1a12">
+<meta name="theme-color" content="#080d09">
 <link rel="manifest" href="manifest.json">
 <title>VILLMARK</title>
-<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Silkscreen:wght@400;700&family=Pixelify+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -39,28 +42,76 @@
     <div class="boot" id="boot"><i></i></div>
   </section>
 
+  <!-- ============ KART ============ -->
+  <section class="screen screen-solid" id="screen-map">
+    <header class="topbar">
+      <div class="tb-title">KART</div>
+      <div class="tb-stats">
+        <button class="chip chip-mynt" data-go="shop"><svg class="ico ico-s" viewBox="0 0 9 9" aria-hidden="true"><rect x="3" y="1" width="3" height="1"/><rect x="2" y="2" width="5" height="1"/><rect x="1" y="3" width="7" height="3"/><rect x="2" y="6" width="5" height="1"/><rect x="3" y="7" width="3" height="1"/></svg> <b class="hud-mynt">500</b></button>
+        <span class="chip"><svg class="ico ico-s" viewBox="0 0 9 9" aria-hidden="true"><rect x="3" y="1" width="3" height="1"/><rect x="2" y="2" width="1" height="1"/><rect x="6" y="2" width="1" height="1"/><rect x="1" y="3" width="1" height="3"/><rect x="7" y="3" width="1" height="3"/><rect x="2" y="6" width="1" height="1"/><rect x="6" y="6" width="1" height="1"/><rect x="3" y="7" width="3" height="1"/><rect x="3" y="3" width="3" height="3"/></svg> <b id="kartSkjult">0</b>/<b id="kartAntall">0</b></span>
+      </div>
+    </header>
+
+    <div class="kart-flate">
+      <div id="kart"></div>
+      <div class="kart-vignett"></div>
+      <div class="kart-verktoy">
+        <button class="icon-btn" id="kartMeg" title="Sentrer p&aring; meg"><svg class="ico" viewBox="0 0 9 9" aria-hidden="true"><rect x="0" y="0" width="3" height="1"/><rect x="0" y="0" width="1" height="3"/><rect x="6" y="0" width="3" height="1"/><rect x="8" y="0" width="1" height="3"/><rect x="0" y="8" width="3" height="1"/><rect x="0" y="6" width="1" height="3"/><rect x="6" y="8" width="3" height="1"/><rect x="8" y="6" width="1" height="3"/><rect x="3" y="3" width="3" height="3"/></svg></button>
+        <button class="icon-btn" id="kartSok" title="Nye spor"><svg class="ico" viewBox="0 0 9 9" aria-hidden="true"><rect x="3" y="1" width="4" height="1"/><rect x="2" y="2" width="1" height="1"/><rect x="7" y="2" width="1" height="1"/><rect x="1" y="3" width="1" height="3"/><rect x="7" y="4" width="1" height="2"/><rect x="2" y="6" width="1" height="1"/><rect x="3" y="7" width="4" height="1"/><rect x="6" y="0" width="3" height="1"/><rect x="8" y="0" width="1" height="3"/></svg></button>
+      </div>
+      <p class="kart-hint">&#9733;4+ SPOR INNENFOR 5 KM &middot; TRYKK ET IKON</p>
+    </div>
+
+    <div class="kart-kort" id="kartKort" hidden>
+      <button class="kart-kort-lukk" id="kartKortLukk"><svg class="ico" viewBox="0 0 9 9" aria-hidden="true"><rect x="0" y="0" width="2" height="2"/><rect x="2" y="2" width="1" height="1"/><rect x="3" y="3" width="1" height="1"/><rect x="4" y="4" width="1" height="1"/><rect x="5" y="5" width="1" height="1"/><rect x="6" y="6" width="1" height="1"/><rect x="7" y="7" width="2" height="2"/><rect x="7" y="0" width="2" height="2"/><rect x="6" y="2" width="1" height="1"/><rect x="5" y="3" width="1" height="1"/><rect x="3" y="5" width="1" height="1"/><rect x="2" y="6" width="1" height="1"/><rect x="0" y="7" width="2" height="2"/></svg></button>
+      <div class="kart-kort-topp">
+        <span class="kart-kort-navn" id="kartKortNavn">? ? ?</span>
+        <span class="kart-kort-stj r1" id="kartKortStj">&#9733;</span>
+      </div>
+      <p class="kart-kort-sci" id="kartKortSci">UIDENTIFISERT</p>
+      <div class="kart-kort-rad">
+        <span class="kart-kort-merke" id="kartKortRang">VANLIG</span>
+        <span class="kart-kort-dist" id="kartKortDist">0 M</span>
+      </div>
+      <p class="kart-kort-fakta" id="kartKortFakta"></p>
+      <button class="btn btn-primary" id="kartKortGo">SKANN HER</button>
+    </div>
+
+    <nav class="tabbar">
+      <button class="tab" data-go="field"><svg class="ico" viewBox="0 0 9 9" aria-hidden="true"><rect x="4" y="1" width="4" height="1"/><rect x="3" y="2" width="5" height="1"/><rect x="2" y="3" width="5" height="1"/><rect x="1" y="4" width="5" height="1"/><rect x="1" y="5" width="4" height="1"/><rect x="1" y="6" width="3" height="1"/><rect x="0" y="7" width="2" height="1"/></svg>PLENEN</button>
+      <button class="tab active" data-go="map"><svg class="ico" viewBox="0 0 9 9" aria-hidden="true"><rect x="0" y="1" width="3" height="7"/><rect x="3" y="0" width="3" height="7"/><rect x="6" y="1" width="3" height="7"/></svg>KART</button>
+      <button class="tab tab-skann" data-go="scan"><svg class="ico" viewBox="0 0 9 9" aria-hidden="true"><rect x="0" y="0" width="3" height="1"/><rect x="0" y="0" width="1" height="3"/><rect x="6" y="0" width="3" height="1"/><rect x="8" y="0" width="1" height="3"/><rect x="0" y="8" width="3" height="1"/><rect x="0" y="6" width="1" height="3"/><rect x="6" y="8" width="3" height="1"/><rect x="8" y="6" width="1" height="3"/><rect x="3" y="3" width="3" height="3"/></svg>SKANN</button>
+      <button class="tab" data-go="collection"><svg class="ico" viewBox="0 0 9 9" aria-hidden="true"><rect x="0" y="0" width="4" height="4"/><rect x="5" y="0" width="4" height="4"/><rect x="0" y="5" width="4" height="4"/><rect x="5" y="5" width="4" height="4"/></svg>SAMLING</button>
+      <button class="tab" data-go="lobby"><svg class="ico" viewBox="0 0 9 9" aria-hidden="true"><rect x="0" y="0" width="2" height="1"/><rect x="1" y="1" width="1" height="1"/><rect x="2" y="2" width="1" height="1"/><rect x="3" y="3" width="1" height="1"/><rect x="4" y="4" width="1" height="1"/><rect x="5" y="5" width="1" height="1"/><rect x="6" y="6" width="1" height="1"/><rect x="7" y="7" width="2" height="2"/><rect x="7" y="0" width="2" height="1"/><rect x="7" y="1" width="1" height="1"/><rect x="6" y="2" width="1" height="1"/><rect x="5" y="3" width="1" height="1"/><rect x="3" y="5" width="1" height="1"/><rect x="2" y="6" width="1" height="1"/><rect x="0" y="7" width="2" height="2"/></svg>DYST</button>
+    </nav>
+  </section>
+
   <!-- ============ PLENEN ============ -->
-  <section class="screen active" id="screen-field">
+  <section class="screen" id="screen-field">
     <header class="topbar">
       <div class="tb-title">PLENEN</div>
       <div class="tb-stats">
-        <button class="chip chip-knapp" id="lydBtn">&#9835;</button>
+        <button class="chip chip-knapp" id="lydBtn"><svg class="ico ico-s" viewBox="0 0 9 9" aria-hidden="true"><rect x="1" y="3" width="2" height="3"/><rect x="3" y="2" width="1" height="5"/><rect x="4" y="1" width="1" height="7"/><rect x="6" y="3" width="1" height="3"/><rect x="8" y="2" width="1" height="5"/></svg></button>
         <button class="chip chip-knapp" id="fieldSesong">H&Oslash;ST</button>
-        <span class="chip">&#9679; <b class="hud-mynt">120</b></span>
-        <span class="chip">&#9673; <b id="feltCount">0</b>/<b id="feltTotal">26</b></span>
+        <button class="chip chip-mynt" data-go="shop"><svg class="ico ico-s" viewBox="0 0 9 9" aria-hidden="true"><rect x="3" y="1" width="3" height="1"/><rect x="2" y="2" width="5" height="1"/><rect x="1" y="3" width="7" height="3"/><rect x="2" y="6" width="5" height="1"/><rect x="3" y="7" width="3" height="1"/></svg> <b class="hud-mynt">500</b></button>
+        <span class="chip"><svg class="ico ico-s" viewBox="0 0 9 9" aria-hidden="true"><rect x="3" y="1" width="3" height="1"/><rect x="2" y="2" width="1" height="1"/><rect x="6" y="2" width="1" height="1"/><rect x="1" y="3" width="1" height="3"/><rect x="7" y="3" width="1" height="3"/><rect x="2" y="6" width="1" height="1"/><rect x="6" y="6" width="1" height="1"/><rect x="3" y="7" width="3" height="1"/><rect x="3" y="3" width="3" height="3"/></svg> <b id="feltCount">0</b>/<b id="feltTotal">26</b></span>
       </div>
     </header>
     <p class="slette-tom" id="feltTom">PLENEN ER TOM<br><span>SKANN EN ART FOR &Aring; SETTE DEN UT HER</span></p>
-    <p class="slette-hint">DRA FOR &Aring; FLYTTE DEG &middot; KNIP FOR &Aring; ZOOME &middot; TRYKK EN ART</p>
-    <button class="scan-fab" id="scanFab">
-      <span class="scan-fab-ico">&#9678;</span>
-      <span class="scan-fab-txt">SKANN</span>
-    </button>
+    <p class="slette-hint">DRA = FLYTT DEG &middot; KNIP = ZOOM &middot; TRYKK = KORT &middot; HOLD = FLYTT &middot; TRYKK TING = VRI</p>
+    <p class="felt-flytt" id="feltFlytt" hidden>FLYTTER</p>
+    <p class="felt-flytt felt-plasser" id="feltPlasser" hidden>TRYKK P&Aring; PLENEN</p>
+    <div class="felt-vri" id="feltVri" hidden>
+      <button class="vri-knapp" data-vri="-1">&#8634;</button>
+      <span class="vri-navn" id="feltVriNavn">TING</span>
+      <button class="vri-knapp" data-vri="1">&#8635;</button>
+    </div>
     <nav class="tabbar">
-      <button class="tab active" data-go="field"><span>&#10047;</span>PLENEN</button>
-      <button class="tab" data-go="collection"><span>&#9636;</span>SAMLING</button>
-      <button class="tab" data-go="battle"><span>&#9876;</span>DYST</button>
-      <button class="tab" data-go="shop"><span>&#9733;</span>BUTIKK</button>
+      <button class="tab active" data-go="field"><svg class="ico" viewBox="0 0 9 9" aria-hidden="true"><rect x="4" y="1" width="4" height="1"/><rect x="3" y="2" width="5" height="1"/><rect x="2" y="3" width="5" height="1"/><rect x="1" y="4" width="5" height="1"/><rect x="1" y="5" width="4" height="1"/><rect x="1" y="6" width="3" height="1"/><rect x="0" y="7" width="2" height="1"/></svg>PLENEN</button>
+      <button class="tab" data-go="map"><svg class="ico" viewBox="0 0 9 9" aria-hidden="true"><rect x="0" y="1" width="3" height="7"/><rect x="3" y="0" width="3" height="7"/><rect x="6" y="1" width="3" height="7"/></svg>KART</button>
+      <button class="tab tab-skann" data-go="scan"><svg class="ico" viewBox="0 0 9 9" aria-hidden="true"><rect x="0" y="0" width="3" height="1"/><rect x="0" y="0" width="1" height="3"/><rect x="6" y="0" width="3" height="1"/><rect x="8" y="0" width="1" height="3"/><rect x="0" y="8" width="3" height="1"/><rect x="0" y="6" width="1" height="3"/><rect x="6" y="8" width="3" height="1"/><rect x="8" y="6" width="1" height="3"/><rect x="3" y="3" width="3" height="3"/></svg>SKANN</button>
+      <button class="tab" data-go="collection"><svg class="ico" viewBox="0 0 9 9" aria-hidden="true"><rect x="0" y="0" width="4" height="4"/><rect x="5" y="0" width="4" height="4"/><rect x="0" y="5" width="4" height="4"/><rect x="5" y="5" width="4" height="4"/></svg>SAMLING</button>
+      <button class="tab" data-go="lobby"><svg class="ico" viewBox="0 0 9 9" aria-hidden="true"><rect x="0" y="0" width="2" height="1"/><rect x="1" y="1" width="1" height="1"/><rect x="2" y="2" width="1" height="1"/><rect x="3" y="3" width="1" height="1"/><rect x="4" y="4" width="1" height="1"/><rect x="5" y="5" width="1" height="1"/><rect x="6" y="6" width="1" height="1"/><rect x="7" y="7" width="2" height="2"/><rect x="7" y="0" width="2" height="1"/><rect x="7" y="1" width="1" height="1"/><rect x="6" y="2" width="1" height="1"/><rect x="5" y="3" width="1" height="1"/><rect x="3" y="5" width="1" height="1"/><rect x="2" y="6" width="1" height="1"/><rect x="0" y="7" width="2" height="2"/></svg>DYST</button>
     </nav>
   </section>
 
@@ -68,7 +119,7 @@
   <section class="screen screen-cam" id="screen-scan">
     <div class="scan-grain"></div>
     <div class="scan-overlay">
-      <button class="icon-btn scan-close" data-go="field">&#10005;</button>
+      <button class="icon-btn scan-close" id="scanLukk"><svg class="ico" viewBox="0 0 9 9" aria-hidden="true"><rect x="0" y="0" width="2" height="2"/><rect x="2" y="2" width="1" height="1"/><rect x="3" y="3" width="1" height="1"/><rect x="4" y="4" width="1" height="1"/><rect x="5" y="5" width="1" height="1"/><rect x="6" y="6" width="1" height="1"/><rect x="7" y="7" width="2" height="2"/><rect x="7" y="0" width="2" height="2"/><rect x="6" y="2" width="1" height="1"/><rect x="5" y="3" width="1" height="1"/><rect x="3" y="5" width="1" height="1"/><rect x="2" y="6" width="1" height="1"/><rect x="0" y="7" width="2" height="2"/></svg></button>
       <div class="scan-hud-top">
         <span class="rec"><i></i>ARTSKANNER</span>
         <span id="scanCoords">N 63.42&deg; &middot; Ø 10.39&deg;</span>
@@ -91,7 +142,6 @@
       <div id="revealCard"></div>
       <div class="reward-row">
         <span>+<b id="revealXp">60</b> XP</span>
-        <span>+<b id="revealCoin">25</b> &#9679;</span>
       </div>
       <button class="btn btn-primary" id="revealOk">LEGG I SAMLING</button>
     </div>
@@ -101,7 +151,7 @@
   <section class="screen screen-solid" id="screen-collection">
     <header class="topbar">
       <div class="tb-title">SAMLING</div>
-      <div class="tb-stats"><span class="chip">&#9673; <b id="colCount">0</b>/<b id="colTotal">10</b></span></div>
+      <div class="tb-stats"><span class="chip"><svg class="ico ico-s" viewBox="0 0 9 9" aria-hidden="true"><rect x="3" y="1" width="3" height="1"/><rect x="2" y="2" width="1" height="1"/><rect x="6" y="2" width="1" height="1"/><rect x="1" y="3" width="1" height="3"/><rect x="7" y="3" width="1" height="3"/><rect x="2" y="6" width="1" height="1"/><rect x="6" y="6" width="1" height="1"/><rect x="3" y="7" width="3" height="1"/><rect x="3" y="3" width="3" height="3"/></svg> <b id="colCount">0</b>/<b id="colTotal">10</b></span></div>
     </header>
     <div class="col-filters">
       <button class="pill active" data-filter="alle">ALLE</button>
@@ -110,10 +160,11 @@
     </div>
     <div class="card-grid" id="cardGrid"></div>
     <nav class="tabbar">
-      <button class="tab" data-go="field"><span>&#10047;</span>PLENEN</button>
-      <button class="tab active" data-go="collection"><span>&#9636;</span>SAMLING</button>
-      <button class="tab" data-go="battle"><span>&#9876;</span>DYST</button>
-      <button class="tab" data-go="shop"><span>&#9733;</span>BUTIKK</button>
+      <button class="tab" data-go="field"><svg class="ico" viewBox="0 0 9 9" aria-hidden="true"><rect x="4" y="1" width="4" height="1"/><rect x="3" y="2" width="5" height="1"/><rect x="2" y="3" width="5" height="1"/><rect x="1" y="4" width="5" height="1"/><rect x="1" y="5" width="4" height="1"/><rect x="1" y="6" width="3" height="1"/><rect x="0" y="7" width="2" height="1"/></svg>PLENEN</button>
+      <button class="tab" data-go="map"><svg class="ico" viewBox="0 0 9 9" aria-hidden="true"><rect x="0" y="1" width="3" height="7"/><rect x="3" y="0" width="3" height="7"/><rect x="6" y="1" width="3" height="7"/></svg>KART</button>
+      <button class="tab tab-skann" data-go="scan"><svg class="ico" viewBox="0 0 9 9" aria-hidden="true"><rect x="0" y="0" width="3" height="1"/><rect x="0" y="0" width="1" height="3"/><rect x="6" y="0" width="3" height="1"/><rect x="8" y="0" width="1" height="3"/><rect x="0" y="8" width="3" height="1"/><rect x="0" y="6" width="1" height="3"/><rect x="6" y="8" width="3" height="1"/><rect x="8" y="6" width="1" height="3"/><rect x="3" y="3" width="3" height="3"/></svg>SKANN</button>
+      <button class="tab active" data-go="collection"><svg class="ico" viewBox="0 0 9 9" aria-hidden="true"><rect x="0" y="0" width="4" height="4"/><rect x="5" y="0" width="4" height="4"/><rect x="0" y="5" width="4" height="4"/><rect x="5" y="5" width="4" height="4"/></svg>SAMLING</button>
+      <button class="tab" data-go="lobby"><svg class="ico" viewBox="0 0 9 9" aria-hidden="true"><rect x="0" y="0" width="2" height="1"/><rect x="1" y="1" width="1" height="1"/><rect x="2" y="2" width="1" height="1"/><rect x="3" y="3" width="1" height="1"/><rect x="4" y="4" width="1" height="1"/><rect x="5" y="5" width="1" height="1"/><rect x="6" y="6" width="1" height="1"/><rect x="7" y="7" width="2" height="2"/><rect x="7" y="0" width="2" height="1"/><rect x="7" y="1" width="1" height="1"/><rect x="6" y="2" width="1" height="1"/><rect x="5" y="3" width="1" height="1"/><rect x="3" y="5" width="1" height="1"/><rect x="2" y="6" width="1" height="1"/><rect x="0" y="7" width="2" height="2"/></svg>DYST</button>
     </nav>
   </section>
 
@@ -121,21 +172,22 @@
   <section class="screen screen-solid" id="screen-shop">
     <header class="topbar">
       <div class="tb-title">BUTIKK</div>
-      <div class="tb-stats"><span class="chip">&#9679; <b class="hud-mynt" id="shopCoins">120</b></span></div>
+      <div class="tb-stats"><button class="chip chip-mynt" data-go="shop"><svg class="ico ico-s" viewBox="0 0 9 9" aria-hidden="true"><rect x="3" y="1" width="3" height="1"/><rect x="2" y="2" width="5" height="1"/><rect x="1" y="3" width="7" height="3"/><rect x="2" y="6" width="5" height="1"/><rect x="3" y="7" width="3" height="1"/></svg> <b class="hud-mynt" id="shopCoins">500</b></button></div>
     </header>
-    <p class="shop-intro">PYNT PLENEN. MYNT F&Aring;R DU AV &Aring; SKANNE NYE ARTER OG VINNE DYSTER.</p>
+    <p class="shop-intro">EN TING OM GANGEN. DU SETTER DEN UT SELV. MYNT F&Aring;R DU AV &Aring; VINNE DYSTER.</p>
     <div class="shop-grid" id="shopGrid"></div>
     <nav class="tabbar">
-      <button class="tab" data-go="field"><span>&#10047;</span>PLENEN</button>
-      <button class="tab" data-go="collection"><span>&#9636;</span>SAMLING</button>
-      <button class="tab" data-go="battle"><span>&#9876;</span>DYST</button>
-      <button class="tab active" data-go="shop"><span>&#9733;</span>BUTIKK</button>
+      <button class="tab" data-go="field"><svg class="ico" viewBox="0 0 9 9" aria-hidden="true"><rect x="4" y="1" width="4" height="1"/><rect x="3" y="2" width="5" height="1"/><rect x="2" y="3" width="5" height="1"/><rect x="1" y="4" width="5" height="1"/><rect x="1" y="5" width="4" height="1"/><rect x="1" y="6" width="3" height="1"/><rect x="0" y="7" width="2" height="1"/></svg>PLENEN</button>
+      <button class="tab" data-go="map"><svg class="ico" viewBox="0 0 9 9" aria-hidden="true"><rect x="0" y="1" width="3" height="7"/><rect x="3" y="0" width="3" height="7"/><rect x="6" y="1" width="3" height="7"/></svg>KART</button>
+      <button class="tab tab-skann" data-go="scan"><svg class="ico" viewBox="0 0 9 9" aria-hidden="true"><rect x="0" y="0" width="3" height="1"/><rect x="0" y="0" width="1" height="3"/><rect x="6" y="0" width="3" height="1"/><rect x="8" y="0" width="1" height="3"/><rect x="0" y="8" width="3" height="1"/><rect x="0" y="6" width="1" height="3"/><rect x="6" y="8" width="3" height="1"/><rect x="8" y="6" width="1" height="3"/><rect x="3" y="3" width="3" height="3"/></svg>SKANN</button>
+      <button class="tab" data-go="collection"><svg class="ico" viewBox="0 0 9 9" aria-hidden="true"><rect x="0" y="0" width="4" height="4"/><rect x="5" y="0" width="4" height="4"/><rect x="0" y="5" width="4" height="4"/><rect x="5" y="5" width="4" height="4"/></svg>SAMLING</button>
+      <button class="tab" data-go="lobby"><svg class="ico" viewBox="0 0 9 9" aria-hidden="true"><rect x="0" y="0" width="2" height="1"/><rect x="1" y="1" width="1" height="1"/><rect x="2" y="2" width="1" height="1"/><rect x="3" y="3" width="1" height="1"/><rect x="4" y="4" width="1" height="1"/><rect x="5" y="5" width="1" height="1"/><rect x="6" y="6" width="1" height="1"/><rect x="7" y="7" width="2" height="2"/><rect x="7" y="0" width="2" height="1"/><rect x="7" y="1" width="1" height="1"/><rect x="6" y="2" width="1" height="1"/><rect x="5" y="3" width="1" height="1"/><rect x="3" y="5" width="1" height="1"/><rect x="2" y="6" width="1" height="1"/><rect x="0" y="7" width="2" height="2"/></svg>DYST</button>
     </nav>
   </section>
 
   <!-- ============ KORTDETALJ ============ -->
   <section class="screen screen-dark" id="screen-detail">
-    <button class="icon-btn detail-close" data-go="collection">&#10005;</button>
+    <button class="icon-btn detail-close" data-go="collection"><svg class="ico" viewBox="0 0 9 9" aria-hidden="true"><rect x="0" y="0" width="2" height="2"/><rect x="2" y="2" width="1" height="1"/><rect x="3" y="3" width="1" height="1"/><rect x="4" y="4" width="1" height="1"/><rect x="5" y="5" width="1" height="1"/><rect x="6" y="6" width="1" height="1"/><rect x="7" y="7" width="2" height="2"/><rect x="7" y="0" width="2" height="2"/><rect x="6" y="2" width="1" height="1"/><rect x="5" y="3" width="1" height="1"/><rect x="3" y="5" width="1" height="1"/><rect x="2" y="6" width="1" height="1"/><rect x="0" y="7" width="2" height="2"/></svg></button>
     <div class="detail-inner">
       <div class="detail-stage"></div>
       <h2 class="detail-name" id="detailName">REV</h2>
@@ -145,13 +197,65 @@
     </div>
   </section>
 
+  <!-- ============ DYST - LOBBY ============ -->
+  <section class="screen screen-solid" id="screen-lobby">
+
+    <header class="topbar">
+      <div class="tb-title">DYST</div>
+      <div class="tb-stats">
+        <span class="chip" id="lobStatus">KOBLER TIL &hellip;</span>
+      </div>
+    </header>
+
+    <div class="lob-rull">
+
+      <label class="lob-merke" for="lobNavn">DITT NAVN</label>
+      <input class="lob-navn" id="lobNavn" maxlength="18" autocomplete="off" spellcheck="false">
+
+      <label class="lob-merke">DITT DEKK</label>
+      <div class="lob-ledere" id="lobLedere"></div>
+
+      <label class="lob-merke">PÅNETT</label>
+      <div class="lob-liste" id="lobListe"></div>
+
+      <button class="btn lob-ai" id="lobMotAI">SPILL MOT MASKINEN</button>
+    </div>
+
+    <!-- ---------- venter paa svar ---------- -->
+    <div class="lob-lag" id="lobVent" hidden>
+      <div class="lob-lag-inn">
+        <p id="lobVentTxt">VENTER PÅ SVAR &hellip;</p>
+        <button class="btn" id="lobVentAvbryt">AVBRYT</button>
+      </div>
+    </div>
+
+    <!-- ---------- noen utfordrer deg ---------- -->
+    <div class="lob-lag" id="lobSpor" hidden>
+      <div class="lob-lag-inn">
+        <p id="lobSporTxt"></p>
+        <div class="lob-lag-knapper">
+          <button class="btn" id="lobAvsla">AVSLÅ</button>
+          <button class="btn btn-primary" id="lobGodta">GODTA</button>
+        </div>
+      </div>
+    </div>
+
+    <nav class="tabbar">
+      <button class="tab" data-go="field"><svg class="ico" viewBox="0 0 9 9" aria-hidden="true"><rect x="4" y="1" width="4" height="1"/><rect x="3" y="2" width="5" height="1"/><rect x="2" y="3" width="5" height="1"/><rect x="1" y="4" width="5" height="1"/><rect x="1" y="5" width="4" height="1"/><rect x="1" y="6" width="3" height="1"/><rect x="0" y="7" width="2" height="1"/></svg>PLENEN</button>
+      <button class="tab" data-go="map"><svg class="ico" viewBox="0 0 9 9" aria-hidden="true"><rect x="0" y="1" width="3" height="7"/><rect x="3" y="0" width="3" height="7"/><rect x="6" y="1" width="3" height="7"/></svg>KART</button>
+      <button class="tab tab-skann" data-go="scan"><svg class="ico" viewBox="0 0 9 9" aria-hidden="true"><rect x="0" y="0" width="3" height="1"/><rect x="0" y="0" width="1" height="3"/><rect x="6" y="0" width="3" height="1"/><rect x="8" y="0" width="1" height="3"/><rect x="0" y="8" width="3" height="1"/><rect x="0" y="6" width="1" height="3"/><rect x="6" y="8" width="3" height="1"/><rect x="8" y="6" width="1" height="3"/><rect x="3" y="3" width="3" height="3"/></svg>SKANN</button>
+      <button class="tab" data-go="collection"><svg class="ico" viewBox="0 0 9 9" aria-hidden="true"><rect x="0" y="0" width="4" height="4"/><rect x="5" y="0" width="4" height="4"/><rect x="0" y="5" width="4" height="4"/><rect x="5" y="5" width="4" height="4"/></svg>SAMLING</button>
+      <button class="tab active" data-go="lobby"><svg class="ico" viewBox="0 0 9 9" aria-hidden="true"><rect x="0" y="0" width="2" height="1"/><rect x="1" y="1" width="1" height="1"/><rect x="2" y="2" width="1" height="1"/><rect x="3" y="3" width="1" height="1"/><rect x="4" y="4" width="1" height="1"/><rect x="5" y="5" width="1" height="1"/><rect x="6" y="6" width="1" height="1"/><rect x="7" y="7" width="2" height="2"/><rect x="7" y="0" width="2" height="1"/><rect x="7" y="1" width="1" height="1"/><rect x="6" y="2" width="1" height="1"/><rect x="5" y="3" width="1" height="1"/><rect x="3" y="5" width="1" height="1"/><rect x="2" y="6" width="1" height="1"/><rect x="0" y="7" width="2" height="2"/></svg>DYST</button>
+    </nav>
+  </section>
+
   <!-- ============ DYST - KORTSPILL ============ -->
   <section class="screen screen-solid" id="screen-battle">
 
     <div class="ks-topp">
       <span class="ks-tur" id="ksTur">DIN TUR 1</span>
-      <button class="icon-btn" id="ksBytt" title="Bytt leder">&#8646;</button>
-      <button class="icon-btn" data-go="field" title="Avslutt">&#10005;</button>
+      <button class="icon-btn" id="ksBytt" title="Bytt leder"><svg class="ico" viewBox="0 0 9 9" aria-hidden="true"><rect x="1" y="2" width="6" height="1"/><rect x="6" y="1" width="1" height="1"/><rect x="7" y="2" width="1" height="1"/><rect x="6" y="3" width="1" height="1"/><rect x="2" y="6" width="6" height="1"/><rect x="2" y="5" width="1" height="1"/><rect x="1" y="6" width="1" height="1"/><rect x="2" y="7" width="1" height="1"/></svg></button>
+      <button class="icon-btn" data-go="field" title="Avslutt"><svg class="ico" viewBox="0 0 9 9" aria-hidden="true"><rect x="0" y="0" width="2" height="2"/><rect x="2" y="2" width="1" height="1"/><rect x="3" y="3" width="1" height="1"/><rect x="4" y="4" width="1" height="1"/><rect x="5" y="5" width="1" height="1"/><rect x="6" y="6" width="1" height="1"/><rect x="7" y="7" width="2" height="2"/><rect x="7" y="0" width="2" height="2"/><rect x="6" y="2" width="1" height="1"/><rect x="5" y="3" width="1" height="1"/><rect x="3" y="5" width="1" height="1"/><rect x="2" y="6" width="1" height="1"/><rect x="0" y="7" width="2" height="2"/></svg></button>
     </div>
 
     <div class="ks-brett" id="ksBrett">
@@ -181,18 +285,19 @@
         <div class="ks-liv" id="myLiv"></div>
         <span class="ks-tall" id="myTall"></span>
       </div>
-
-      <div class="ks-hand" id="myHand"></div>
     </div>
 
-    <div class="ks-bunn">
-      <button class="btn btn-primary" id="ksAvslutt">AVSLUTT TUR</button>
-    </div>
+    <!-- handa staar utenfor brettet, saa den blir liggende fast nederst -->
+    <div class="ks-hand" id="myHand"></div>
 
     <!-- ---------- malvelger ---------- -->
     <div class="ks-banner" id="ksBanner" hidden>
       <span id="ksBannerTxt">VELG MÅL</span>
       <button class="btn" id="ksAvbryt">AVBRYT</button>
+    </div>
+
+    <div class="ks-bunn">
+      <button class="btn btn-primary" id="ksAvslutt">AVSLUTT TUR</button>
     </div>
 
     <!-- ---------- kortark ---------- -->
@@ -217,7 +322,7 @@
     <div class="bt-result" id="ksResult" hidden>
       <p class="bt-result-txt" id="ksResultTxt">SEIER!</p>
       <p class="ks-result-grunn" id="ksResultGrunn"></p>
-      <div class="reward-row"><span>+<b>140</b> XP</span><span>+<b>80</b> &#9679;</span></div>
+      <div class="reward-row"><span>+<b>140</b> XP</span><span>+<b>80</b> <svg class="ico ico-s" viewBox="0 0 9 9" aria-hidden="true"><rect x="3" y="1" width="3" height="1"/><rect x="2" y="2" width="5" height="1"/><rect x="1" y="3" width="7" height="3"/><rect x="2" y="6" width="5" height="1"/><rect x="3" y="7" width="3" height="1"/></svg></span></div>
       <div class="ks-dialog-knapper">
         <button class="btn" id="ksIgjen">EN GANG TIL</button>
         <button class="btn btn-primary" data-go="field">FORTSETT</button>
@@ -225,6 +330,38 @@
     </div>
   </section>
 
+  <!-- ============ NIV\u00c5 OPP ============ -->
+  <!-- ============ NEDLASTING AV ARTSMODELL ============ -->
+  <div id="modellDialog" hidden>
+    <div class="modell-kort">
+      <p class="modell-tittel">ARTSMODELL</p>
+      <p class="modell-txt" id="modellDialogTxt"></p>
+      <div class="modell-knapper">
+        <button class="btn" id="modellNei">IKKE N&Aring;</button>
+        <button class="btn btn-primary" id="modellJa">LAST NED</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="mergeBoks" hidden>
+    <div class="merge-kort">
+      <p class="merge-tittel">SL&Aring; SAMMEN?</p>
+      <p class="merge-art" id="mergeArt">REV</p>
+      <div class="merge-niva">
+        <span class="merge-niva-fra" id="mergeFra">Nv 1</span>
+        <span class="merge-niva-pil"><svg class="ico ico-s" viewBox="0 0 9 9" aria-hidden="true"><rect x="1" y="4" width="6" height="1"/><rect x="5" y="2" width="1" height="1"/><rect x="6" y="3" width="1" height="1"/><rect x="7" y="4" width="1" height="1"/><rect x="6" y="5" width="1" height="1"/><rect x="5" y="6" width="1" height="1"/></svg></span>
+        <span class="merge-niva-til" id="mergeTil">Nv 2</span>
+      </div>
+      <div class="merge-stats" id="mergeStats"></div>
+      <p class="merge-note">DE TO EKSEMPLARENE BLIR TIL ETT.</p>
+      <div class="merge-knapper">
+        <button class="btn" id="mergeNei">NEI</button>
+        <button class="btn btn-primary" id="mergeJa">JA</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="crt"></div>
   <div id="toast"></div>
   <div id="flash"></div>
 </div>
@@ -233,7 +370,30 @@
 <script src="species.js"></script>
 <script src="cards.js"></script>
 <script src="voxel.js"></script>
+<script src="artsmapping.js"></script>
+<script src="klassifiser.js"></script>
+<script>
+/* Artsmodellene ligger utenfor repoet fordi 100 MB binaerfiler odelegger
+   GitHub Pages. Kjor tools/export_*.py, last opp til et Hugging Face-repo
+   og lim inn adressen her. Staar den urort, kjorer spillet simulert skann. */
+if(window.KLASSIFISER){
+  // KLASSIFISER.base = 'https://huggingface.co/DITT-BRUKERNAVN/villmark-modeller/resolve/main/';
+}
+</script>
+<script>
+/* Fyll inn prosjektets adresse og anon-noekkel for aa spille over nett.
+   Staar de tomme, faller spillet tilbake til lokal testmodus mellom to faner.
+   Anon-noekkelen er ment aa vaere offentlig. */
+window.VILLMARK_NETT = {
+  url:     'https://bawqaeqzutqcwzddzgdm.supabase.co',
+  anonKey: 'sb_publishable_oJVUjEcpb1mxXkgBbvdHaw_wLKX6XGk',
+};
+</script>
 <script src="app.js"></script>
+<script src="net.js"></script>
 <script src="battle.js"></script>
+<script src="lobby.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="map.js"></script>
 </body>
 </html>

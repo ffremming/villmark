@@ -1,0 +1,215 @@
+/* VILLMARK - DYSTLOBBY
+   Skjermen foran kortspillet: velg navn, velg dekk, se hvem som er paanett
+   og utfordre dem. Lobbyen kjenner bare NETT og KORTSPILL sine ytterdorer. */
+
+const LOBBY = (() => {
+'use strict';
+
+const VM = () => window.VM;
+const $  = s => document.querySelector(s);
+
+const L = {
+  kablet:false,
+  startet:false,
+  spillere:[],
+  innkomne:new Map(),   // id -> kampId for dem som har utfordret oss
+  venterPaa:null,       // id vi selv har utfordret
+  minLeder:'ld_bjorn',
+};
+
+/* ============================================================ tegning */
+function lederKnappHTML(l, valgt){
+  const f = KORTFARGER[l.farger[0]], g = KORTFARGER[l.farger[1]];
+  return `<button class="lob-leder${valgt ? ' valgt' : ''}" data-leder="${l.id}"
+    style="--a:${f.hex};--b:${g.hex}">
+    <span class="lob-leder-navn">${l.navn}</span>
+    <span class="lob-leder-farge">${f.navn} / ${g.navn}</span>
+    <span class="lob-leder-liv">${l.liv} LIV</span>
+  </button>`;
+}
+
+function tegnLedere(){
+  $('#lobLedere').innerHTML = LEDERE.map(l => lederKnappHTML(l, l.id === L.minLeder)).join('');
+}
+
+function tegnListe(){
+  const ut = $('#lobListe');
+  if(!L.spillere.length){
+    ut.innerHTML = `<p class="lob-tomt">INGEN ANDRE ER PÅNETT NÅ.${
+      NETT.LOKAL_MODUS ? '<br><small>LOKAL TESTMODUS — ÅPNE SPILLET I EN FANE TIL.</small>' : ''}</p>`;
+    return;
+  }
+  ut.innerHTML = L.spillere.map(s => {
+    const leder = KORTBASE[s.leder];
+    const utfordrer = L.innkomne.has(s.id);
+    const opptatt = s.status === 'i_kamp';
+    return `<button class="lob-rad${utfordrer ? ' utfordrer' : ''}"
+      data-spiller="${s.id}"${opptatt && !utfordrer ? ' disabled' : ''}>
+      <span class="lob-rad-navn">${s.navn}</span>
+      <span class="lob-rad-leder">${leder ? leder.navn : '—'}</span>
+      ${utfordrer ? '<span class="lob-merkelapp">UTFORDRER DEG</span>'
+                  : `<span class="lob-rad-status">${opptatt ? 'I KAMP' : 'LEDIG'}</span>`}
+    </button>`;
+  }).join('');
+}
+
+function vent(tekst){
+  $('#lobVentTxt').textContent = tekst;
+  $('#lobVent').hidden = false;
+}
+function lukkVent(){ $('#lobVent').hidden = true; }
+
+/* ============================================================ utfordringer */
+async function utfordre(id){
+  const s = L.spillere.find(x => x.id === id);
+  if(!s) return;
+  L.venterPaa = id;
+  vent('VENTER PÅ SVAR FRA ' + s.navn + ' …');
+
+  const svar = await NETT.utfordre(id);
+  L.venterPaa = null;
+  lukkVent();
+
+  if(!svar.godtatt){
+    VM().toast(svar.tidsavbrudd ? 'INGEN SVAR' : 'UTFORDRINGEN BLE AVSLÅTT');
+    return;
+  }
+  gaTilKamp(svar.kampId, 'vert', id);
+}
+
+function godta(id){
+  const kampId = L.innkomne.get(id);
+  if(!kampId) return;
+  L.innkomne.delete(id);
+  NETT.svarUtfordring(id, kampId, true);
+  gaTilKamp(kampId, 'gjest', id);
+}
+
+function avsla(id){
+  const kampId = L.innkomne.get(id);
+  if(!kampId) return;
+  L.innkomne.delete(id);
+  NETT.svarUtfordring(id, kampId, false);
+  tegnListe();
+}
+
+/* Kanalen maa staa foer kampen starter, ellers gaar den forste meldingen tapt. */
+function gaTilKamp(kampId, rolle, motpart){
+  NETT.kampInn(kampId, rolle, motpart);
+  KORTSPILL.KS.minLeder = L.minLeder;
+  if(rolle === 'vert') KORTSPILL.startVert(kampId);
+  else                 KORTSPILL.startGjest(kampId);
+  VM().gaTil('battle');
+}
+
+/* ============================================================ kabling */
+function kable(){
+  if(L.kablet) return;
+  L.kablet = true;
+
+  $('#lobNavn').addEventListener('change', e => {
+    const n = NETT.settNavn(e.target.value);
+    e.target.value = n;
+  });
+
+  $('#lobLedere').addEventListener('click', e => {
+    const b = e.target.closest('[data-leder]');
+    if(!b) return;
+    L.minLeder = b.dataset.leder;
+    KORTSPILL.KS.minLeder = L.minLeder;
+    NETT.settLeder(L.minLeder);
+    tegnLedere();
+  });
+
+  $('#lobListe').addEventListener('click', e => {
+    const b = e.target.closest('[data-spiller]');
+    if(!b || b.disabled) return;
+    const id = b.dataset.spiller;
+    if(L.innkomne.has(id)) sporGodta(id);
+    else utfordre(id);
+  });
+
+  $('#lobVentAvbryt').addEventListener('click', () => {
+    NETT.avbrytUtfordring();
+    L.venterPaa = null;
+    lukkVent();
+  });
+
+  $('#lobMotAI').addEventListener('click', () => {
+    KORTSPILL.KS.minLeder = L.minLeder;
+    VM().gaTil('battle');
+  });
+
+  $('#lobGodta').addEventListener('click', () => {
+    const id = $('#lobSpor').dataset.fra;
+    $('#lobSpor').hidden = true;
+    godta(id);
+  });
+  $('#lobAvsla').addEventListener('click', () => {
+    const id = $('#lobSpor').dataset.fra;
+    $('#lobSpor').hidden = true;
+    avsla(id);
+  });
+
+  NETT.paa('spillere', liste => {
+    L.spillere = liste;
+    for(const id of [...L.innkomne.keys()]){
+      if(!liste.some(s => s.id === id)) L.innkomne.delete(id);
+    }
+    tegnListe();
+  });
+
+  NETT.paa('utfordring', u => {
+    if(u.avbrutt){
+      L.innkomne.delete(u.fra);
+      if($('#lobSpor').dataset.fra === u.fra) $('#lobSpor').hidden = true;
+      tegnListe();
+      return;
+    }
+    L.innkomne.set(u.fra, u.kampId);
+    tegnListe();
+    VM().LYD.naer();
+    VM().toast(u.fraNavn + ' VIL DYSTE');
+  });
+
+  NETT.paa('melding', m => KORTSPILL.taImot(m));
+
+  NETT.paa('borte', () => {
+    if(NETT.rolle) KORTSPILL.motpartBorte();
+  });
+}
+
+function sporGodta(id){
+  const s = L.spillere.find(x => x.id === id);
+  const d = $('#lobSpor');
+  d.dataset.fra = id;
+  $('#lobSporTxt').textContent = (s ? s.navn : 'NOEN') + ' VIL DYSTE MOT DEG';
+  d.hidden = false;
+}
+
+/* ============================================================ inn og ut */
+async function aapne(){
+  kable();
+  tegnLedere();
+  tegnListe();
+  $('#lobStatus').textContent = 'KOBLER TIL …';
+
+  if(!L.startet){
+    try {
+      await NETT.klar();
+      L.startet = true;
+    } catch(e){
+      $('#lobStatus').textContent = 'FIKK IKKE KONTAKT';
+      VM().toast('NETTET SVARER IKKE');
+      return;
+    }
+    NETT.settLeder(L.minLeder);
+  }
+  $('#lobNavn').value = NETT.meg.navn;
+  $('#lobStatus').textContent = NETT.LOKAL_MODUS ? 'LOKAL TESTMODUS' : 'PÅNETT';
+  NETT.lobbyInn();
+  tegnListe();
+}
+
+return { aapne, get minLeder(){ return L.minLeder; } };
+})();
