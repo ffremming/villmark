@@ -260,14 +260,19 @@ async function klassifiser(kilde, opt){
     }
   };
 
-  /* 1. Dyremodellen forst. Den dekker alle 16 dyrene i biblioteket. */
+  const mapopt = { funnet: opt.funnet };
+
+  /* 1. Dyremodellen forst. Den treffer 12 av de 16 dyrene eksakt. */
   const dyr = await hent('speciesnet');
   opt.onFase && opt.onFase('regner', 0);
   const dyrePred = await kjor(dyr, kilde, ort);
-  const dyreSvar = ARTSMAPPING.beste(dyrePred, 'speciesnet');
+  const dyreSvar = ARTSMAPPING.beste(dyrePred, 'speciesnet', mapopt);
   opt.onFase && opt.onFase('regner', 0.5);
 
-  if(dyreSvar.id && dyreSvar.niva <= 1 && dyreSvar.p >= TERSKEL_DYR){
+  /* Bare et eksakt artstreff avslutter her. Paa slekts- eller familieniva
+     kjorer vi plantemodellen ogsaa: den kjenner Haliaeetus albicilla og
+     Phoca vitulina eksakt, som SpeciesNet bare naar paa slekt og familie. */
+  if(dyreSvar.id && dyreSvar.niva === 0 && dyreSvar.p >= TERSKEL_DYR){
     opt.onFase && opt.onFase('regner', 1);
     return dyreSvar;
   }
@@ -277,7 +282,7 @@ async function klassifiser(kilde, opt){
   try {
     const plante = await hent('inat21');
     const pred = await kjor(plante, kilde, ort);
-    planteSvar = ARTSMAPPING.beste(pred, 'inat21');
+    planteSvar = ARTSMAPPING.beste(pred, 'inat21', mapopt);
   } catch(e){
     if(e.navn !== 'NedlastingKreves') throw e;
     /* Spilleren sa nei til plantemodellen. Da faar dyresvaret staa. */

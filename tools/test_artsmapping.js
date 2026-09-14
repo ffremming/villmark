@@ -83,10 +83,53 @@ sjekk('under minP ignoreres',
   [null, 3]);
 
 /* --- sjeldenhet avgjor naar flere arter deler familie --- */
-console.log('\nEricaceae-kandidater:', SPECIES.filter(s => ['tyttebaer', 'rosslyng'].includes(s.id)).map(s => s.id + ':' + s.sjelden).join(' '));
-sjekk('Ericaceae -> minst sjeldne (rosslyng har sjelden:1)',
+const ericaceae = SPECIES.filter(s => (M.TAKSONOMI[s.id] || {}).family === 'ericaceae');
+const ventetEricaceae = ericaceae.slice().sort((a, b) => a.sjelden - b.sjelden)[0].id;
+console.log('\nEricaceae-kandidater:', ericaceae.map(s => s.id + ':' + s.sjelden).join(' '));
+sjekk('Ericaceae -> minst sjeldne av dem som finnes',
   pick(M.beste(inat('Erica carnea', 'Erica', 'Ericaceae'), 'inat21')),
-  ['rosslyng', 2]);
+  [ventetEricaceae, 2]);
+
+
+/* --- gruppebro: arter ingen modell dekker --- */
+const medRang = (name, felt) => [{ label: Object.assign({ name }, felt), p: 0.6 }];
+
+sjekk('ukjent fisk -> gadide (USIKKER)',
+  pick(M.beste(medRang('Perca fluviatilis', { genus: 'Perca', family: 'Percidae', class: 'Actinopterygii' }), 'inat21')),
+  ['sei', 2]);
+
+sjekk('laks treffer eksakt, ikke broen',
+  pick(M.beste(medRang('Salmo salar', { genus: 'Salmo', family: 'Salmonidae', class: 'Actinopterygii' }), 'inat21')),
+  ['laks', 0]);
+
+sjekk('annen salmonide -> familie, ikke broen',
+  pick(M.beste(medRang('Oncorhynchus mykiss', { genus: 'Oncorhynchus', family: 'Salmonidae', class: 'Actinopterygii' }), 'inat21')),
+  ['orret', 2]);
+
+sjekk('rodalge -> tang og tare (USIKKER)',
+  pick(M.beste(medRang('Chondrus crispus', { genus: 'Chondrus', family: 'Gigartinaceae', phylum: 'Rhodophyta' }), 'inat21')),
+  ['sukkertare', 2]);
+
+sjekk('gronnalge -> tang og tare',
+  pick(M.beste(medRang('Ulva lactuca', { genus: 'Ulva', family: 'Ulvaceae', phylum: 'Chlorophyta' }), 'inat21')),
+  ['sukkertare', 2]);
+
+/* --- samlingen bryter uavgjort: fjellrev naas bare naar rev er tatt --- */
+sjekk('Vulpes uten rev i samlingen -> rev',
+  pick(M.beste(medRang('Vulpes zerda', { genus: 'Vulpes', family: 'Canidae' }), 'inat21', { funnet: new Set() })),
+  ['rev', 1]);
+
+sjekk('Vulpes med rev alt tatt -> fjellrev',
+  pick(M.beste(medRang('Vulpes zerda', { genus: 'Vulpes', family: 'Canidae' }), 'inat21', { funnet: new Set(['rev']) })),
+  ['fjellrev', 1]);
+
+/* --- havorn: SpeciesNet naar bare slekt, iNat21 treffer eksakt --- */
+sjekk('SpeciesNet havorn bare paa slekt',
+  pick(M.beste(sn('abc;aves;accipitriformes;accipitridae;haliaeetus;leucocephalus;bald eagle'), 'speciesnet')),
+  ['havorn', 1]);
+sjekk('iNat21 havorn eksakt',
+  pick(M.beste(medRang('Haliaeetus albicilla', { genus: 'Haliaeetus', family: 'Accipitridae' }), 'inat21')),
+  ['havorn', 0]);
 
 function pick(r) { return [r.id, r.niva]; }
 

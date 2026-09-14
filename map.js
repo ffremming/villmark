@@ -162,6 +162,13 @@ function velgPunkt(p){
     ? sp.fakta
     : 'Noe beveger seg her. Gå nærmere og skann for å få det inn i samlinga.';
 
+  /* LES MER staar bare pa arter som alt er funnet - ellers avslorer den arten */
+  const mer = $('#kartKortMer');
+  if(mer){
+    mer.dataset.mer = p.art;
+    mer.hidden = !(kjent && window.ARTIKKEL && window.ARTIKKEL.har(p.art));
+  }
+
   const kort = $('#kartKort');
   kort.hidden = false;
   kort.classList.remove('inn'); void kort.offsetWidth; kort.classList.add('inn');

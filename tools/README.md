@@ -9,17 +9,22 @@ bruker SKANN-skjermen det simulerte skannet akkurat som før.
 
 ## Hvorfor to modeller
 
-| | dyr (16) | planter (7) | sopp (2) |
-|---|---|---|---|
-| SpeciesNet 4.0.3b | 16 | 0 | 0 |
-| birder `resnet_v2_50_inat21` | 11 | 7 | 2 |
+Målt mot de 72 artene i `species.js`, mot modellenes faktiske labellister:
 
-iNat21 mangler `Lepus timidus`, `Lynx lynx`, `Gulo gulo`, `Vulpes lagopus` og
-`Gadus morhua`. SpeciesNet mangler alt som ikke er dyr. Derfor begge, med
-SpeciesNet først og iNat21 som oppfølger når den første er usikker.
+| | eksakt | slekt | familie | ingen |
+|---|---|---|---|---|
+| SpeciesNet 4.0.3b | 21 | 2 | 6 | 43 |
+| birder `resnet_v2_50_inat21` | 53 | 10 | 4 | 5 |
+| **beste av de to** | **58** | 6 | 3 | 5 |
 
-`Laminaria hyperborea` (stortare) finnes i ingen av modellene. Den arten kan
-bare treffes gjennom simulert skann.
+SpeciesNet kjenner ingen planter, ingen sopp og ingen fisk, men den er sterkest
+på viltkamera-pattedyrene. iNat21 dekker resten. Derfor begge: SpeciesNet først,
+iNat21 når den første ikke gir et eksakt artstreff.
+
+Kjør `node tools/dekning.js` etter hver utvidelse av `species.js`. Den henter
+begge labellistene og rapporterer hvilke arter som er ufangbare. Skriptet
+avslutter med feilkode hvis en art hverken dekkes av en modell eller av en
+gruppebro.
 
 ## Oppsett
 
@@ -70,9 +75,41 @@ python tools/test_parity.py --modell inat21     --bilder bilder/
 node tools/test_artsmapping.js
 ```
 
+```bash
+node tools/dekning.js
+```
+
 `test_parity.py` kjører PyTorch og ONNX på de samme bildene og krever samme
 topp-1. For int8 tillates 0,05 avvik i sannsynlighet, for fp16 1e-3.
-`test_artsmapping.js` dekker mappingen fra modellabel til art i biblioteket.
+`test_artsmapping.js` dekker mappingen fra modellabel til art i biblioteket
+(30 tester). `dekning.js` er beskrevet over.
+
+## Arter ingen modell kjenner
+
+Fem arter har null dekning: `torsk`, `sei`, `tare`, `sukkertare` og
+`grisetang`. SpeciesNet har ingen fisk overhodet, iNat21 har 183 fiskearter
+men ingen Gadiformes, og brunalger finnes ingen steder.
+
+`GRUPPEBRO` i `artsmapping.js` fanger dem på høyere taksonomisk nivå: alt som
+er `Actinopterygii` og ikke allerede er plassert lander på en av gadidene, og
+alt som er rød-, grønn- eller brunalge lander på en av tangartene. Resultatet
+merkes alltid USIKKER, så spilleren ser at det var en gjetning. Broen sjekkes
+etter slekt og familie, så en laks treffer `Salmo salar` eksakt og når aldri
+broen.
+
+## Uavgjort mellom flere arter
+
+Når en slekt eller familie rommer flere av spillets arter — `Vulpes` har både
+rev og fjellrev, `Ericaceae` har fire — velges først en art spilleren mangler,
+deretter den minst sjeldne. Uten den første regelen ville fjellrev vært
+umulig: ingen modell kjenner `Vulpes lagopus`, så fjellrev nås bare på
+slektsnivå, og der ville rev alltid vunnet.
+
+## XP etter sikkerhet
+
+`NIVA_XP` i `app.js` skalerer utbyttet: sikkert artstreff 1,0, nærmeste
+slektning 0,6, usikker 0,35. Det simulerte skannet har ikke noe nivå og gir
+full uttelling som før.
 
 ## Publisering
 

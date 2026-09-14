@@ -53,6 +53,22 @@ function tegnListe(){
   }).join('');
 }
 
+/* Statuslinja skiller mellom aa vaere tilkoblet og aa vaere synlig.
+   Er du 'usynlig' ser du alle andre, mens ingen ser deg. */
+const STATUSTEKST = {
+  lokal:    'LOKAL TESTMODUS',
+  av:       'KOBLER TIL …',
+  kobler:   'KOBLER TIL …',
+  usynlig:  'IKKE SYNLIG — PRØVER IGJEN',
+  paanett:  'PÅNETT',
+};
+function tegnStatus(){
+  const el = $('#lobStatus');
+  const t = NETT.tilstand();
+  el.textContent = STATUSTEKST[t] || t;
+  el.classList.toggle('lob-status-varsel', t === 'usynlig' || t === 'kobler');
+}
+
 function vent(tekst){
   $('#lobVentTxt').textContent = tekst;
   $('#lobVent').hidden = false;
@@ -174,6 +190,8 @@ function kable(){
 
   NETT.paa('melding', m => KORTSPILL.taImot(m));
 
+  NETT.paa('status', tegnStatus);
+
   NETT.paa('borte', () => {
     if(NETT.rolle) KORTSPILL.motpartBorte();
   });
@@ -192,7 +210,7 @@ async function aapne(){
   kable();
   tegnLedere();
   tegnListe();
-  $('#lobStatus').textContent = 'KOBLER TIL …';
+  tegnStatus();
 
   if(!L.startet){
     try {
@@ -206,8 +224,8 @@ async function aapne(){
     NETT.settLeder(L.minLeder);
   }
   $('#lobNavn').value = NETT.meg.navn;
-  $('#lobStatus').textContent = NETT.LOKAL_MODUS ? 'LOKAL TESTMODUS' : 'PÅNETT';
   NETT.lobbyInn();
+  tegnStatus();
   tegnListe();
 }
 

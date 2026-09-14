@@ -67,6 +67,7 @@ const STATE = {
   kartMal: null,        // art valgt fra kartet - overstyrer tilfeldig skann
   malArt: null,
   malVariant: null,
+  malNiva: 0,           // sikkerhetsniva fra artsmapping: 0 sikker, 1 slektning, 2 usikker
   sesong: sesongFraDato(),
 };
 
@@ -689,7 +690,16 @@ function loop(now){
   addEventListener('pointermove', flytt);
   addEventListener('pointerup', opp);
   addEventListener('pointercancel', opp);
-  addEventListener('wheel', e => { if(aktiv === 'field') FELT.zoom(e.deltaY*0.02); }, {passive:true});
+  /* Styreplate: to fingre panorerer, knip (ctrl+wheel) zoomer. Musehjul zoomer. */
+  addEventListener('wheel', e => {
+    if(aktiv !== 'field') return;
+    if(e.ctrlKey){ FELT.zoom(e.deltaY*0.12); return; }   // knip paa styreplate
+    if(e.deltaX !== 0 || e.deltaMode === 0){
+      FELT.panorer(-e.deltaX, -e.deltaY);               // to fingre drar plenen
+      return;
+    }
+    FELT.zoom(e.deltaY*0.02);                           // musehjul i hakk
+  }, {passive:true});
 })();
 
 /* ---------- plukke opp og flytte artene ---------- */
@@ -1089,6 +1099,7 @@ async function startSkann(){
   /* typeof-sjekken gjor at et feilslaatt klassifiser.js ikke tar skanneren
      med seg i fallet - da kjorer spillet bare simulert som for. */
   ekteSkann = typeof KLASSIFISER !== 'undefined' && KLASSIFISER.konfigurert() && !STATE.kartMal;
+  STATE.malNiva = 0;
   if(ekteSkann){
     STATE.malArt = null;
     STATE.malVariant = null;
@@ -1130,6 +1141,7 @@ SCENES.scan.exit = stoppSkann;
    ikke er tilgjengelige, naar kartet har satt opp et mote, og som
    fallback hvis noe ryker underveis ---------- */
 function simulertSkann(){
+  STATE.malNiva = 0;   /* simulert skann er alltid et sikkert treff */
   if(!STATE.malArt) settMal(tilfeldigArt());
   const linjer = ['ANALYSERER FORM…','SAMMENLIGNER MED ARTSBANK…','MÅLER FARGEPROFIL…','BEKREFTER ART…'];
   let p = 0, i = 0;
@@ -1193,6 +1205,8 @@ function visSkannResultat(svar){
   const prosent = Math.round((svar.p || 0) * 100);
   const raa = (svar.latin || svar.felles || 'INGEN MATCH').toUpperCase();
 
+  STATE.malNiva = svar.niva;
+
   if(!svar.id){
     $('#scanReadout').textContent = 'UKJENT ART · ' + raa + ' ' + prosent + ' %';
     $('#scanReadout').classList.add('bom');
@@ -1246,6 +1260,9 @@ $('#scanGo').addEventListener('click', async () => {
     const svar = await KLASSIFISER.klassifiser(video, {
       onFase: skannFase,
       bekreftNedlasting: sporOmNedlasting,
+      /* samlingen bryter uavgjort paa slekt og familie: en art du mangler
+         slaar en du alt har, ellers ville fjellrev aldri vunnet over rev */
+      funnet: STATE.funnet,
     });
     visSkannResultat(svar);
   } catch(err){
@@ -1262,14 +1279,22 @@ $('#scanGo').addEventListener('click', async () => {
 });
 
 // ============================================================ funn
+/* Et sikkert artstreff er verdt mer enn en gjetning paa slekt eller familie.
+   Indeks foelger nivaaene i artsmapping.js: 0 sikker, 1 slektning, 2 usikker.
+   Det simulerte skannet har ikke noe niva og faar full uttelling. */
+const NIVA_XP = [1, 0.6, 0.35];
+
 function visFunn(id, variant){
   const sp = SPECIES_BY_ID[id];
   const ny = !STATE.funnet.has(id);
   variant = variant !== undefined ? variant : STATE.malVariant;
-  const mult = variant ? VARIANTER[variant].bonus : 1;
+  const niva = STATE.malNiva || 0;
+  const mult = (variant ? VARIANTER[variant].bonus : 1) * (NIVA_XP[niva] != null ? NIVA_XP[niva] : 1);
   $('#revealKicker').textContent = variant
     ? VARIANTER[variant].navn + ' VARIANT!'
-    : (ny ? 'NY ART REGISTRERT' : 'DUPLIKAT REGISTRERT');
+    : niva > 0
+      ? ARTSMAPPING.NIVA_TEKST[niva] + ' · ' + (ny ? 'NY ART' : 'DUPLIKAT')
+      : (ny ? 'NY ART REGISTRERT' : 'DUPLIKAT REGISTRERT');
   $('#revealKicker').classList.toggle('variant', !!variant);
   const xp = Math.round((ny ? 60 + sp.sjelden*25 : 10) * mult);
   $('#revealXp').textContent = xp;
@@ -1394,6 +1419,12 @@ function visDetalj(id, ex){
   $('#detailSci').textContent  = sp.sci;
   $('#detailFact').textContent = sp.fakta;
   $('#detailName').textContent += niva > 1 ? '  Nv ' + niva : '';
+  /* LES MER: knappen barer artsId, og skjules for arter uten artikkel */
+  const mer = $('#detailMer');
+  if(mer){
+    mer.dataset.mer = id;
+    mer.hidden = !(window.ARTIKKEL && ARTIKKEL.har(id));
+  }
   $('#detailStats').innerHTML = [
     ['HP',st.hp,140],['ANGREP',st.angrep,50],['FORSVAR',st.forsvar,50],['FART',st.fart,50]
   ].map(([n,v,m]) =>

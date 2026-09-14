@@ -566,6 +566,84 @@ button,input{ font-family:inherit; }
   border-left:6px solid var(--gull); padding:12px;
 }
 
+/* ---------- LES MER: knapper ---------- */
+.detail-mer{
+  margin-top:18px; width:100%; max-width:340px; padding:13px 18px;
+  font-size:12px; border-color:var(--gull2); color:var(--gull);
+}
+.kart-kort-mer{
+  width:100%; padding:11px; margin-bottom:9px; font-size:11px;
+  border-color:var(--gull2); color:var(--gull); --lift:4px;
+}
+
+/* ---------- LES MER: artsarket ---------- */
+.art-ark{ position:absolute; inset:0; z-index:40; display:flex;
+  align-items:flex-end; justify-content:center; }
+.art-ark-bak{ position:absolute; inset:0; background:rgba(8,13,9,.88); }
+.art-ark-inn{
+  position:relative; display:flex; flex-direction:column;
+  width:min(560px,100%); max-height:90%;
+  background:var(--ink2); border:var(--bw) solid var(--line);
+  outline:var(--bw) solid var(--ink);
+}
+.art-ark.inn .art-ark-inn{ animation:opp .16s steps(4) both; }
+
+.art-topp{
+  display:flex; align-items:flex-start; gap:10px; flex:0 0 auto;
+  padding:14px 14px 12px 16px;
+  background:var(--panel); border-bottom:var(--bw) solid var(--ink);
+  box-shadow:0 var(--bw) 0 var(--line2);
+}
+.art-topp-tekst{ flex:1; min-width:0; }
+.art-navn{ font:400 16px/1.3 var(--f-tittel); color:var(--krem);
+  text-shadow:0 2px 0 var(--ink); }
+.art-sci{ font:400 15px/1 var(--f-tekst); color:var(--krem2); margin-top:7px; }
+.art-lukk{ flex:0 0 auto; width:38px; height:38px; }
+
+.art-rull{
+  flex:1; overflow-y:auto; touch-action:pan-y; -webkit-overflow-scrolling:touch;
+  padding:16px 16px calc(20px + var(--safe-b));
+}
+.art-intro{
+  font:400 17px/1.6 var(--f-tekst); color:var(--krem);
+  background:var(--panel); border:2px solid var(--line2);
+  border-left:6px solid var(--gull); padding:12px;
+}
+.art-bolk{
+  font:400 10px/1.5 var(--f-ui); letter-spacing:.08em; color:var(--gronn-lys);
+  margin:20px 0 9px; padding-bottom:6px;
+  border-bottom:2px solid var(--line2);
+}
+.art-bolk-gull{ color:var(--gull); border-bottom-color:var(--gull2); }
+.art-tekst{ font:400 16px/1.6 var(--f-tekst); color:var(--krem); }
+
+.art-tall{ display:flex; flex-direction:column; gap:2px; }
+.art-tall-rad{
+  display:grid; grid-template-columns:104px 1fr; gap:10px;
+  padding:7px 8px; background:var(--panel);
+  border-left:3px solid var(--line2);
+}
+.art-tall-rad:nth-child(even){ background:var(--panel2); }
+.art-tall-rad dt{ font:400 9px/1.6 var(--f-ui); letter-spacing:.05em;
+  color:var(--krem2); }
+.art-tall-rad dd{ font:400 15px/1.5 var(--f-tekst); color:var(--krem); }
+
+.art-fakta{ list-style:none; display:flex; flex-direction:column; gap:8px; }
+.art-fakta li{
+  position:relative; padding:10px 10px 10px 30px;
+  font:400 16px/1.55 var(--f-tekst); color:var(--krem);
+  background:var(--panel); border:2px solid var(--line2);
+}
+.art-fakta li::before{
+  content:'\2605'; position:absolute; left:9px; top:11px;
+  font:700 11px/1 var(--f-ui); color:var(--gull);
+}
+.art-fot{
+  margin-top:20px; padding-top:10px; border-top:2px solid var(--line2);
+  font:400 9px/1.6 var(--f-ui); letter-spacing:.06em; color:var(--krem2);
+  text-align:center;
+}
+
 /* ---------- DYST: KORTSPILL ---------- */
 #screen-battle{
   background:
@@ -1090,3 +1168,6 @@ button,input{ font-family:inherit; }
 }
 .lob-lag-inn p{ font:400 11px/1.8 var(--f-tittel); text-transform:uppercase; color:var(--krem); }
 .lob-lag-knapper{ display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+
+/* statuslinja roper bare naar noe faktisk er galt */
+.lob-status-varsel{ color:var(--gull); border-color:var(--gull); }

@@ -679,8 +679,13 @@ const SESONG_FX_BAR = {
 /** hvilken sesongtabell arten foelger */
 const SESONG_TYPE = {
   gran:'bar', furu:'bar', tare:'bar',
+  einer:'bar', barlind:'bar', sukkertare:'bar', grisetang:'bar', alegras:'bar',
   bjork:'lauv', tyttebaer:'lauv', molte:'lauv', rosslyng:'lauv', blaveis:'lauv',
+  osp:'lauv', rogn:'lauv', graor:'lauv', selje:'lauv', eik:'lauv', dvergbjork:'lauv',
+  blabaer:'lauv', krekling:'lauv', skrubbaer:'lauv',
+  hvitveis:'lauv', reinrose:'lauv', marisko:'lauv', soldogg:'lauv', myrull:'lauv',
   fluesopp:null, kantarell:null,
+  steinsopp:null, giftslorsopp:null, trompetsopp:null, rodskrubb:null,
 };
 
 function fargeFilter(opt){

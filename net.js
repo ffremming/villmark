@@ -31,12 +31,24 @@ const N = {
   kampId:null,
   rolle:null,                // 'vert' | 'gjest'
   motpart:null,              // id til den vi spiller mot
-  lyttere:{ spillere:[], utfordring:[], melding:[], borte:[] },
+  lyttere:{ spillere:[], utfordring:[], melding:[], borte:[], status:[] },
+  tilkoblet:false,           // kanalen staar
+  sporet:false,              // serveren har registrert oss, saa andre ser oss
   utestaaende:null,          // utfordringen vi selv har sendt
   sb:null,
 };
 
 function rop(navn, ...a){ for(const f of N.lyttere[navn].slice()) f(...a); }
+
+/* Fire tilstander, og de to midterste er poenget: kanalen kan staa uten at
+   vi selv er registrert, og da ser vi alle andre mens ingen ser oss. */
+function tilstand(){
+  if(LOKAL_MODUS) return 'lokal';
+  if(!N.lobbyKanal) return 'av';
+  if(!N.tilkoblet)  return 'kobler';
+  if(!N.sporet)     return 'usynlig';
+  return 'paanett';
+}
 const uuid = () => (crypto.randomUUID ? crypto.randomUUID()
   : Date.now().toString(16) + Math.random().toString(16).slice(2));
 
@@ -129,6 +141,8 @@ const Lokal = (() => {
     },
     lobbyInn(){
       if(puls) return;
+      N.tilkoblet = true; N.sporet = true;
+      rop('status', tilstand());
       send({ t:'hei', s:N.meg });
       send({ t:'hvem' });
       puls = setInterval(() => { send({ t:'hei', s:N.meg }); luk(); }, HJERTESLAG);
@@ -136,8 +150,10 @@ const Lokal = (() => {
     lobbyUt(){
       clearInterval(puls); puls = null;
       send({ t:'hade', id:N.meg.id });
+      N.tilkoblet = false; N.sporet = false;
       N.spillere.clear();
       rop('spillere', liste());
+      rop('status', tilstand());
     },
     oppdater(){ send({ t:'hei', s:N.meg }); },
     kringkast(m){ send(m); },
@@ -156,7 +172,42 @@ const Sky = (() => {
     });
   }
 
-  return {
+  /* Aa se de andre og aa vaere synlig selv er to uavhengige ting: kanalen kan
+     staa, mens vaar egen track aldri kom fram. Da ser vi alle andre, og ingen
+     ser oss. Derfor gjentas track til serveren svarer 'ok'. */
+  let sporing = null, gjenopp = null;
+
+  async function meldInn(){
+    clearTimeout(sporing); sporing = null;
+    if(!N.lobbyKanal) return;
+    let svar;
+    try { svar = await N.lobbyKanal.track(N.meg); }
+    catch { svar = 'feil'; }
+    const ok = (svar === 'ok');
+    if(ok !== N.sporet){ N.sporet = ok; rop('status', tilstand()); }
+    if(!ok) sporing = setTimeout(meldInn, 2000);
+  }
+
+  function kobleOppIgjen(){
+    if(gjenopp || !N.lobbyKanal) return;
+    gjenopp = setTimeout(async () => {
+      gjenopp = null;
+      const k = N.lobbyKanal;
+      N.lobbyKanal = null;
+      try { await N.sb.removeChannel(k); } catch {}
+      Sky.lobbyInn();
+    }, 3000);
+  }
+
+  /* Mobilnettlesere fryser tilkoblingen naar skjermen laases. Naar sida
+     kommer fram igjen melder vi oss inn paa nytt. */
+  if(typeof document !== 'undefined'){
+    document.addEventListener('visibilitychange', () => {
+      if(document.visibilityState === 'visible' && N.lobbyKanal) meldInn();
+    });
+  }
+
+  const Sky = {
     async start(){
       await lastBibliotek();
       N.sb = window.supabase.createClient(KONF.url, KONF.anonKey);
@@ -172,38 +223,60 @@ const Sky = (() => {
     lobbyInn(){
       if(N.lobbyKanal) return;
       N.lobbyKanal = N.sb.channel(LOBBY, { config:{ presence:{ key:N.meg.id } } });
+      N.tilkoblet = false; N.sporet = false;
+      rop('status', tilstand());
+
+      const lesPresence = () => {
+        if(!N.lobbyKanal) return;
+        const alle = N.lobbyKanal.presenceState();
+        N.spillere.clear();
+        for(const nokkel in alle){
+          const s = alle[nokkel][0];
+          if(s && s.id && s.id !== N.meg.id) N.spillere.set(s.id, s);
+        }
+        if(N.motpart && !N.spillere.has(N.motpart)) rop('borte');
+        rop('spillere', liste());
+      };
+
       N.lobbyKanal
-        .on('presence', { event:'sync' }, () => {
-          const alle = N.lobbyKanal.presenceState();
-          N.spillere.clear();
-          for(const nokkel in alle){
-            const s = alle[nokkel][0];
-            if(s && s.id && s.id !== N.meg.id) N.spillere.set(s.id, s);
-          }
-          if(N.motpart && !N.spillere.has(N.motpart)) rop('borte');
-          rop('spillere', liste());
-        })
+        .on('presence', { event:'sync' },  lesPresence)
+        .on('presence', { event:'join' },  lesPresence)
+        .on('presence', { event:'leave' }, lesPresence)
         .on('broadcast', { event:'lobby' }, e => lobbyMelding(e.payload))
-        .subscribe(async status => {
-          if(status === 'SUBSCRIBED') await N.lobbyKanal.track(N.meg);
+        .subscribe(status => {
+          if(status === 'SUBSCRIBED'){
+            N.tilkoblet = true;
+            rop('status', tilstand());
+            meldInn();              // ogsaa etter gjenoppkobling
+            return;
+          }
+          if(status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED'){
+            N.tilkoblet = false; N.sporet = false;
+            rop('status', tilstand());
+            kobleOppIgjen();
+          }
         });
     },
 
     async lobbyUt(){
+      clearTimeout(sporing); sporing = null;
+      clearTimeout(gjenopp); gjenopp = null;
       if(!N.lobbyKanal) return;
       const k = N.lobbyKanal;
       N.lobbyKanal = null;
+      N.tilkoblet = false; N.sporet = false;
       N.spillere.clear();
       rop('spillere', []);
       try { await k.untrack(); } catch {}
       await N.sb.removeChannel(k);
     },
 
-    oppdater(){ if(N.lobbyKanal) N.lobbyKanal.track(N.meg); },
+    oppdater(){ if(N.lobbyKanal) meldInn(); },
     kringkast(m){
       if(N.lobbyKanal) N.lobbyKanal.send({ type:'broadcast', event:'lobby', payload:m });
     },
   };
+  return Sky;
 })();
 
 const T = LOKAL_MODUS ? Lokal : Sky;
@@ -307,7 +380,7 @@ function paa(navn, f){
 
 return {
   LOKAL_MODUS,
-  klar, settNavn, settLeder,
+  klar, settNavn, settLeder, tilstand,
   get meg(){ return N.meg; },
   get rolle(){ return N.rolle; },
   get motpartId(){ return N.motpart; },

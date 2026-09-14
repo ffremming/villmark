@@ -254,9 +254,16 @@ const LEDERE = LEDERKORT.map(l => KORTBASE[l.id]);
    50 kort, bare i LEDERens to farger, maks 4 kopier av hvert kort.
    Kortene legges runde for runde slik at kurven blir jevn. */
 function byggStokk(leder){
-  const basseng = Object.values(KORTBASE)
+  let basseng = Object.values(KORTBASE)
     .filter(k => k.kat !== 'leder' && leder.farger.includes(k.farger[0]))
     .sort((a,b) => a.kost - b.kost || a.id.localeCompare(b.id));
+  /* naar bassenget er stoerre enn stokken: plukk jevnt spredt over
+     kostnadskurven. Tar vi bare de forste, blir stokken uten dyre kort. */
+  if(basseng.length > REGLER.stokk){
+    const steg = basseng.length / REGLER.stokk;
+    basseng = Array.from({length:REGLER.stokk},
+      (_, i) => basseng[Math.floor(i*steg)]);
+  }
   const stokk = [];
   for(let kopi = 0; kopi < REGLER.maksKopier && stokk.length < REGLER.stokk; kopi++){
     for(const k of basseng){

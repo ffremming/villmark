@@ -32,7 +32,14 @@ INAT_KATEGORIER = "https://ml-inat-competition-datasets.s3.amazonaws.com/2021/va
 
 
 def hent_taksonomi() -> dict:
-    """Henter iNat21-kategoriene og indekserer dem paa artsnavn."""
+    """Henter iNat21-kategoriene og indekserer dem paa mappenavn.
+
+    Birder navngir klassene med iNat21s mappenavn, ikke artsnavnet:
+        "00000 Animalia Annelida Clitellata Haplotaxida Lumbricidae Lumbricus terrestris"
+    Det er indeks + rike + rekke + klasse + orden + familie + slekt + art.
+    `image_dir_name` i val.json er den samme strengen med understrek, saa vi
+    indekserer paa den og slipper aa gjette.
+    """
     print("henter iNat21-taksonomi ...")
     with urllib.request.urlopen(INAT_KATEGORIER, timeout=120) as svar:
         raa = svar.read()
@@ -41,15 +48,25 @@ def hent_taksonomi() -> dict:
         data = json.load(tar.extractfile(medlem))
     tab = {}
     for kat in data["categories"]:
-        tab[kat["name"].lower()] = {
+        tab[nokkel(kat.get("image_dir_name", ""))] = {
             "name": kat["name"],
             "genus": kat.get("genus", ""),
             "family": kat.get("family", ""),
+            # orden, klasse og rekke trengs av gruppebroen i artsmapping.js,
+            # som fanger torsk gjennom Actinopterygii og tare gjennom algene
+            "order": kat.get("order", ""),
+            "class": kat.get("class", ""),
+            "phylum": kat.get("phylum", ""),
             "kingdom": kat.get("kingdom", ""),
             "common_name": kat.get("common_name", ""),
         }
     print(f"  {len(tab)} arter i taksonomien")
     return tab
+
+
+def nokkel(s: str) -> str:
+    """Mappenavn til sammenlignbar noekkel: understrek og mellomrom er samme ting."""
+    return " ".join(str(s).replace("_", " ").split()).lower()
 
 
 def klasseliste(model_info) -> list[str]:
@@ -65,26 +82,43 @@ def klasseliste(model_info) -> list[str]:
     return ut
 
 
+# Mappenavnet er: indeks rike rekke klasse orden familie slekt art
+RANGER = ["kingdom", "phylum", "class", "order", "family", "genus", "art"]
+
+
+def fra_mappenavn(navn: str) -> dict:
+    """Leser taksonomien rett ut av mappenavnet naar val.json ikke har treff."""
+    deler = nokkel(navn).split()
+    if deler and deler[0].isdigit():
+        deler = deler[1:]
+    felt = {r: "" for r in RANGER}
+    for rang, verdi in zip(RANGER, deler):
+        felt[rang] = verdi.capitalize() if rang != "art" else verdi
+    slekt, art = felt.pop("genus"), felt.pop("art")
+    return {
+        "name": (slekt + " " + art).strip(),
+        "genus": slekt,
+        "family": felt["family"],
+        "order": felt["order"],
+        "class": felt["class"],
+        "phylum": felt["phylum"],
+        "kingdom": felt["kingdom"],
+    }
+
+
 def berik(navn_liste: list[str], taksonomi: dict) -> list[dict]:
-    """Kobler hvert klassenavn til slekt og familie. Uten treff beholdes navnet."""
+    """Kobler hver klasse til artsnavn, slekt, familie, orden, klasse og rekke."""
     ut, truffet = [], 0
     for navn in navn_liste:
-        nokkel = navn.replace("_", " ").strip().lower()
-        kat = taksonomi.get(nokkel)
+        kat = taksonomi.get(nokkel(navn))
         if kat:
             truffet += 1
             ut.append(kat)
         else:
-            deler = nokkel.split()
-            ut.append(
-                {
-                    "name": navn.replace("_", " "),
-                    "genus": deler[0] if deler else "",
-                    "family": "",
-                    "kingdom": "",
-                }
-            )
-    print(f"  {truffet}/{len(navn_liste)} klasser fikk slekt og familie")
+            ut.append(fra_mappenavn(navn))
+    print(f"  {truffet}/{len(navn_liste)} klasser koblet mot val.json, resten lest fra mappenavnet")
+    if truffet == 0:
+        print("  ADVARSEL: ingen treff mot val.json - sjekk at mappenavnformatet er uendret")
     return ut
 
 

@@ -178,8 +178,10 @@ async function vent(N, uttrykk, ms = 20000, navn = uttrykk){
   sjekk(await vent(B, 'NETT.meg.id !== null', 25000, 'innlogging B'), 'nettleser B logget inn');
   const idA = await A.kjor('NETT.meg.id'), idB = await B.kjor('NETT.meg.id');
   sjekk(idA && idB && idA !== idB, 'de to fikk hver sin bruker-id');
-  sjekk(await A.kjor('document.querySelector("#lobStatus").textContent') === 'PÅNETT',
-    'lobbyen melder PAANETT');
+  sjekk(await vent(A, 'NETT.tilstand() === "paanett"', 25000, 'A registrert'),
+    'nettleser A er registrert hos serveren, ikke bare tilkoblet');
+  sjekk(await vent(B, 'NETT.tilstand() === "paanett"', 25000, 'B registrert'),
+    'nettleser B er registrert hos serveren, ikke bare tilkoblet');
 
   await A.kjor('NETT.settNavn("ALFA")');
   await B.kjor('NETT.settNavn("BETA")');
@@ -189,6 +191,10 @@ async function vent(N, uttrykk, ms = 20000, navn = uttrykk){
     'A ser B i lista'), 'nettleser A ser den andre spilleren');
   sjekk(await vent(B, 'document.querySelectorAll("#lobListe .lob-rad").length === 1', 25000,
     'B ser A i lista'), 'nettleser B ser den andre spilleren');
+  /* Asymmetri er den farlige feilen: den ene ser den andre, men ikke omvendt. */
+  sjekk(await A.kjor('NETT.spillere().length') === 1
+     && await B.kjor('NETT.spillere().length') === 1,
+    'begge ser hverandre, ingen asymmetri');
   /* Et navnebytte naar de andre via presence, men ikke oyeblikkelig. */
   sjekk(await vent(A, 'document.querySelector("#lobListe .lob-rad-navn").textContent === "BETA"',
     20000, 'navnet BETA'), 'navnet foelger med over presence');

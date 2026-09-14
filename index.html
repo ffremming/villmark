@@ -74,6 +74,7 @@
         <span class="kart-kort-dist" id="kartKortDist">0 M</span>
       </div>
       <p class="kart-kort-fakta" id="kartKortFakta"></p>
+      <button class="btn kart-kort-mer" id="kartKortMer" data-mer="" hidden>LES MER</button>
       <button class="btn btn-primary" id="kartKortGo">SKANN HER</button>
     </div>
 
@@ -194,6 +195,7 @@
       <p class="detail-sci" id="detailSci">Vulpes vulpes</p>
       <div class="detail-stats" id="detailStats"></div>
       <p class="detail-fact" id="detailFact"></p>
+      <button class="btn detail-mer" id="detailMer" data-mer="">LES MER</button>
     </div>
   </section>
 
@@ -361,6 +363,21 @@
     </div>
   </div>
 
+  <!-- ============ ARTSARTIKKEL (LES MER) ============ -->
+  <div class="art-ark" id="artArk" hidden>
+    <div class="art-ark-bak" id="artArkBak"></div>
+    <article class="art-ark-inn">
+      <header class="art-topp">
+        <div class="art-topp-tekst">
+          <h3 class="art-navn" id="artNavn">REV</h3>
+          <p class="art-sci" id="artSci">Vulpes vulpes</p>
+        </div>
+        <button class="icon-btn art-lukk" id="artLukk" title="Lukk"><svg class="ico" viewBox="0 0 9 9" aria-hidden="true"><rect x="0" y="0" width="2" height="2"/><rect x="2" y="2" width="1" height="1"/><rect x="3" y="3" width="1" height="1"/><rect x="4" y="4" width="1" height="1"/><rect x="5" y="5" width="1" height="1"/><rect x="6" y="6" width="1" height="1"/><rect x="7" y="7" width="2" height="2"/><rect x="7" y="0" width="2" height="2"/><rect x="6" y="2" width="1" height="1"/><rect x="5" y="3" width="1" height="1"/><rect x="3" y="5" width="1" height="1"/><rect x="2" y="6" width="1" height="1"/><rect x="0" y="7" width="2" height="2"/></svg></button>
+      </header>
+      <div class="art-rull" id="artRull"></div>
+    </article>
+  </div>
+
   <div id="crt"></div>
   <div id="toast"></div>
   <div id="flash"></div>
@@ -371,6 +388,7 @@
 <script src="cards.js"></script>
 <script src="voxel.js"></script>
 <script src="artsmapping.js"></script>
+<script src="artikler.js"></script>
 <script src="klassifiser.js"></script>
 <script>
 /* Artsmodellene ligger utenfor repoet fordi 100 MB binaerfiler odelegger
