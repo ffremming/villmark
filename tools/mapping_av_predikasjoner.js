@@ -35,11 +35,21 @@ for (const [fasit, pred] of Object.entries(data.bilder)) {
   /* Gruppebroen lover aldri en bestemt art, bare riktig gruppe: en ukjent
      fisk kan bli torsk eller sei. Da teller gruppen som riktig. */
   const gruppe = M.GRUPPEBRO.find((b) => b.ider.includes(fasit));
-  const riktig = svar.id === fasit || (!!gruppe && gruppe.ider.includes(svar.id));
+
+  /* SpeciesNet kjenner ingen planter og ingen sopp. Svarer den "blank" paa en
+     fluesopp, er det riktig oppforsel - i den ekte kjeden gaar bildet videre
+     til iNat21. Derfor teller UKJENT ART som riktig naar vi tester den
+     modellen alene paa noe som ikke er et dyr. */
+  const erPlante = BY_ID[fasit] && BY_ID[fasit].kind !== 'dyr';
+  const utenfor = data.kilde === 'speciesnet' && erPlante;
+
+  const riktig = utenfor
+    ? svar.id === null
+    : svar.id === fasit || (!!gruppe && gruppe.ider.includes(svar.id));
   sum++;
   if (!riktig) feil++;
   console.log(
-    (riktig ? (svar.id === fasit ? 'ok   ' : 'ok*  ') : 'FEIL ') +
+    (riktig ? (svar.id === fasit ? 'ok   ' : utenfor ? 'ok-  ' : 'ok*  ') : 'FEIL ') +
     fasit.padEnd(12) +
     '-> ' + navn.padEnd(12) +
     svar.nivaTekst.padEnd(20) +
@@ -47,5 +57,6 @@ for (const [fasit, pred] of Object.entries(data.bilder)) {
   );
 }
 
-console.log('\n' + (sum - feil) + '/' + sum + ' bilder landet paa riktig art (ok* = riktig gruppe via gruppebro)');
+console.log('\n' + (sum - feil) + '/' + sum + ' bilder landet paa riktig art' +
+  '  (ok* = riktig gruppe via gruppebro, ok- = korrekt avvist, arten finnes ikke i modellen)');
 process.exit(feil ? 1 : 0);

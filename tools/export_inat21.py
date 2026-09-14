@@ -127,6 +127,12 @@ def main() -> None:
     ap.add_argument("--kalibrering", type=pathlib.Path,
                     help="mappe med 30-60 mobilbilder. Uten denne skrives fp16 i stedet for int8.")
     ap.add_argument("--modell", default=MODELL)
+    ap.add_argument("--metode", default="percentile", choices=["percentile", "minmax", "entropy"],
+                    help="kalibreringsmetode for int8")
+    ap.add_argument("--maks-bilder", type=int, default=48, dest="maks_bilder",
+                    help="hvor mange kalibreringsbilder som brukes. Percentile holder "
+                         "histogrammer for hver aktivering i minnet, saa store "
+                         "inndataformater krever faerre bilder.")
     args = ap.parse_args()
 
     import birder
@@ -159,7 +165,7 @@ def main() -> None:
 
     ut = felles.UT / f"{NAVN}.onnx"
     if args.kalibrering:
-        felles.kvantiser_int8(fp32, ut, felles.Kalibrering(args.kalibrering, forbehandle, "bilde"))
+        felles.kvantiser_int8(fp32, ut, felles.Kalibrering(args.kalibrering, forbehandle, "bilde", args.maks_bilder), args.metode)
         presisjon = "int8"
     else:
         print("  ingen kalibreringsbilder - skriver fp16 i stedet")

@@ -47,28 +47,48 @@ class Kalibrering:
     """
 
     def __init__(self, mappe: pathlib.Path, forbehandle, inputnavn: str, maks: int = 64):
-        from onnxruntime.quantization import CalibrationDataReader  # noqa: F401
-
-        filer = [
+        self.filer = [
             p
             for p in sorted(mappe.rglob("*"))
             if p.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}
         ][:maks]
-        if not filer:
+        if not self.filer:
             raise SystemExit(f"fant ingen bilder i {mappe}")
-        print(f"  kalibrerer paa {len(filer)} bilder")
-        self._data = ({inputnavn: forbehandle(p)} for p in filer)
+        print(f"  kalibrerer paa {len(self.filer)} bilder")
+        self.forbehandle = forbehandle
+        self.inputnavn = inputnavn
+        self.rewind()
 
     def get_next(self):
         return next(self._data, None)
 
     def rewind(self):
-        pass
+        """Percentile og Entropy leser datasettet to ganger. Uten en ekte
+        rewind ville andre runde faatt null bilder, og skalaene blitt satt
+        paa ingenting."""
+        self._data = ({self.inputnavn: self.forbehandle(p)} for p in self.filer)
 
 
-def kvantiser_int8(fp32: pathlib.Path, ut: pathlib.Path, leser) -> None:
-    from onnxruntime.quantization import QuantFormat, QuantType, quantize_static
+def kvantiser_int8(fp32: pathlib.Path, ut: pathlib.Path, leser, metode: str = "percentile") -> None:
+    """Statisk int8-kvantisering.
+
+    Kalibreringsmetoden avgjor mye. MinMax setter skalaen etter den storste
+    verdien den saa, saa en enkelt uteligger presser hele omraadet og alle de
+    vanlige verdiene klemmes sammen. Percentile kutter halen og gir som regel
+    bedre treffsikkerhet paa CNN-er.
+    """
+    from onnxruntime.quantization import CalibrationMethod, QuantFormat, QuantType, quantize_static
     from onnxruntime.quantization.shape_inference import quant_pre_process
+
+    metoder = {
+        "minmax": (CalibrationMethod.MinMax, {}),
+        "percentile": (CalibrationMethod.Percentile, {"CalibPercentile": 99.999}),
+        "entropy": (CalibrationMethod.Entropy, {}),
+    }
+    if metode not in metoder:
+        raise SystemExit(f"ukjent kalibreringsmetode: {metode}")
+    kalib, ekstra = metoder[metode]
+    print(f"  kalibreringsmetode: {metode}")
 
     forbehandlet = fp32.with_suffix(".prep.onnx")
     quant_pre_process(str(fp32), str(forbehandlet), skip_symbolic_shape=True)
@@ -80,6 +100,8 @@ def kvantiser_int8(fp32: pathlib.Path, ut: pathlib.Path, leser) -> None:
         activation_type=QuantType.QUInt8,
         weight_type=QuantType.QInt8,
         per_channel=True,
+        calibrate_method=kalib,
+        extra_options=ekstra,
     )
     forbehandlet.unlink(missing_ok=True)
     print(f"  int8 ONNX: {ut.name}  {ut.stat().st_size / 1e6:.1f} MB")

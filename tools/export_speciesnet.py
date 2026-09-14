@@ -61,6 +61,12 @@ def main() -> None:
         help="mappe med 30-60 bilder tatt med mobilkamera. Uten denne skrives fp16 (~110 MB) i stedet for int8 (~55 MB).",
     )
     ap.add_argument("--modell", default=MODELL_ID)
+    ap.add_argument("--metode", default="percentile", choices=["percentile", "minmax", "entropy"],
+                    help="kalibreringsmetode for int8")
+    ap.add_argument("--maks-bilder", type=int, default=48, dest="maks_bilder",
+                    help="hvor mange kalibreringsbilder som brukes. Percentile holder "
+                         "histogrammer for hver aktivering i minnet, saa store "
+                         "inndataformater krever faerre bilder.")
     args = ap.parse_args()
 
     from speciesnet.classifier import SpeciesNetClassifier
@@ -77,8 +83,8 @@ def main() -> None:
 
     ut = felles.UT / f"{NAVN}.onnx"
     if args.kalibrering:
-        leser = felles.Kalibrering(args.kalibrering, forbehandle, "bilde")
-        felles.kvantiser_int8(fp32, ut, leser)
+        leser = felles.Kalibrering(args.kalibrering, forbehandle, "bilde", args.maks_bilder)
+        felles.kvantiser_int8(fp32, ut, leser, args.metode)
         presisjon = "int8"
     else:
         print("  ingen kalibreringsbilder - skriver fp16 i stedet")

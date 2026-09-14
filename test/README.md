@@ -1,6 +1,17 @@
 # Tester
 
-Tre selvstendige testfiler. Ingen avhengigheter utenfor Node og Chrome.
+Fire selvstendige testfiler. Ingen avhengigheter utenfor Node og Chrome.
+
+## `store.test.js`
+
+Kjører `store.js` i en `vm`-kontekst med en påtatt `localStorage`. Dekker at en
+plen kommer tilbake slik den ble lagret, at uid-tellerne klarer alt som står på
+plenen, at ødelagt eller ukjent lagring kastes uten å røre plenen, og at
+ingenting skrives mens du står på en annen spillers plen.
+
+```sh
+node test/store.test.js
+```
 
 ## `protokoll.test.js`
 
@@ -18,9 +29,12 @@ Motorens animasjonspauser fjernes i sandkassen, så en full kamp tar sekunder.
 ## `nettleser.test.js`
 
 Åpner spillet i tre faner i ekte Chrome og styrer dem over DevTools-protokollen.
-Dekker lobbyen: spillerlista, utfordring, merket ved navnet, godkjenning, og at
-begge parter havner i samme kamp med speilvendt tur. Sjekker også at
-enspillerkampen mot maskinen fortsatt virker.
+Dekker lobbyen: spillerlista, valget mellom å besøke og å utfordre, utfordring,
+merket ved navnet, godkjenning, og at begge parter havner i samme kamp med
+speilvendt tur. Dekker også besøk: at gjesten ser verten sin plen, at plenen er
+merket som gjesteplen, og at gjesten får sin egen plen tilbake når hen går ut.
+Til slutt at plenen skrives til `localStorage` og kommer tilbake etter at sida
+lastes på nytt. Sjekker også at enspillerkampen mot maskinen fortsatt virker.
 
 ```sh
 node test/nettleser.test.js
@@ -46,7 +60,7 @@ prosjektet.
 
 ## Felles
 
-Alle tre skriver `Alle ... gikk gjennom` og avslutter med kode 0 når de er
+Alle fire skriver `Alle ... gikk gjennom` og avslutter med kode 0 når de er
 grønne. Nettlesertestene krever Google Chrome på `/Applications/Google Chrome.app`,
 starter en lokal filtjener selv, og rydder bort nettleserprosessene sine også
 når de feiler underveis.

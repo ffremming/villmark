@@ -468,6 +468,9 @@ async function blokkSteg(){
     a.kort.nokler.includes('VERN') && !a.hvilt && a !== k.mal);
   if(!vern.length) return;
 
+  /* Angrepet stanser uansett — da er det ingenting a ta stilling til. */
+  if(kraft(k.ang) < kraft(k.mal)) return;
+
   let valgt = null;
   if(erAi(fp)) valgt = aiVelgVern(vern);
   else {
@@ -492,8 +495,20 @@ async function mottrekkSteg(){
   while(true){
     const kort = fp.hand.map((id,i) => ({ kort:KORTBASE[id], i }))
       .filter(o => o.kort.mot > 0 ||
-        (o.kort.kat === 'hendelse' && o.kort.eff.nar === 'mottrekk' && o.kort.kost <= fp.sol.aktiv));
+        (erMottrekkshendelse(o.kort) && o.kort.kost <= fp.sol.aktiv));
     if(!kort.length) return;
+
+    /* Naermest hvert kort i stokken har en MOT-verdi, saa spoersmalet kom
+       for paa hvert eneste angrep — omtrent ni ganger i partiet, som
+       oftest med "LA DET STA" som eneste fornuftige svar. Her hoppes det
+       over naar svaret ikke kan endre noe: enten star maalet allerede
+       imot, eller saa rekker ikke alt paa handa opp. */
+    const na = kraft(k.mal), inn = kraft(k.ang);
+    if(na > inn) return;
+    const tak = kort.reduce((s,o) => s + Math.max(o.kort.mot,
+      erMottrekkshendelse(o.kort) && o.kort.kost <= fp.sol.aktiv ? o.kort.eff.verdi : 0), 0);
+    if(na + tak < inn) return;
+
     const merker = kort.map(o => o.kort.kat === 'hendelse' && o.kort.eff.nar === 'mottrekk'
       ? o.kort.navn + ' (HENDELSE)' : o.kort.navn + ' +' + o.kort.mot);
     const svar = await spor(k.forsvS,
@@ -536,6 +551,20 @@ async function skadeSteg(){
   await vent(600);
 }
 
+/* UTLOESER-spoersmalet kom ogsaa naar svaret ikke kunne endre noe: ingen
+   lovlige mal, tom SOL-stokk eller tom kortstokk. Da gaar livskortet rett
+   paa handa uten a stoppe spillet. */
+function utloserNytter(side, e){
+  const p = KS.p[side], mp = KS.p[1-side];
+  switch(e.gjor){
+    case 'sol':   return p.sol.stokk > 0 && p.sol.total < REGLER.solStokk;
+    case 'trekk': return p.stokk.length > 0;
+    case 'ko':    return mp.arter.some(a => a.kort.kost <= e.maks);
+    case 'hvil':  return mp.arter.some(a => !a.hvilt && a.kort.kost <= e.maks);
+    default:      return true;
+  }
+}
+
 async function treffLeder(side, antall, fortaer){
   const p = KS.p[side];
   for(let i=0;i<antall;i++){
@@ -548,7 +577,7 @@ async function treffLeder(side, antall, fortaer){
       logg('FORTÆR — livskortet gar rett i komposten.');
       continue;
     }
-    if(kort.utloser){
+    if(kort.utloser && utloserNytter(side, kort.utloser)){
       const bruk = erAi(p) ? true
         : (await spor(side, 'UTLØSER: ' + kort.navn, [kort], ['LA DET LIGGE','BRUK UTLØSER'])) === 1;
       if(bruk){
@@ -627,32 +656,50 @@ function aiVelgAngrepsmal(a, mp){
   return null;
 }
 
+/* Maskinen blokkerte bare naar vernet overlevde angrepet. Siden en LEDER
+   har 5000 kraft og de fleste VERN-kortene ligger under, ble det brukt
+   omtrent ett vern per parti, og noekkelordet var i praksis en tom kropp:
+   en stokk full av VERN vant hvert femte parti. Na ofres et billig vern
+   for a spare et livskort, slik et menneske ville gjort. */
 function aiVelgVern(vern){
   const k = KS.kamp;
+  const fp = KS.p[k.forsvS];
   const trygt = vern.filter(v => kraft(v) > kraft(k.ang));
-  const kritisk = k.mal.sted === 'leder' && KS.p[k.forsvS].liv.length <= 2;
   if(trygt.length) return trygt.sort((a,b) => kraft(a)-kraft(b))[0];
-  if(kritisk) return vern.sort((a,b) => (a.kort.kost)-(b.kort.kost))[0];
+  if(k.mal.sted !== 'leder') return null;
+  const billigst = vern.slice().sort((a,b) => a.kort.kost - b.kort.kost)[0];
+  const dobbel = k.ang.kort.nokler.includes('DOBBELTHOGG');
+  if(fp.liv.length <= 2 || dobbel || billigst.kort.kost <= 3) return billigst;
   return null;
 }
 
+const erMottrekkshendelse = kort =>
+  kort.kat === 'hendelse' && kort.eff && kort.eff.nar === 'mottrekk';
+
+/* Maskinen regnet bare med MOT-verdien og lot MOTTREKK-hendelsene ligge,
+   selv om mennesket kunne spille dem. Na teller begge veier, og den
+   sterkeste tas forst. Hendelsen legges rett paa det angrepne kortet:
+   det er alltid det den skal redde. */
 function aiMottrekk(){
   const k = KS.kamp, fp = KS.p[k.forsvS];
   const viktig = k.mal.sted === 'leder'
     ? fp.liv.length <= 2
     : k.mal.kort.kost >= 4;
   if(!viktig) return;
-  const kort = fp.hand.map((id,i) => ({ k:KORTBASE[id], i }))
-    .filter(o => o.k.mot > 0)
-    .sort((a,b) => b.k.mot - a.k.mot);
-  for(const o of kort){
-    if(kraft(k.mal) > kraft(k.ang)) break;
-    const idx = fp.hand.indexOf(o.k.id);
-    if(idx < 0) continue;
-    fp.hand.splice(idx, 1);
-    fp.kompost.push(o.k.id);
-    k.mal.kbuff += o.k.mot;
-    logg('Motstanderen bruker ' + o.k.navn + ' som mottrekk (+' + o.k.mot + ').');
+
+  while(kraft(k.mal) <= kraft(k.ang)){
+    const valg = fp.hand.map(id => KORTBASE[id])
+      .map(kort => ({ kort, spilles: erMottrekkshendelse(kort) && kort.kost <= fp.sol.aktiv
+                                     && kort.eff.verdi > kort.mot }))
+      .map(o => ({ ...o, gir: o.spilles ? o.kort.eff.verdi : o.kort.mot }))
+      .filter(o => o.gir > 0)
+      .sort((a,b) => b.gir - a.gir)[0];
+    if(!valg) break;
+    fp.hand.splice(fp.hand.indexOf(valg.kort.id), 1);
+    fp.kompost.push(valg.kort.id);
+    if(valg.spilles) fp.sol.aktiv -= valg.kort.kost;
+    k.mal.kbuff += valg.gir;
+    logg('Motstanderen bruker ' + valg.kort.navn + ' som mottrekk (+' + valg.gir + ').');
   }
   tegn();
 }

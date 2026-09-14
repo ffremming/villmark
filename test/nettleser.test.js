@@ -192,8 +192,56 @@ const sov = ms => new Promise(r => setTimeout(r, ms));
   await kjor(c, 'VM.gaTil("field")');
   await sov(400);
 
+  /* --------- B besoeker plenen til A --------- */
+  /* A setter ut en art, saa det er noe aa se paa hos naboen. */
+  await kjor(a, `VM.STATE.eksemplarer.push({ uid:9001, art:SPECIES[0].id, niva:1,
+    variant:null, x:4, z:4 }); VM.STATE.funnet.add(SPECIES[0].id); VM.gaTil('field');`);
+  await sov(900);
+  /* Lagringen venter litt paa flere endringer foer den skriver, saa vi ser
+     etter den i stedet for aa gjette paa en pause. */
+  let skrevet = false;
+  for(let i = 0; i < 12 && !skrevet; i++){
+    skrevet = await kjor(a, `(() => { const d = JSON.parse(localStorage.getItem('villmark-plen-v1') || '{}');
+      return (d.eksemplarer || []).some(e => e.uid === 9001); })()`);
+    if(!skrevet) await sov(400);
+  }
+  sjekk(skrevet, 'plenen skrives til telefonen naar den endrer seg');
+  await kjor(a, 'VM.gaTil("lobby")');
+  await sov(900);
+
+  await kjor(b, 'document.querySelector("#lobListe .lob-rad").click()');
+  await sov(400);
+  sjekk(await kjor(b, '!document.querySelector("#lobVelg").hidden'),
+    'fane B faar valget mellom aa besoeke og aa utfordre');
+
+  await kjor(b, 'document.querySelector("#lobVelgBesok").click()');
+  await sov(1500);
+  sjekk(await kjor(b, 'document.querySelector("#screen-field").classList.contains("active")'),
+    'fane B havner paa plenen etter et besoek');
+  sjekk(await kjor(b, '!document.querySelector("#feltBesok").hidden'),
+    'fane B ser hvem sin plen den staar paa');
+  sjekk(await kjor(b, 'document.querySelector("#feltBesokNavn").textContent') === 'PLENEN TIL ALFA',
+    'linja navngir verten');
+  sjekk(await kjor(b, 'document.body.classList.contains("visiting")'),
+    'plenen er merket som gjesteplen');
+  sjekk(await kjor(b, 'VM.STATE.eksemplarer.some(e => e.uid === 9001)'),
+    'fane B ser arten som staar paa plenen til A');
+
+  /* ut igjen: egen plen skal vaere tilbake, og ingenting av A skal henge igjen */
+  await kjor(b, 'document.querySelector("#feltBesokUt").click()');
+  await sov(1200);
+  sjekk(await kjor(b, '!VM.STATE.eksemplarer.some(e => e.uid === 9001)'),
+    'fane B har sin egen plen tilbake etterpaa');
+  sjekk(await kjor(b, 'document.querySelector("#feltBesok").hidden'),
+    'besoekslinja er borte igjen');
+  sjekk(await kjor(b, 'document.querySelector("#screen-lobby").classList.contains("active")'),
+    'TILBAKE gaar til lista du kom fra');
+  await sov(600);
+
   /* --------- A utfordrer B --------- */
   await kjor(a, 'document.querySelector("#lobListe .lob-rad").click()');
+  await sov(400);
+  await kjor(a, 'document.querySelector("#lobVelgDyst").click()');
   await sov(900);
   sjekk(await kjor(a, '!document.querySelector("#lobVent").hidden'),
     'fane A venter paa svar');
@@ -203,7 +251,9 @@ const sov = ms => new Promise(r => setTimeout(r, ms));
   await kjor(b, 'document.querySelector("#lobListe .lob-rad").click()');
   await sov(500);
   sjekk(await kjor(b, '!document.querySelector("#lobSpor").hidden'),
-    'fane B faar spoersmaal om aa godta');
+    'fane B faar spoersmaal om aa godta, ikke valget');
+  sjekk(await kjor(b, 'document.querySelector("#lobVelg").hidden'),
+    'valgdialogen ligger stille naar noen utfordrer deg');
 
   await kjor(b, 'document.querySelector("#lobGodta").click()');
   await sov(3000);
@@ -281,6 +331,18 @@ const sov = ms => new Promise(r => setTimeout(r, ms));
     sjekk(await kjor(b, 'KORTSPILL.KS.p[1].hand.every(x => x === "?")'),
       'gjesten ser aldri vertens kort');
   }
+
+  /* --------- plenen overlever at sida lastes paa nytt --------- */
+  /* Fane C staar for seg selv: A og B er i kamp og roerer ikke plenen sin. */
+  await kjor(c, `VM.STATE.eksemplarer.push({ uid:9101, art:SPECIES[1].id, niva:1,
+    variant:null, x:-5, z:6 }); VM.STATE.funnet.add(SPECIES[1].id); VM.gaTil('field');`);
+  await sov(900);
+  await cdp.kall('Page.reload', {}, c);
+  await sov(4000);
+  sjekk(await kjor(c, 'VM.STATE.eksemplarer.some(e => e.uid === 9101)'),
+    'plenen kommer tilbake etter at sida lastes paa nytt');
+  sjekk(await kjor(c, 'VM.STATE.funnet.has(SPECIES[1].id)'),
+    'funnlista kommer tilbake etter at sida lastes paa nytt');
 
   for(const [navn, sid] of [['A', a], ['B', b]]){
     const f = await kjor(sid, 'JSON.stringify(window.__feil || [])');

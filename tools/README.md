@@ -42,18 +42,49 @@ python -c "import kagglehub; kagglehub.login()"
 
 ## Kalibreringsbilder
 
-Statisk int8-kvantisering trenger ekte bilder for å finne riktige skalaer.
-Legg 30–60 bilder i en mappe — tatt med mobilkamera, på de motivene spillet
-faktisk brukes på: dyr, trær, lyng, sopp, bakken, himmelen.
+Statisk int8-kvantisering trenger ekte bilder for å finne riktige tallområder.
+Det er ikke trening — modellens vekter røres ikke, skriptet måler bare hvilke
+verdier aktiveringene faktisk bruker, slik at int8-skalaene settes riktig.
 
-Uten `--kalibrering` skriver skriptene fp16 i stedet. Det virker, men filen
-blir omtrent dobbelt så stor (110 MB mot 55 MB for SpeciesNet).
+Bildene hentes automatisk:
+
+```bash
+python tools/hent_kalibrering.py
+```
+
+Den henter ett bilde per art i `species.js` fra Wikipedias REST-API, pluss ti
+scener uten art i seg — skogbunn, mose, ur, snø, bark, overskyet himmel —
+fordi skanneren ofte peker på ingenting spesielt. Bildene havner i
+`tools/kalibrering/` og er gitignorert.
+
+Har du egne mobilbilder, er de bedre: de har samme optikk og lyssetting som
+det modellen møter i bruk. Pek `--kalibrering` på den mappa i stedet.
+
+Uten `--kalibrering` skriver skriptene fp16. Det virker, men filen blir
+omtrent dobbelt så stor.
+
+### Kalibreringsmetoden avgjør kvaliteten
+
+`--metode percentile` er standard, og det er ikke en detalj. MinMax setter
+skalaen etter den største verdien den så, så én uteligger presser hele
+tallområdet og alle de vanlige verdiene klemmes sammen. Målt på de ti
+testbildene:
+
+| metode | størrelse | riktig art |
+|---|---|---|
+| fp16 (ingen kalibrering) | 88,1 MB | 9/10 |
+| int8 minmax | 44,7 MB | 8/10 — `bjork` ble til `OSP` |
+| int8 percentile | 44,7 MB | **9/10** |
+
+Percentile gir altså fp16-kvalitet til halve størrelsen. `entropy` finnes
+også som valg, men er tregere og ga ingen gevinst her.
 
 ## Kjøring
 
 ```bash
-python tools/export_speciesnet.py --kalibrering bilder/
-python tools/export_inat21.py     --kalibrering bilder/
+python tools/hent_kalibrering.py
+python tools/export_speciesnet.py --kalibrering tools/kalibrering/
+python tools/export_inat21.py     --kalibrering tools/kalibrering/
 ```
 
 Ut i `modeller/`:

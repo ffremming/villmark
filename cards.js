@@ -33,7 +33,7 @@ const NOKKEL_VIS = {
 /* ---------------------------------------------------------- regelkonstanter */
 const REGLER = {
   stokk: 50,          // kort i kortstokken
-  solStokk: 10,       // kort i SOL-stokken
+  solStokk: 8,        // kort i SOL-stokken. 10 rakk ingen a bruke opp
   apningshand: 5,     // kort trukket ved start
   solForste: 1,       // SOL forste spiller far pa sin forste tur
   solVanlig: 2,       // SOL alle andre turer
@@ -160,13 +160,15 @@ const ARTSKORT = {
    tall, saa et kort skiller seg fra et annet paa mer enn kraft. Ett hvert,
    for at bassenget ikke skal renne over av VERN og DOBBELTHOGG. */
 function avledeNokler(sp){
-  if(sp.kind === 'dyr'){
-    if(sp.angrep  >= 28) return ['DOBBELTHOGG'];
-    if(sp.fart    >= 30) return ['SPRANG'];
-    if(sp.forsvar >= 22) return ['VERN'];
-    return [];
-  }
-  return sp.forsvar >= 14 ? ['VERN'] : [];
+  const naboer = SPECIES.filter(x => x.omrade === sp.omrade);
+  const snitt = f => naboer.reduce((s,x) => s + f(x), 0) / naboer.length;
+  const rel = f => f(sp) / (snitt(f) || 1);
+  const best = [
+    ['DOBBELTHOGG', rel(x => x.angrep)],
+    ['SPRANG',      rel(x => x.fart)],
+    ['VERN',        rel(x => x.forsvar)],
+  ].sort((a,b) => b[1] - a[1])[0];
+  return best[1] >= 1.2 ? [best[0]] : [];
 }
 
 /* ---------------------------------------------------------- HENDELSE-kortene
@@ -216,8 +218,8 @@ const LEDERKORT = [
   { id:'ld_rein',       art:'rein',       liv:4, farger:['vidda','myra'],        eff:E('aktiver','trekk',{verdi:1}) },
   { id:'ld_havorn',     art:'havorn',     liv:5, farger:['kysten','fjorden'],    eff:E('nar_angrep','selvkraft',{verdi:1000}) },
   { id:'ld_elg',        art:'elg',        liv:5, farger:['myra','kysten'],       eff:E('nar_angrep','selvkraft',{verdi:1000}) },
-  { id:'ld_bjorn',      art:'bjorn',      liv:5, farger:['granskogen','fjellet'],eff:E('aktiver','kraft',{verdi:1000}) },
-  { id:'ld_steinkobbe', art:'steinkobbe', liv:5, farger:['fjorden','granskogen'],eff:E('aktiver','kraft',{verdi:1000}) },
+  { id:'ld_bjorn',      art:'bjorn',      liv:5, farger:['granskogen','fjellet'],eff:E('aktiver','kraft',{verdi:2000}) },
+  { id:'ld_steinkobbe', art:'steinkobbe', liv:5, farger:['fjorden','granskogen'],eff:E('aktiver','kraft',{verdi:2000}) },
 ];
 
 /* ---------------------------------------------------------- kortbygging */
@@ -225,15 +227,24 @@ function typeLinje(sp){
   return (sp.kind === 'dyr' ? 'DYR' : 'PLANTE') + ' / ' + KORTFARGER[sp.omrade].navn;
 }
 
+/* Et VERN gir fra seg turen det kommer ned: det skal stoppe noe, ikke
+   angripe. Til gjengjeld staar det som et kort to hakk lenger oppe paa
+   kraftkurven. Uten det taper de forsvarstunge fargene paa ren fart —
+   MYRA, som er atte planter og fire dyr, angrep ti ganger i partiet mot
+   KYSTENs fjorten, og ELGen vant hvert femte parti. */
+const VERNKRAFT = 2000;
+
 function byggArtKort(sp){
   const d = ARTSKORT[sp.id] || { nokler: avledeNokler(sp), eff:null };
+  const nokler = d.nokler || [];
   return {
     id: sp.id, kat:'art', artId: sp.id,
     navn: sp.navn, sci: sp.sci,
     farger: [sp.omrade],
-    kost: kortKost(sp), kraft: kortKraft(sp), mot: kortMottrekk(sp),
+    kost: kortKost(sp), mot: kortMottrekk(sp),
+    kraft: kortKraft(sp) + (nokler.includes('VERN') ? VERNKRAFT : 0),
     attributt: kortAttributt(sp), typer: typeLinje(sp),
-    nokler: d.nokler || [], eff: d.eff || null, utloser: d.utloser || null,
+    nokler, eff: d.eff || null, utloser: d.utloser || null,
     sjelden: sp.sjelden, fakta: sp.fakta,
   };
 }
@@ -330,10 +341,15 @@ function byggStokk(leder){
     return lagt;
   };
   /* Fyll en rute i planen. Mangler fargene kort til akkurat den kosten,
-     brukes naermeste kost i samme kategori, saa planen alltid gaar opp. */
+     brukes naermeste kost i samme kategori, saa planen alltid gaar opp.
+     Et for dyrt kort teller dobbelt saa langt unna som et for billig: et
+     hull fylt oppover kan ikke spilles paa kurven, og da star SOL ubrukt.
+     MYRA og KYSTEN har ingen art paa kost 5, og da ELGens hull ble fylt
+     med kost 6 vant han bare hvert fjerde parti. */
+  const avstand = (k, kost) => k.kost > kost ? (k.kost - kost) * 2 : kost - k.kost;
   const fyll = (kat, kost, antall) => {
     const naer = basseng.filter(k => k.kat === kat).sort((a,b) =>
-      Math.abs(a.kost - kost) - Math.abs(b.kost - kost)
+      avstand(a, kost) - avstand(b, kost)
       || vekt(b) - vekt(a) || a.id.localeCompare(b.id));
     let igjen = antall;
     for(const k of naer){
