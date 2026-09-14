@@ -100,6 +100,10 @@
     </header>
     <p class="slette-tom" id="feltTom">PLENEN ER TOM<br><span>SKANN EN ART FOR &Aring; SETTE DEN UT HER</span></p>
     <p class="slette-hint">DRA = FLYTT DEG &middot; KNIP = ZOOM &middot; TRYKK = KORT &middot; HOLD = FLYTT &middot; TRYKK TING = VRI</p>
+    <div class="felt-besok" id="feltBesok" hidden>
+      <span class="felt-besok-navn" id="feltBesokNavn">PLENEN TIL</span>
+      <button class="felt-besok-ut" id="feltBesokUt">TILBAKE</button>
+    </div>
     <p class="felt-flytt" id="feltFlytt" hidden>FLYTTER</p>
     <p class="felt-flytt felt-plasser" id="feltPlasser" hidden>TRYKK P&Aring; PLENEN</p>
     <div class="felt-vri" id="feltVri" hidden>
@@ -228,6 +232,18 @@
       <div class="lob-lag-inn">
         <p id="lobVentTxt">VENTER PÅ SVAR &hellip;</p>
         <button class="btn" id="lobVentAvbryt">AVBRYT</button>
+      </div>
+    </div>
+
+    <!-- ---------- valgt spiller: se plenen eller dyste ---------- -->
+    <div class="lob-lag" id="lobVelg" hidden>
+      <div class="lob-lag-inn">
+        <p id="lobVelgNavn"></p>
+        <div class="lob-lag-knapper">
+          <button class="btn" id="lobVelgBesok">BES&Oslash;K PLENEN</button>
+          <button class="btn btn-primary" id="lobVelgDyst">UTFORDRE</button>
+        </div>
+        <button class="btn" id="lobVelgAvbryt">AVBRYT</button>
       </div>
     </div>
 
@@ -407,6 +423,7 @@ window.VILLMARK_NETT = {
   anonKey: 'sb_publishable_oJVUjEcpb1mxXkgBbvdHaw_wLKX6XGk',
 };
 </script>
+<script src="store.js"></script>
 <script src="app.js"></script>
 <script src="net.js"></script>
 <script src="battle.js"></script>

@@ -523,15 +523,17 @@ const VISIT = (() => {
 
   const FIELDS = ['funnet','varianter','pynt','eksemplarer','sesong','sistLagt'];
 
-  /** what we hand to a player who asks to see our lawn */
+  /** what we hand to a player who asks to see our lawn.
+      Ours, never the guest lawn we may be standing on. */
   function snapshot(){
+    const S = parked || STATE;
     return {
-      sesong:      STATE.sesong,
-      funnet:      [...STATE.funnet],
-      varianter:   STATE.varianter,
+      sesong:      S.sesong,
+      funnet:      [...S.funnet],
+      varianter:   S.varianter,
       /* things still waiting to be placed are nobody else's business */
-      pynt:        STATE.pynt.filter(p => p.x !== null && p.z !== null),
-      eksemplarer: STATE.eksemplarer.filter(e => e.x !== null && e.z !== null),
+      pynt:        S.pynt.filter(p => p.x !== null && p.z !== null),
+      eksemplarer: S.eksemplarer.filter(e => e.x !== null && e.z !== null),
     };
   }
 

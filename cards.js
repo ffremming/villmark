@@ -202,16 +202,22 @@ const BIOTOPKORT = {
 
 /* ---------------------------------------------------------- LEDER-kortene
    En LEDER per omrade. To farger, slik at stokken far nok kort a velge i.
-   Hver farge brukes av noyaktig to ledere, og hver effekt deles av en leder
-   med 4 liv og en med 5. Tallene er stilt inn mot 300 simulerte partier
-   (se seiersandelene i utviklingsloggen): alle ledere ligger na 40-60 %. */
+   Hver farge brukes av noyaktig to ledere, og hver effekt deles av to
+   ledere.
+
+   Liv og effekt skal veie mot hverandre: den sterkeste effekten horer
+   sammen med minst liv. For sto det motsatt — GAUPE og REIN hadde bade
+   fem liv og trekk hver tur, mens BJORN og STEINKOBBE hadde fire liv og
+   en SOL-effekt som ikke gjorde noe, siden SOL-stokken uansett naar taket
+   av seg selv. Den beste lederen vant fire av fem partier mot den
+   svakeste. */
 const LEDERKORT = [
-  { id:'ld_bjorn',      art:'bjorn',      liv:4, farger:['granskogen','fjellet'],eff:E('aktiver','sol',{verdi:1}) },
-  { id:'ld_steinkobbe', art:'steinkobbe', liv:4, farger:['fjorden','granskogen'],eff:E('aktiver','sol',{verdi:1}) },
-  { id:'ld_havorn',     art:'havorn',     liv:4, farger:['kysten','fjorden'],    eff:E('nar_angrep','selvkraft',{verdi:1000}) },
-  { id:'ld_elg',        art:'elg',        liv:4, farger:['myra','kysten'],       eff:E('nar_angrep','selvkraft',{verdi:1000}) },
-  { id:'ld_gaupe',      art:'gaupe',      liv:5, farger:['fjellet','vidda'],     eff:E('aktiver','trekk',{verdi:1}) },
-  { id:'ld_rein',       art:'rein',       liv:5, farger:['vidda','myra'],        eff:E('aktiver','trekk',{verdi:1}) },
+  { id:'ld_gaupe',      art:'gaupe',      liv:4, farger:['fjellet','vidda'],     eff:E('aktiver','trekk',{verdi:1}) },
+  { id:'ld_rein',       art:'rein',       liv:4, farger:['vidda','myra'],        eff:E('aktiver','trekk',{verdi:1}) },
+  { id:'ld_havorn',     art:'havorn',     liv:5, farger:['kysten','fjorden'],    eff:E('nar_angrep','selvkraft',{verdi:1000}) },
+  { id:'ld_elg',        art:'elg',        liv:5, farger:['myra','kysten'],       eff:E('nar_angrep','selvkraft',{verdi:1000}) },
+  { id:'ld_bjorn',      art:'bjorn',      liv:5, farger:['granskogen','fjellet'],eff:E('aktiver','kraft',{verdi:1000}) },
+  { id:'ld_steinkobbe', art:'steinkobbe', liv:5, farger:['fjorden','granskogen'],eff:E('aktiver','kraft',{verdi:1000}) },
 ];
 
 /* ---------------------------------------------------------- kortbygging */
@@ -220,7 +226,7 @@ function typeLinje(sp){
 }
 
 function byggArtKort(sp){
-  const d = ARTSKORT[sp.id] || { nokler:[], eff:null };
+  const d = ARTSKORT[sp.id] || { nokler: avledeNokler(sp), eff:null };
   return {
     id: sp.id, kat:'art', artId: sp.id,
     navn: sp.navn, sci: sp.sci,
@@ -235,14 +241,14 @@ function byggArtKort(sp){
 function byggHendelseKort(sp){
   const t = sp.trekk[0];
   const plante = sp.kind === 'plante';
-  const eff = plante
-    ? (PLANTEHENDELSE[sp.id] || E('hoved','trekk',{verdi:1}))
+  const p = plante && (PLANTEHENDELSE[sp.id] || { kost:2, eff:E('hoved','trekk',{verdi:1}) });
+  const eff = plante ? p.eff
     : E('mottrekk','kraft',{ verdi: t.s >= 30 ? 4000 : 3000 });
   return {
     id: 'hn_' + sp.id, kat:'hendelse', artId: sp.id,
     navn: t.n, sci: sp.sci,
     farger: [sp.omrade],
-    kost: plante ? Math.max(1, Math.min(4, Math.ceil(t.s/9))) : (t.s >= 30 ? 2 : 1),
+    kost: plante ? p.kost : (t.s >= 30 ? 2 : 1),
     kraft: null, mot: plante ? 0 : 1000,
     attributt: null, typer: 'HENDELSE / ' + KORTFARGER[sp.omrade].navn,
     nokler: [], eff, utloser: plante ? null : E('utloser','kraft',{verdi:3000}),

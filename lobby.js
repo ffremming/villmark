@@ -14,6 +14,7 @@ const L = {
   spillere:[],
   innkomne:new Map(),   // id -> kampId for dem som har utfordret oss
   venterPaa:null,       // id vi selv har utfordret
+  venterFelt:false,     // we asked someone for their lawn and wait for it
   minLeder:'ld_bjorn',
 };
 
@@ -93,6 +94,24 @@ async function utfordre(id){
   gaTilKamp(svar.kampId, 'vert', id);
 }
 
+/* ------------------------------------------------ visiting a lawn */
+/* A visit is a question to a player who is online right now: they answer
+   with a snapshot of their lawn, and it is drawn read-only. Nobody's lawn
+   is stored on the network, so an offline player cannot be visited. */
+async function besok(id){
+  const s = L.spillere.find(x => x.id === id);
+  if(!s) return;
+  L.venterFelt = true;
+  vent('HENTER PLENEN TIL ' + s.navn + ' \u2026');
+
+  const svar = await NETT.askField(id);
+  L.venterFelt = false;
+  lukkVent();
+  if(!svar || !svar.felt){ VM().toast('FIKK IKKE TAK I PLENEN'); return; }
+
+  VM().visitField(svar.navn || s.navn, svar.felt);
+}
+
 function godta(id){
   const kampId = L.innkomne.get(id);
   if(!kampId) return;
@@ -142,14 +161,27 @@ function kable(){
     if(!b || b.disabled) return;
     const id = b.dataset.spiller;
     if(L.innkomne.has(id)) sporGodta(id);
-    else utfordre(id);
+    else sporValg(id);
   });
 
   $('#lobVentAvbryt').addEventListener('click', () => {
-    NETT.avbrytUtfordring();
+    if(L.venterFelt){ NETT.cancelField(); L.venterFelt = false; }
+    else NETT.avbrytUtfordring();
     L.venterPaa = null;
     lukkVent();
   });
+
+  $('#lobVelgBesok').addEventListener('click', () => {
+    const id = $('#lobVelg').dataset.spiller;
+    $('#lobVelg').hidden = true;
+    besok(id);
+  });
+  $('#lobVelgDyst').addEventListener('click', () => {
+    const id = $('#lobVelg').dataset.spiller;
+    $('#lobVelg').hidden = true;
+    utfordre(id);
+  });
+  $('#lobVelgAvbryt').addEventListener('click', () => { $('#lobVelg').hidden = true; });
 
   $('#lobMotAI').addEventListener('click', () => {
     KORTSPILL.KS.minLeder = L.minLeder;
@@ -167,11 +199,17 @@ function kable(){
     avsla(id);
   });
 
+  /* Someone wants to see our lawn. It costs nothing to show it, so the
+     answer goes out without asking - the lawn holds nothing private. */
+  NETT.paa('fieldRequest', fra => NETT.sendField(fra, VM().fieldSnapshot()));
+
   NETT.paa('spillere', liste => {
     L.spillere = liste;
     for(const id of [...L.innkomne.keys()]){
       if(!liste.some(s => s.id === id)) L.innkomne.delete(id);
     }
+    const valgt = $('#lobVelg');
+    if(!valgt.hidden && !liste.some(s => s.id === valgt.dataset.spiller)) valgt.hidden = true;
     tegnListe();
   });
 
@@ -195,6 +233,15 @@ function kable(){
   NETT.paa('borte', () => {
     if(NETT.rolle) KORTSPILL.motpartBorte();
   });
+}
+
+/** the two things you can do with another player */
+function sporValg(id){
+  const s = L.spillere.find(x => x.id === id);
+  const d = $('#lobVelg');
+  d.dataset.spiller = id;
+  $('#lobVelgNavn').textContent = s ? s.navn : 'SPILLER';
+  d.hidden = false;
 }
 
 function sporGodta(id){
